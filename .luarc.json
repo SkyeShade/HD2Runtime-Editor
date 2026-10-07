@@ -1,0 +1,6 @@
+{
+  "workspace.library": ["../HD2Runtime/sdk/stubs"],
+  "runtime.version": "LuaJIT",
+  "runtime.path": ["?.lua", "?/init.lua"],
+  "workspace.checkThirdParty": false
+}

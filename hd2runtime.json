@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "name": "HD2Runtime Editor",
+  "resource": "mods/skyeshade/hd2runtime_editor",
+  "guid": "e4b62702-7e11-557e-8413-2b0facb4c1ff",
+  "thumbnail": "assets/HD2Editor \u00b7 icon@1x.png",
+  "requires": {
+    "bingus": {
+      "min_release": 15,
+      "api": 1
+    },
+    "hd2runtime": {
+      "min_version": "0.30.0-dev",
+      "api": 1,
+      "module": "mods/skyeshade/hd2runtime"
+    }
+  },
+  "sdk": "../HD2Runtime/sdk"
+}
