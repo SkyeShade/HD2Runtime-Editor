@@ -9,10 +9,22 @@ local MAX_NAME=40
 
 local Presets={};Presets.__index=Presets
 
+-- Stored forms: numbers, booleans, strings and plain tables of those (codes, encoded references), by row key.
+local function storable(v,depth)
+    local t=type(v)
+    if t=='number'then return v==v and v>-math.huge and v<math.huge end
+    if t=='boolean'or t=='string'then return true end
+    if t~='table'or getmetatable(v)~=nil or(depth or 0)>4 then return false end
+    for k,x in pairs(v)do
+        if type(k)~='string'and type(k)~='number'then return false end
+        if not storable(x,(depth or 0)+1)then return false end
+    end
+    return true
+end
 local function pairs_of(map)
     local list={}
     for key,value in pairs(map or{})do
-        if type(key)=='string'and type(value)=='number'then list[#list+1]={k=key,v=value}end
+        if type(key)=='string'and storable(value)then list[#list+1]={k=key,v=value}end
     end
     table.sort(list,function(a,b)return a.k<b.k end)
     return list
@@ -20,7 +32,7 @@ end
 local function map_of(list)
     local map={}
     for _,item in ipairs(type(list)=='table'and list or{})do
-        if type(item)=='table'and type(item.k)=='string'and type(item.v)=='number'then map[item.k]=item.v end
+        if type(item)=='table'and type(item.k)=='string'and item.v~=nil then map[item.k]=item.v end
     end
     return map
 end

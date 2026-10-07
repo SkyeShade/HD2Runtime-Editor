@@ -27,6 +27,20 @@ def render(frame, path, backdrop=(46, 52, 58)):
         layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
         d = ImageDraw.Draw(layer)
         r, g, b, a = it['c']
+        if it['k'] == 'i':
+            # an icon mask (images/<id>.png): R in the accent colour, G white, as the game's icon material draws it
+            icon = Path(__file__).resolve().parents[1] / 'images' / (it['image'] + '.png')
+            if icon.is_file():
+                mask = Image.open(icon).convert('RGB').resize((int(it['w']), int(it['h'])))
+                rr, gg, _ = mask.split()
+                accent = Image.new('RGBA', mask.size, (r, g, b, 255))
+                white = Image.new('RGBA', mask.size, (255, 255, 238, 255))
+                tile = Image.new('RGBA', mask.size, (0, 0, 0, 0))
+                tile = Image.composite(accent, tile, rr)
+                tile = Image.composite(white, tile, gg)
+                layer.paste(tile, (int(it['x']), int(it['y'])), tile)
+            base = Image.alpha_composite(base, layer)
+            continue
         if it['k'] == 'r':
             d.rectangle([it['x'], it['y'], it['x'] + it['w'] - 1, it['y'] + it['h'] - 1], fill=(r, g, b, a))
         else:

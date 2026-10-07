@@ -6,6 +6,7 @@ local canvas_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/canvas')
 local input_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/input')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
+local pickers=require('mods/skyeshade/hd2runtime_editor/editor/ui/pickers')
 local C,SZ=theme.colour,theme.size
 local M={}
 local App={};App.__index=App
@@ -30,6 +31,8 @@ function M.new(ctx)
     self.cat=2
     return self
 end
+
+pickers.install(App)
 
 ------------------------------------------------------------------------------------------------- helpers --
 function App:toast(text,colour)self.toast_msg={text=util.plain(text,150),colour=colour or C.text,time=self.time}end
@@ -115,6 +118,20 @@ end
 ---------------------------------------------------------------------------------------------- staging --
 function App:stage(row,value)
     if not row.editable then self:toast(row.label..': '..tostring(row.reason or'not editable'),C.error);return false end
+    if row.kind then
+        if self.ctx.choices==false then
+            self:toast('Editing '..row.label..' needs HD2Runtime r50 (script choices)',C.error);return false
+        end
+        local current=self.layer:value(row)
+        local existing=self.pending[row.key]
+        if util.same(current,value)then
+            if existing then self.pending[row.key]=nil;self.pending_n=self.pending_n-1 end
+            return true
+        end
+        if not existing then self.pending_n=self.pending_n+1 end
+        self.pending[row.key]={row=row,value=value}
+        return true
+    end
     local held=util.representable(value,row.integer,row.storage)
     if held==nil then
         self:toast(row.integer and'Whole numbers only'or'At most 3 decimals',C.error);return false
@@ -137,9 +154,9 @@ function App:unstage(row)
 end
 function App:stage_map(map)
     local missing=0
-    for key,value in pairs(map)do
-        local row=self.catalog:row(key)
-        if row and row.editable then self:stage(row,value)else missing=missing+1 end
+    for key,stored in pairs(map)do
+        local row,value=self:decode_value(key,stored)
+        if row and value~=nil then self:stage(row,value)else missing=missing+1 end
     end
     return missing
 end
@@ -181,6 +198,22 @@ local function nudge_step(row,value,shift,ctrl)
 end
 function App:nudge(row,direction,shift,ctrl)
     if not row or not row.editable then return end
+    if row.kind=='choice'and row.options then
+        -- step through the choices (On / Off, statuses, enums)
+        local options=row.options(row)
+        local value=self:row_view(row)
+        local index=1
+        for i,o in ipairs(options)do if util.same(o.value,value)then index=i end end
+        local next_index=(index-1+direction)%#options+1
+        if options[next_index]then self:stage(row,options[next_index].value)end
+        return
+    elseif row.kind=='uses'then
+        local value=self:row_view(row)
+        if value=='unlimited'then if direction<0 then self:stage(row,row.max or 100)end return end
+        local n=util.clamp(value+direction*(shift and 10 or 1),row.min or 1,row.max or 100)
+        self:stage(row,n)
+        return
+    elseif row.kind then return end
     local value=self:row_view(row)
     local step=nudge_step(row,value,shift,ctrl)
     local v=value+direction*step
@@ -194,6 +227,8 @@ function App:begin_edit(row,text,fresh)
         if row then self:toast(row.label..': '..tostring(row.reason or'not editable'),C.error)end
         return
     end
+    if row.kind=='code'then return self:open_code(row)end
+    if row.kind then return self:open_picker(row,row.kind=='uses'and text or nil)end
     self.edit={row=row,buffer=text or util.format((self:row_view(row))),fresh=fresh}
 end
 function App:commit_edit()
@@ -284,7 +319,7 @@ function App:handle_browse_keys(f)
             if k.LEFT then self:nudge(row,-1,f.shift,f.ctrl)end
             if k.RIGHT then self:nudge(row,1,f.shift,f.ctrl)end
             if k.ENTER then self:begin_edit(row,nil,true)end
-            if k.BACKSPACE then
+            if k.BACKSPACE and not row.kind then
                 local text=util.format((self:row_view(row)))
                 self:begin_edit(row,text:sub(1,-2))
             end
@@ -295,21 +330,25 @@ function App:handle_browse_keys(f)
                     if source=='editor'then
                         local base=self.layer:base(row)
                         self:stage(row,base)
-                        self:toast('Staged: back to '..util.format(base)..' (press Apply)',C.pending)
+                        self:toast('Staged: back to '..self:text(row,base)..' (press Apply)',C.pending)
                     end
                 end
             end
             if#f.chars>0 then
-                self:begin_edit(row,'',false)
-                if self.edit then self:edit_chars(f.chars)end
+                if row.kind=='uses'then self:open_picker(row,table.concat(f.chars))
+                elseif not row.kind then
+                    self:begin_edit(row,'',false)
+                    if self.edit then self:edit_chars(f.chars)end
+                end
             end
         end
-        if k.ESCAPE then self.focus='objects'end
     end
 end
 
 function App:handle_keys(f)
     local k=f.keys
+    if self.picker then return self:handle_picker_keys(f)end
+    if self.coder then return self:handle_code_keys(f)end
     if self.confirm then
         if k.ENTER or k.F10 and self.confirm.kind=='reset'or k.INSERT then self:confirm_yes()
         elseif k.ESCAPE or k.BACKSPACE or k.DELETE then self.confirm=nil end
@@ -345,6 +384,11 @@ function App:handle_keys(f)
         if k.BACKSPACE then r.text=r.text:sub(1,-2)end
         if k.ESCAPE or k.DELETE then self.rename=nil
         elseif k.ENTER or k.TAB then self:finish_rename()end
+        return
+    end
+    -- Escape closes the window (inside a dialog, a typed value, the search or a name it cancels that first)
+    if k.ESCAPE then
+        if self.ctx.close then self.ctx.close()end
         return
     end
     if k.TAB then
@@ -405,10 +449,15 @@ end
 ------------------------------------------------------------------------------------------------- frame --
 function App:frame(d,dt)
     self.time=self.time+(dt or 0)
+    -- centred on the screen (1080p units)
     local layout=theme.panel
-    self.canvas:begin(d,layout.x,layout.y)
+    local scale=d.scale or 1
+    local ox=math.floor(((d.width or 1920)/scale-layout.w)/2+0.5)
+    local oy=math.floor(((d.height or 1080)/scale-layout.h)/2+0.5)
+    self.canvas:begin(d,math.max(0,ox),math.max(0,oy))
     local typing=self.edit~=nil or(self.view=='browse'and self.focus=='fields')
-    local letters=(self.search and self.search.active)or self.rename~=nil
+    local letters=(self.search and self.search.active)or self.rename~=nil or self.picker~=nil
+    if self.coder then typing=false end
     local f=self.input:poll(dt or 0,{typing=typing,letters=letters,mouse=self.ctx.mouse})
     self.frame_input=f
     self:handle_keys(f)
@@ -427,6 +476,7 @@ local function chip(cv,text,x,cy,fg,bg,align,z)
     return w
 end
 M.chip=chip
+App.chip_fn=chip
 local function button(self,label,x,y,w,h,style,action,hint)
     local cv=self.canvas
     local hovered=self.hover==action
@@ -638,8 +688,10 @@ function App:draw_objects(y0,h)
                 cv:rect(x+8,y+2,w-16,rh-4,focused and C.select or C.gold_wash,2)
                 cv:rect(x+8,y+2,3,rh-4,focused and C.gold or C.gold_dim,3)
             elseif self.hover==(self.obj_actions[i])then cv:rect(x+8,y+2,w-16,rh-4,C.hover,2)end
-            cv:text(object.name,x+22,y+15,{size=SZ.label,colour=selected and C.text or C.dim,max=w-74})
-            cv:text(object.subtitle or'',x+22,y+31,{size=SZ.tiny,colour=C.faint,max=w-74})
+            local tx=x+22
+            if self:draw_icon(object,x+18,y+5,rh-10)then tx=x+18+rh end
+            cv:text(object.name,tx,y+15,{size=SZ.label,colour=selected and C.text or C.dim,max=w-56-(tx-x)})
+            cv:text(object.subtitle or'',tx,y+31,{size=SZ.tiny,colour=C.faint,max=w-56-(tx-x)})
             local mx=x+w-20
             if markers.pending[object.key]then cv:rect(mx-7,y+rh/2-4,8,8,C.pending,4);mx=mx-14 end
             if markers.editor[object.key]then cv:rect(mx-7,y+rh/2-4,8,8,C.gold,4);mx=mx-14 end
@@ -660,7 +712,9 @@ function App:draw_fields(y0,h)
         return
     end
     -- object header
-    cv:text(object.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
+    local hx=x0+20
+    if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end
+    cv:text(object.name,hx,y0+24,{size=20,font='title',colour=C.text,max=w-40-(hx-x0)})
     local items,selectable=self:field_items(object)
     local edited=0
     for _,row in ipairs(object.rows)do
@@ -669,7 +723,7 @@ function App:draw_fields(y0,h)
     end
     local sub=(object.subtitle and(object.subtitle..'   ')or'')..#object.rows..' fields'
         ..(edited>0 and('   '..edited..' edited')or'')
-    cv:text(sub,x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
+    cv:text(sub,hx,y0+47,{size=SZ.small,colour=C.faint,max=w-40-(hx-x0)})
     if object.error then cv:text('Could not read: '..object.error,x0+20,y0+70,{size=SZ.small,colour=C.error,max=w-40})end
     -- column titles
     local hy=y0+66
@@ -716,7 +770,7 @@ function App:draw_fields(y0,h)
             local cy=y+rh/2
             cv:text(row.label,x+FX.label,cy,{size=SZ.label,colour=row.editable and(selected and C.text or C.dim)or C.faint,
                 max=FX.default_right-FX.label-90})
-            cv:text(util.format(row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
+            cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
             -- value box
             local value,source,state,holder,err=self:row_view(row)
             local editing=self.edit and self.edit.row==row
@@ -735,7 +789,7 @@ function App:draw_fields(y0,h)
                 if self.edit.fresh and text~=''then cv:rect(bx+bw-12-tw,y+7,tw+4,rh-14,C.gold_soft,4)end
                 if math.floor(self.time*2.2)%2==0 then cv:rect(bx+bw-8,y+8,2,rh-16,C.gold,6)end
             else
-                cv:text(util.format(value),bx+bw-10,cy,{size=SZ.label,colour=row.editable and colour or C.faint,
+                cv:text(self:text(row,value),bx+bw-10,cy,{size=SZ.label,colour=row.editable and colour or C.faint,
                     align='right',max=bw-16})
             end
             local unit=util.unit(row.unit)
@@ -778,7 +832,12 @@ function App:draw_status(y,h)
             cv:text('Locked: '..tostring(row.reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
             return
         end
-        local range=(row.min or row.max)and('range '..util.format(row.min or-math.huge)..' to '..util.format(row.max))or'no published range'
+        local range
+        if row.kind=='code'then range=(row.min_length or 1)..' to '..(row.max_length or 9)..' directions'
+        elseif row.kind=='uses'then range=(row.unlimited and'unlimited, or 'or'')..(row.min or 1)..' to '..(row.max or 100)
+        elseif row.kind=='reference'then range='Enter to pick a donor'
+        elseif row.kind then range='Enter to choose, ←→ to step'
+        else range=(row.min or row.max)and('range '..util.format(row.min or-math.huge)..' to '..util.format(row.max))or'no published range'end
         x=x+cv:text(tostring(row.field),x,cy,{size=SZ.small,colour=C.dim,max=260})+16
         x=x+cv:text(range..(row.integer and', whole numbers'or''),x,cy,{size=SZ.small,colour=C.faint,max=240})+14
         if row.shared then x=x+chip(cv,'SHARED',x,cy,C.pending,C.pending_soft)+6 end
@@ -786,7 +845,7 @@ function App:draw_status(y,h)
         local _,base_holder=self.layer:base(row)
         if base_holder then
             x=x+10
-            cv:text('Mod: '..pretty_mod(base_holder.mod)..' = '..util.format(base_holder.value),x,cy,
+            cv:text('Mod: '..pretty_mod(base_holder.mod)..' = '..self:text(row,base_holder.value),x,cy,
                 {size=SZ.small,colour=C.mod,max=math.max(40,maxw-x)})
         end
     elseif self.view=='mods'then
@@ -963,10 +1022,10 @@ function App:draw_mods(y0,h)
                 local claim=item.claim
                 local label=claim.text
                 cv:text(label,x+18,cy,{size=SZ.small,colour=C.dim,max=lw-330})
-                cv:text(util.format(claim.value),x+lw-210,cy,{size=SZ.label,colour=C.mod,align='right',max=100})
+                cv:text(util.value_text(claim.value),x+lw-210,cy,{size=SZ.label,colour=C.mod,align='right',max=150})
                 local slot=self.layer.slots[claim.loc]
                 if slot and slot.user then
-                    chip(cv,'EDITOR '..util.format(slot.target),x+lw-18,cy,C.gold,C.gold_wash,'right')
+                    chip(cv,'EDITOR '..util.plain(util.value_text(slot.target),24),x+lw-18,cy,C.gold,C.gold_wash,'right')
                 elseif slot and slot.watch then
                     chip(cv,'HELD BY EDITOR',x+lw-18,cy,C.faint,C.line,'right')
                 else
@@ -987,11 +1046,39 @@ function App:current_values()
     for key,p in pairs(self.pending)do values[key]=p.value end
     return values
 end
+-- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the
+-- loadout screen colours it. False when there is none (the layout keeps its text-only form).
+function App:draw_icon(object,x,y,size)
+    local icons=self.ctx.icons
+    if not icons or type(self.canvas.d.image)~='function'then return false end
+    local family,name=tostring(object.key):match('^(%a+)|(.+)$')
+    local entry=family=='st'and icons.stratagems[name]or family=='bo'and icons.boosters[name]
+    if not entry then return false end
+    self.canvas:image(entry.handle,x,y,size,size,{colours={r=entry.accent,g={255,255,238,255}},z=4})
+    return true
+end
+-- A value's text for a row (its labels, arrows for codes, names for references).
+function App:text(row,value)return catalog_module.text(row,value)end
+-- Values by key as presets and the saved session store them (reference handles by what names them).
+function App:encode_values(values)
+    local out={}
+    for key,value in pairs(values)do
+        local row=self.catalog:row(key)
+        local stored=row and catalog_module.encode(row,value)
+        if stored~=nil then out[key]=stored end
+    end
+    return out
+end
+function App:decode_value(key,stored)
+    local row=self.catalog:row(key)
+    if not row or not row.editable then return nil end
+    return row,catalog_module.decode(self.catalog,row,stored)
+end
 function App:save_preset(name,confirmed)
     local values=self:current_values()
     if next(values)==nil then self:toast('Nothing to save: edit a field first',C.dim);return end
     if not confirmed and self.presets:find(name)then self:ask('overwrite_preset',name);return end
-    local ok,why=self.presets:save(name,values)
+    local ok,why=self.presets:save(name,self:encode_values(values))
     if ok then self:toast('Saved preset '..name..' ('..util.count(values)..' fields)',C.ok)
     else self:toast('Could not save: '..tostring(why),C.error)end
 end
@@ -1058,7 +1145,7 @@ function App:draw_presets(y0,h)
         return
     end
     self.preset_actions=self.preset_actions or{}
-    local bottom=y0+h-96
+    local bottom=y0+h-118
     self:list({x=0,y=y0+36,w=PRESETS_W-1,h=bottom-y0-40,count=n,row_h=48,selected=self.preset_index,
         scroll_key='preset_scroll',focused=true,actions=self.preset_actions,
         click=function(i)
@@ -1102,8 +1189,22 @@ function App:draw_presets(y0,h)
     cv:rect(restore and tx+18 or tx+2,ty-7,14,14,restore and C.inverse or C.dim,4)
     cv:text('Restore my last applied values when the game starts',tx+46,ty,{size=SZ.small,colour=C.dim,max=PRESETS_W-80})
     cv:hit(tx,ty-12,PRESETS_W-36,24,self.toggle_restore)
+    -- the cursor capture (HD2Runtime r50, experimental)
+    if self.ctx.set_free_cursor then
+        local free=self.presets:setting('free_cursor',true)
+        self.toggle_cursor=self.toggle_cursor or{click=function()
+            local on=not self.presets:setting('free_cursor',true)
+            self.presets:set_setting('free_cursor',on)
+            self.ctx.set_free_cursor(on)
+        end}
+        local cy2=ty+28
+        cv:rect(tx,cy2-9,34,18,free and C.gold or C.line_strong,3)
+        cv:rect(free and tx+18 or tx+2,cy2-7,14,14,free and C.inverse or C.dim,4)
+        cv:text('Free the mouse from the camera while open (experimental)',tx+46,cy2,{size=SZ.small,colour=C.dim,max=PRESETS_W-80})
+        cv:hit(tx,cy2-12,PRESETS_W-36,24,self.toggle_cursor)
+    end
     cv:text('Open the editor with '..tostring(self.ctx.hotkey or'F8')..'. Edits apply live through HD2Runtime\'s guarded writes.',
-        18,sy+48,{size=SZ.tiny,colour=C.faint,max=PRESETS_W-36})
+        18,sy+70,{size=SZ.tiny,colour=C.faint,max=PRESETS_W-36})
     -- detail
     local x0=PRESETS_W
     local w=L.w-x0
@@ -1168,7 +1269,8 @@ function App:draw_value_list(values,x0,y,w,h)
             else
                 cv:text('Unknown field: '..item.key,x+18,cy,{size=SZ.small,colour=C.faint,max=lw-140})
             end
-            cv:text(util.format(item.value),x+lw-18,cy,{size=SZ.label,colour=C.gold,align='right',max=110})
+            cv:text(item.row and self:text(item.row,item.value)or util.value_text(item.value),x+lw-18,cy,
+                {size=SZ.label,colour=C.gold,align='right',max=170})
         end})
 end
 
@@ -1192,6 +1294,8 @@ function App:draw()
     self:draw_footer(L.h-theme.footer_h,theme.footer_h)
     cv:rect(0,0,3,L.h,C.rail,7)
     self:draw_confirm()
+    self:draw_picker()
+    self:draw_code()
 end
 
 return M

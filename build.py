@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 DESCRIPTION = (
     'An in-game editor for every value HD2Runtime exposes. See which installed HD2Runtime mods change what, edit any '
     'field live (also the ones a mod sets), apply only what changed, and reset to the mods\' and game values at any '
-    'time. Presets included. Press F8 in game.'
+    'time. Calldown codes, mission uses, projectile swaps and payloads too. Presets included. Press F8 in game.'
 )
 
 

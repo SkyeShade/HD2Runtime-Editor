@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  HD2Runtime Editor UI art: every <div class="artboard"> is one exported PNG.
+    data-name   file name (assets/ui/<name>.png; also images/<name>.png for data-game="raw")
+    data-w/h    size in CSS pixels (export.py --scale 2 renders @2x)
+    data-game   "raw": also exported at exactly 256 x 256 for the mod's images/ folder (SDK icon families)
+  Open this file in a browser to design; run `py tools/ui-art/export.py` to export.
+  The theme tokens below are the in-game ones (src/editor/ui/theme.lua).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HD2Runtime Editor UI art</title>
+<style>
+  :root {
+    --gold: #ffc72c; --gold-dim: #96710a; --gold-wash: rgba(255,199,44,.09);
+    --panel: #0b0e12; --panel-alt: #0f1318; --header: #07090c; --box: #050709;
+    --text: #eaeae4; --dim: #a0a4aa; --faint: #686e76; --line: rgba(255,255,255,.12);
+    --mod: #68c4ff; --pending: #ff9838; --error: #ff6054; --ok: #80d694;
+    --font: "FS Sinclair", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #1d2127; color: var(--text); font-family: var(--font); }
+  body.gallery { padding: 32px; display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  body.gallery .artboard { outline: 1px dashed rgba(255,255,255,.18); }
+  body.gallery .slot { display: flex; flex-direction: column; gap: 8px; }
+  body.gallery .slot > label { font: 12px var(--font); color: var(--dim); letter-spacing: .04em; }
+  html.solo, body.solo { background: transparent; overflow: hidden; }
+  body.solo .slot > label { display: none; }
+  .artboard { position: relative; overflow: hidden; }
+
+  /* ---- icon frame: the in-game card look (dark rounded square, yellow mark) ---- */
+  .icon { width: 256px; height: 256px; display: grid; place-items: center; }
+  .icon svg { width: 100%; height: 100%; }
+  .icon.plate { background: var(--panel); border-radius: 44px; box-shadow: inset 0 0 0 4px rgba(255,255,255,.08); }
+  .icon.plate svg { width: 70%; height: 70%; }
+
+  /* ---- buttons (2x of the in-game 150 x 34) ---- */
+  .btn { width: 300px; height: 68px; display: grid; place-items: center; font: 600 30px var(--font);
+         letter-spacing: .06em; text-transform: uppercase; border: 2px solid var(--line); background: var(--panel); color: var(--text); }
+  .btn.primary { background: var(--gold); border-color: var(--gold); color: #0e1014; }
+  .btn.primary.hover { background: #ffd65c; }
+  .btn.danger { color: var(--error); border-color: var(--error); }
+  .btn.danger.hover { background: rgba(255,96,84,.18); }
+  .btn.disabled { color: var(--faint); }
+
+  /* ---- chips ---- */
+  .chip { height: 40px; padding: 0 14px; display: inline-grid; place-items: center; font: 600 24px var(--font); letter-spacing: .05em; }
+  .chip.mod { color: var(--mod); background: rgba(104,196,255,.16); }
+  .chip.edited { color: var(--gold); background: var(--gold-wash); }
+  .chip.pending { color: var(--pending); background: rgba(255,152,56,.18); }
+
+  /* ---- banner ---- */
+  .banner { width: 1280px; height: 400px; background:
+      radial-gradient(120% 140% at 85% 0%, rgba(255,199,44,.16), transparent 55%), linear-gradient(180deg, #0d1116, #07090c);
+      display: flex; align-items: center; gap: 56px; padding: 0 88px; }
+  .banner .mark { width: 220px; height: 220px; flex: none; }
+  .banner h1 { font: 600 76px var(--font); letter-spacing: .04em; }
+  .banner h1 b { color: var(--gold); font-weight: 600; }
+  .banner p { margin-top: 14px; font: 28px var(--font); color: var(--dim); max-width: 760px; line-height: 1.35; }
+</style>
+</head>
+<body class="gallery">
+
+<!-- The editor mark (the icon's brackets and three sliders) -->
+<template id="mark">
+  <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="#ffc72c">
+    <path d="M87 87h126v34h-92v92H87zM299 87h126v126h-34v-92h-92zM87 299h34v92h92v34H87zM391 299h34v126H299v-34h92z"/>
+    <rect x="164" y="188" width="184" height="16"/><rect x="270" y="172" width="48" height="48"/>
+    <rect x="164" y="248" width="184" height="16"/><rect x="190" y="232" width="48" height="48"/>
+    <rect x="164" y="308" width="184" height="16"/><rect x="246" y="292" width="48" height="48"/>
+  </svg>
+</template>
+
+<div class="slot"><label>logo-mark (game raw)</label>
+  <div class="artboard icon" data-name="logo-mark" data-w="256" data-h="256" data-game="raw"><use-mark></use-mark></div></div>
+
+<div class="slot"><label>cat-weapons</label>
+  <div class="artboard icon plate" data-name="cat-weapons" data-w="256" data-h="256" data-game="raw">
+    <svg viewBox="0 0 100 100" fill="#ffc72c"><path d="M10 44h52l6-8h22v14H70l-4 6H40l-6 18H20l6-18H10z"/><rect x="44" y="56" width="10" height="8"/></svg>
+  </div></div>
+
+<div class="slot"><label>cat-stratagems</label>
+  <div class="artboard icon plate" data-name="cat-stratagems" data-w="256" data-h="256" data-game="raw">
+    <svg viewBox="0 0 100 100" fill="none" stroke="#ffc72c" stroke-width="9" stroke-linecap="square">
+      <path d="M50 14v30M50 14l-11 11M50 14l11 11"/><path d="M14 64h30M86 64H56M50 86V70"/></svg>
+  </div></div>
+
+<div class="slot"><label>cat-equipment</label>
+  <div class="artboard icon plate" data-name="cat-equipment" data-w="256" data-h="256" data-game="raw">
+    <svg viewBox="0 0 100 100" fill="#ffc72c"><path d="M30 18h40v10h10v62H20V28h10zM40 28h20v-2H40z"/><rect x="34" y="44" width="32" height="8" fill="#0b0e12"/></svg>
+  </div></div>
+
+<div class="slot"><label>cat-enemies</label>
+  <div class="artboard icon plate" data-name="cat-enemies" data-w="256" data-h="256" data-game="raw">
+    <svg viewBox="0 0 100 100" fill="#ffc72c"><path d="M50 12 86 30v22c0 18-16 30-36 36C30 82 14 70 14 52V30z"/>
+      <path d="M34 44h10v10H34zM56 44h10v10H56zM40 64h20v6H40z" fill="#0b0e12"/></svg>
+  </div></div>
+
+<div class="slot"><label>tab-mods</label>
+  <div class="artboard icon plate" data-name="tab-mods" data-w="256" data-h="256" data-game="raw">
+    <svg viewBox="0 0 100 100" fill="#ffc72c"><rect x="16" y="16" width="30" height="30"/><rect x="54" y="16" width="30" height="30" opacity=".55"/>
+      <rect x="16" y="54" width="30" height="30" opacity=".55"/><rect x="54" y="54" width="30" height="30"/></svg>
+  </div></div>
+
+<div class="slot"><label>tab-presets</label>
+  <div class="artboard icon plate" data-name="tab-presets" data-w="256" data-h="256" data-game="raw">
+    <svg viewBox="0 0 100 100" fill="#ffc72c"><path d="M24 12h52v78L50 72 24 90z"/></svg>
+  </div></div>
+
+<div class="slot"><label>btn-apply</label><div class="artboard btn primary" data-name="btn-apply" data-w="300" data-h="68">Apply</div></div>
+<div class="slot"><label>btn-apply-hover</label><div class="artboard btn primary hover" data-name="btn-apply-hover" data-w="300" data-h="68">Apply</div></div>
+<div class="slot"><label>btn-discard</label><div class="artboard btn" data-name="btn-discard" data-w="300" data-h="68">Discard</div></div>
+<div class="slot"><label>btn-reset</label><div class="artboard btn danger" data-name="btn-reset" data-w="392" data-h="68" style="width:392px">Reset to defaults</div></div>
+<div class="slot"><label>btn-disabled</label><div class="artboard btn disabled" data-name="btn-disabled" data-w="300" data-h="68">Apply</div></div>
+
+<div class="slot"><label>chips</label>
+  <div class="artboard" data-name="chips" data-w="420" data-h="40" style="display:flex;gap:12px;width:420px;height:40px">
+    <span class="chip mod">MOD</span><span class="chip edited">EDITED</span><span class="chip pending">PENDING</span></div></div>
+
+<div class="slot"><label>readme-banner</label>
+  <div class="artboard banner" data-name="readme-banner" data-w="1280" data-h="400">
+    <div class="mark"><use-mark></use-mark></div>
+    <div><h1>HD2RUNTIME <b>EDITOR</b></h1><p>Live, in-game editing of every value HD2Runtime exposes, on top of the mods you have installed.</p></div>
+  </div></div>
+
+<script>
+  // <use-mark> -> the shared mark SVG
+  const mark = document.getElementById('mark').content;
+  for (const el of document.querySelectorAll('use-mark')) el.replaceWith(mark.cloneNode(true));
+  for (const a of document.querySelectorAll('.artboard')) { a.style.width = a.dataset.w + 'px'; a.style.height = a.dataset.h + 'px'; }
+  // ?only=<name>: just that artboard at the top-left on a transparent page (what export.py captures)
+  const only = new URLSearchParams(location.search).get('only');
+  if (only) {
+    document.documentElement.className = 'solo';
+    document.body.className = 'solo';
+    for (const slot of document.querySelectorAll('.slot')) {
+      const a = slot.querySelector('.artboard');
+      if (!a || a.dataset.name !== only) slot.remove();
+    }
+  }
+</script>
+</body>
+</html>

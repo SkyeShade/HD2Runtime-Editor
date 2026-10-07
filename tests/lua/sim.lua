@@ -6,6 +6,13 @@ local catalog=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local S={memory={},writes=0,log={}}
 _G.update=function()end
 
+function S.selector_key(sel)
+    local parts={}
+    for _,k in ipairs({'output','weapon','attack','phase','is_null','catalogue','none','self'})do
+        parts[#parts+1]=tostring(rawget(sel,k)or'')
+    end
+    return table.concat(parts,'|')
+end
 local function loc_of(change)return catalog.location(change.descriptor,'d:'..tostring(change.descriptor))end
 local function claim(spec,kind)
     pcall(require('hd2runtime/core/shared_records').claim,spec,kind,spec.mod)
@@ -23,6 +30,13 @@ local function start_spec(kind)
             if watch.status=='complete'or watch.status=='rejected'or watch.status=='cancelled'then return end
             elapsed=elapsed+dt
             if elapsed<startup then return end
+            -- references are encoded when the real prepare re-proves them live: here, from their selectors
+            for _,change in ipairs(spec.changes or{})do
+                if change.desired_selector then
+                    change.desired='ref:'..S.selector_key(change.desired_selector)
+                    change.expected='ref:'..S.selector_key(change.expected_selector or{})
+                end
+            end
             for _,change in ipairs(spec.changes or{})do
                 local current=S.memory[loc_of(change)]or change.expected
                 local ok,err=pcall(ownership.expected,change,current,change.field)

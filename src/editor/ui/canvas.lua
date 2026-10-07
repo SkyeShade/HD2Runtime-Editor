@@ -85,6 +85,14 @@ function Canvas:text(text,x,cy,opts)
     return w or self:measure(text,size,opts.font)
 end
 
+-- One of the mod's images (HD2Runtime r50 d:image), in units; nothing when the overlay has no images.
+function Canvas:image(handle,x,y,w,h,opts)
+    if type(self.d.image)~='function'or handle==nil then return end
+    local s=self.s
+    local x0,y0=px((self.ox+x)*s),px((self.oy+y)*s)
+    local size=px(w*s)
+    self.d:image(handle,x0,y0,size,px(h*s),opts)
+end
 -- A clickable region (units, panel space) for this frame; later regions win.
 function Canvas:hit(x,y,w,h,action)
     self.hits[#self.hits+1]={x=x,y=y,w=w,h=h,action=action}

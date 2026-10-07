@@ -89,6 +89,61 @@ function M.unit(unit)
     return text
 end
 
+-- Whether two field values are the same value: primitives by ==; typed reference handles (each built with its own
+-- metatable) by every non-function field they carry; plain tables (calldown codes) element by element. The same rule
+-- as HD2Runtime's script choices (api/options.lua same).
+function M.same(a,b,depth)
+    if rawequal(a,b)then return true end
+    if type(a)~=type(b)then return false end
+    if type(a)~='table'then return a==b end
+    if(depth or 0)>8 then return false end
+    if(getmetatable(a)~=nil)~=(getmetatable(b)~=nil)then return false end
+    for k,v in pairs(a)do
+        if type(v)~='function'and not M.same(v,rawget(b,k),(depth or 0)+1)then return false end
+    end
+    for k,v in pairs(b)do
+        if type(v)~='function'and rawget(a,k)==nil then return false end
+    end
+    return true
+end
+
+-- A calldown code in arrows ('↑ → ↓').
+local ARROWS={up='↑',down='↓',left='←',right='→'}
+M.ARROWS=ARROWS
+function M.code_text(code)
+    local parts={}
+    for i,d in ipairs(code)do parts[i]=ARROWS[d]or tostring(d)end
+    return table.concat(parts,' ')
+end
+-- Any field value as text: numbers, On/Off, Unlimited/None, names, codes and reference handles.
+function M.value_text(v)
+    local t=type(v)
+    if t=='number'then return M.format(v)end
+    if t=='boolean'then return v and'On'or'Off'end
+    if t=='string'then
+        if v=='unlimited'then return 'Unlimited'end
+        if v=='none'then return 'None'end
+        return M.humanize(v)
+    end
+    if t~='table'then return tostring(v)end
+    if getmetatable(v)==nil then
+        if#v>0 and type(v[1])=='string'and ARROWS[v[1]]then return M.code_text(v)end
+        if rawget(v,'is_null')or rawget(v,'path')=='no_explosion'then return 'None'end
+        local parts={}
+        for i,x in ipairs(v)do parts[i]=M.value_text(x)end
+        return table.concat(parts,', ')
+    end
+    if rawget(v,'is_null')or rawget(v,'none')or rawget(v,'path')=='no_explosion'then return 'None'end
+    local output=rawget(v,'output')
+    if type(output)=='string'then return(output:match('([^/]+)$')or output):gsub('%-',' ')end
+    local weapon,attack,phase=rawget(v,'weapon'),rawget(v,'attack'),rawget(v,'phase')
+    if weapon then
+        return tostring(weapon)..(attack and attack~='primary'and(' · '..M.humanize(attack))or'')
+            ..(phase and(' · '..M.humanize(phase))or'')
+    end
+    return 'reference'
+end
+
 function M.copy(t)
     local out={}
     for k,v in pairs(t)do out[k]=v end

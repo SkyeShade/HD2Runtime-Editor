@@ -4,3 +4,7 @@ __pycache__/
 .idea/
 *.user
 *.suo
+# Game-derived icons (tools/game_icons.py): local builds only, never committed
+images/si_*.png
+images/bi_*.png
+src/editor/generated/

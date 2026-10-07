@@ -54,9 +54,26 @@ local function flags_of(spec,outer)
     return f
 end
 
+-- The mod that registered an operation id, from the Runtime's registry, when exactly one mod did.
+function Ledger:registrant(op_id)
+    local registry=self:registry()
+    if not registry then return nil end
+    local found
+    for _,item in ipairs(registry)do
+        local origin=item.origin or{}
+        if tostring(item.id)==op_id and type(origin.mod)=='string'and origin.mod~='unknown'then
+            if found and found~=origin.mod then return nil end
+            found=origin.mod
+        end
+    end
+    return found
+end
+
 function Ledger:record(spec,kind,mod)
     if type(spec)~='table'then return end
     mod=mod or spec.mod or'unknown'
+    -- Runtimes before r50 could not name a mod built without the SDK wrapper's run_as scope; the registry can.
+    if mod=='unknown'then mod=self:registrant(tostring(spec.id))or mod end
     if mod==self.editor then return end
     if spec.ensured then kind='ensure'end
     local op_id=tostring(spec.id)

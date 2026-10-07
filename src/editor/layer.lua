@@ -16,7 +16,29 @@
 -- A value outside a handle's range is reached by adopting again with a wider handle (step 1 with the editor's own
 -- ensure handed over). Every failure stops at the guards and is shown on the field; nothing is retried blindly.
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
+local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local M={}
+
+-- The form the editor holds a value in for a row, or nil: numbers with three decimals (or whole), other kinds as given
+-- after a shape check (a code of the row's directions and length; uses a whole count in range or 'unlimited').
+local function hold(row,value)
+    if value==nil then return nil end
+    if not row.kind then return util.representable(value,row.integer,row.storage)end
+    if row.kind=='uses'then
+        if value=='unlimited'then return value end
+        if type(value)=='number'and value%1==0 then return value end
+        return nil
+    end
+    if row.kind=='code'then
+        if type(value)~='table'then return nil end
+        local allowed={}
+        for _,d in ipairs(row.directions or{'up','right','down','left'})do allowed[d]=true end
+        for _,d in ipairs(value)do if not allowed[d]then return nil end end
+        return value
+    end
+    return value
+end
+M.hold=hold
 
 local FAILED={rejected=true,blocked=true,cancelled=true,unavailable=true}
 local Layer={};Layer.__index=Layer
@@ -52,7 +74,7 @@ end
 -- The value the field returns to on reset, and the claim of the mod that set it (nil: vanilla).
 function Layer:base(row)
     local holder=self.ledger:holder(row.loc)
-    if holder and type(holder.value)=='number'then return holder.value,holder end
+    if holder and holder.value~=nil and(row.kind or type(holder.value)=='number')then return holder.value,holder end
     return row.vanilla,nil
 end
 -- What the field is (or is being set to): value, source ('editor' | 'mod' | 'vanilla'), holder claim, slot.
@@ -105,10 +127,19 @@ local function slot_for(self,row)
 end
 -- Ask for the user's value on a field. False and why when the value cannot be held exactly.
 function Layer:set(row,value)
-    local held=util.representable(value,row.integer,row.storage)
-    if held==nil then return false,'use at most 3 decimals'..(row.integer and' (whole numbers only)'or'')end
-    if row.min and held<row.min or row.max and held>row.max then
+    local held=hold(row,value)
+    if held==nil then
+        if row.kind then return false,'not a value this field takes'end
+        return false,'use at most 3 decimals'..(row.integer and' (whole numbers only)'or'')
+    end
+    if type(held)=='number'and(row.min and held<row.min or row.max and held>row.max)then
         return false,'outside the field range '..util.format(row.min)..' to '..util.format(row.max)
+    end
+    if row.kind=='code'and(#held<(row.min_length or 1)or#held>(row.max_length or 9))then
+        return false,'a code has '..(row.min_length or 1)..' to '..(row.max_length or 9)..' directions'
+    end
+    if held=='unlimited'and row.kind=='uses'and not row.unlimited then
+        return false,'this stratagem cannot be made unlimited'
     end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
@@ -121,7 +152,7 @@ function Layer:reset(row)
     if not slot then return false end
     local base=self:base(slot.row)
     slot.user,slot.error=false,nil
-    slot.target=util.representable(base,slot.row.integer,slot.row.storage)
+    slot.target=hold(slot.row,base)
     slot.dirty=true
     self:changed()
     return true
@@ -136,6 +167,22 @@ end
 
 -- A live handle for a field: integer steps, or 0.001; its range holds `values`, the field's range and storage.
 function Layer:handle(row,current,values)
+    if row.kind then
+        -- a script choice over the values this change needs: the one held now first, then the target and the base
+        local list={current}
+        for _,v in ipairs(values)do
+            local known=false
+            for _,x in ipairs(list)do if util.same(x,v)then known=true end end
+            if v~=nil and not known then list[#list+1]=v end
+        end
+        local mod=self.hd2.mod(self.id)
+        if type(mod.choice)~='function'then return nil,'editing this field needs HD2Runtime r50 (script choices)'end
+        self.counter=self.counter+1
+        local spec={id='c'..self.counter,values=list,default=1}
+        local ok,handle=pcall(function()return mod:choice(spec)end)
+        if not ok then return nil,tostring(handle)end
+        return handle
+    end
     local step=row.integer and 1 or util.STEP
     local lo,hi=current,current
     for _,v in ipairs(values)do
@@ -168,7 +215,19 @@ function Layer:register(row,handle)
     local id='hd2editor-'..self.counter..'-'..util.slug(row.field or'field',28)
     local patch={id=id,field=row.field,expect=row.vanilla,value=handle}
     for key,on in pairs(row.acks or{})do if on then patch[key]=true end end
+    if row.kind then
+        -- every value of the choice passes the bind-time proof: ask the validator which acknowledgements they need
+        local acks={}
+        for key,on in pairs(row.acks or{})do if on then acks[key]=true end end
+        for _,value in ipairs(handle.values or{})do
+            local ok,result=catalog_module.probe(row,value,acks)
+            if not ok then return {status='rejected',error=catalog_module.text(row,value)..': '..tostring(result)}end
+            acks=result
+        end
+        for key in pairs(acks)do patch[key]=true end
+    end
     local ok,watch=pcall(function()
+        patch.expect=catalog_module.expect(row)
         patch.target=row.target()
         local request={patch=patch,startup_delay=0,interval=30,recover=true}
         return self.hd2.events.run_as(self.id,function()return self.hd2.ensure(request)end)
@@ -185,7 +244,7 @@ local function fail(self,slot,why)
         slot.phase='hold'
         slot.target=slot.held
         local base=self:base(slot.row)
-        slot.user=slot.held~=nil and slot.held~=util.representable(base,slot.row.integer,slot.row.storage)
+        slot.user=slot.held~=nil and not util.same(slot.held,hold(slot.row,base))
     else
         slot.phase,slot.user,slot.target='idle',false,nil
     end
@@ -202,8 +261,8 @@ function Layer:adopt(slot)
         local base=self:base(row)
         current=base
     end
-    local held=util.representable(current,row.integer,row.storage)
-    if held==nil then return fail(self,slot,'the value in the game now ('..tostring(current)..') has more than 3 decimals')end
+    local held=hold(row,current)
+    if held==nil then return fail(self,slot,'the value in the game now ('..util.value_text(current)..') cannot be held')end
     local group={slots={},cancel={},started=self.clock}
     local function begin(s,value,values)
         local handle,why=self:handle(s.row,value,values)
@@ -231,8 +290,7 @@ function Layer:adopt(slot)
                         local other=self.slots[change.loc]
                         if change.loc~=slot.loc and not(other and(other.watch or other.phase=='adopt'))then
                             local mrow=mirror_row(self,change)
-                            local value=mrow and type(change.value)=='number'
-                                and util.representable(change.value,mrow.integer,mrow.storage)
+                            local value=mrow and hold(mrow,change.value)
                             if not value then whole=false
                             else
                                 local m=slot_for(self,mrow)
@@ -254,6 +312,14 @@ function Layer:adopt(slot)
     self:changed()
 end
 
+-- Whether a handle can take `value` without adopting again (a slider's range, or one of a choice's values).
+function Layer:covers(handle,value)
+    if handle.kind=='choice'then
+        for _,v in ipairs(handle.values or{})do if util.same(v,value)then return true end end
+        return false
+    end
+    return type(value)=='number'and value>=handle.min and value<=handle.max
+end
 -- Steers a held slot to its target through its handle.
 function Layer:steer(slot)
     slot.mark=slot.watch.runs or 0
@@ -265,7 +331,7 @@ function Layer:steer(slot)
 end
 
 local function release_if_done(self,slot)
-    if slot.phase~='hold'or slot.user or slot.dirty or slot.target~=slot.held then return end
+    if slot.phase~='hold'or slot.user or slot.dirty or not util.same(slot.target,slot.held)then return end
     if slot.base_kind=='ensure'then return end
     if slot.watch then pcall(slot.watch.cancel)end
     self.slots[slot.loc]=nil
@@ -305,7 +371,7 @@ local function step_group(self,group)
         s.watch,s.handle=s.next_watch,s.next_handle
         s.next_watch,s.next_handle,s.group=nil,nil,nil
         s.held,s.phase=s.adopt_value,'hold'
-        s.dirty=s.target~=nil and s.target~=s.held
+        s.dirty=s.target~=nil and not util.same(s.target,s.held)
     end
     self:changed()
     return true
@@ -330,7 +396,7 @@ function Layer:tick(dt)
                 fail(self,slot,w.error or w.status)
             elseif w.status=='waiting'and(w.runs or 0)>slot.mark then
                 slot.held,slot.phase=slot.steering,'hold'
-                slot.dirty=slot.target~=slot.held
+                slot.dirty=not util.same(slot.target,slot.held)
                 self:changed()
             end
         elseif slot.phase=='hold'or slot.phase=='idle'then
@@ -339,12 +405,11 @@ function Layer:tick(dt)
                 local target=slot.target
                 if target==nil then
                     if not slot.watch then self.slots[slot.loc]=nil end
-                elseif slot.phase=='hold'and slot.held==target then
+                elseif slot.phase=='hold'and util.same(slot.held,target)then
                     release_if_done(self,slot)
-                elseif slot.phase=='idle'and not slot.user and target==util.representable(self:base(slot.row),
-                    slot.row.integer,slot.row.storage)then
+                elseif slot.phase=='idle'and not slot.user and util.same(target,hold(slot.row,self:base(slot.row)))then
                     self.slots[slot.loc]=nil
-                elseif slot.watch and slot.handle and target>=slot.handle.min and target<=slot.handle.max then
+                elseif slot.watch and slot.handle and self:covers(slot.handle,target)then
                     self:steer(slot)
                 else
                     self:adopt(slot)

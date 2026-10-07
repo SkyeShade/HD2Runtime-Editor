@@ -114,8 +114,59 @@ assert(H.app.pending_n==2,'preset staged two values')
 step({'F9'})
 settle(6)
 assert(H.sim.value(rof)==1300,'preset applied 1300')
+-- value fields: a status from the picker, a calldown code, mission uses typed as digits
+local function row_where(object_key,pred)
+    local o=H.catalog:object(object_key);H.catalog:open(o)
+    for _,r in ipairs(o.rows)do if pred(r)then return r end end
+    error('no row on '..object_key)
+end
+local status=row_where('pw|BR-14 Adjudicator',function(r)return r.kind=='choice'and r.field=='damage.status_1_type'end)
+H.app:reveal(status)
+step({'ENTER'})
+assert(H.app.picker and H.app.picker.row==status,'picker open for the status')
+step({'DOWN'},nil,'15_picker')
+step({'ENTER'})
+assert(H.app.picker==nil and H.app.pending[status.key],'status staged')
+local code=row_where('st|Eagle Smoke Strike',function(r)return r.kind=='code'end)
+H.app:reveal(code)
+step({'ENTER'})
+assert(H.app.coder and H.app.coder.row==code,'code editor open')
+step({'BACKSPACE'});step({'LEFT'})
+step({},nil,'16_code')
+local edited=H.app.coder.code
+assert(edited[#edited]=='left','arrow key appended a direction')
+step({'ENTER'})
+assert(H.app.pending[code.key],'code staged')
+local uses=row_where('st|EXO-55 Breakthrough Exosuit',function(r)return r.kind=='uses'end)
+H.app:reveal(uses)
+step({'5'})
+assert(H.app.picker and H.app.picker.filter=='5','digits open the uses picker filtered')
+step({'ENTER'})
+assert(H.app.pending[uses.key]and H.app.pending[uses.key].value==5,'5 uses staged')
+step({},nil,'17_value_pending')
+step({'F9'})
+settle(8)
+step({},nil,'18_value_applied')
+for _,r in ipairs({status,code,uses})do
+    assert(H.layer:state(r)=='active',r.label..' active: '..tostring(H.layer:state(r))..' '..tostring((select(2,H.layer:state(r)))))
+end
+-- a preset keeps non-numeric values (stored by name) and loads them back
+H.app.view='presets';step({'INSERT'});step({'TAB'})
+local saved=H.presets:list()[#H.presets:list()]
+local found=0
+for _,item in ipairs(saved.fields)do
+    if item.k==code.key and type(item.v)=='table'then found=found+1 end
+    if item.k==uses.key and item.v==5 then found=found+1 end
+end
+assert(found==2,'code and uses stored in the preset: '..found)
+H.app.view='browse'
+-- Escape closes the window
+local closed=false
+H.app.ctx.close=function()closed=true end
+step({'ESCAPE'})
+assert(closed,'Escape closes the editor')
 -- search: Ctrl+F, type, filter
-step({'TAB'},{down={'SHIFT'}})
+H.app:set_view('browse')
 H.app.focus='objects'
 H.input.pressed={}
 step({'F'},{down={'CTRL'}})
@@ -128,6 +179,10 @@ H.app.search=nil
 for i,item in ipairs(H.app.categories)do if item.id=='automatons'then H.app:select_category(i)end end
 H.app.focus='objects'
 step({},nil,'13_automatons')
+-- stratagem icons render in the list and the header (when tools/game_icons.py generated them)
+for i,item in ipairs(H.app.categories)do if item.id=='offensive'then H.app:select_category(i)end end
+H.app.focus='objects'
+step({},nil,'19_icons')
 H.app.focus='fields'
 for _=1,40 do step({'DOWN'})end
 step({},nil,'14_enemy_fields')

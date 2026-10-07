@@ -10,7 +10,8 @@
 | `editor/ledger.lua` | Which mod applied which value: an observer on `core/shared_records.claim`, plus the operation registry behind `hd2.diagnostics.operations`. |
 | `editor/layer.lua` | The override layer: adopt, hand-over, steer, reset (below). |
 | `editor/presets.lua` | Presets, the saved session and settings in `hd2.store`. |
-| `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel) and the app (views, staging, dialogs). |
+| `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel), the app (views, staging, dialogs) and pickers (the value picker and the calldown code editor). |
+| `editor/generated/game_icons.lua` | Optional, written by `tools/game_icons.py`: stratagem and booster name → icon image and accent colour. |
 
 ## Rows
 
@@ -31,6 +32,14 @@ How targets are built follows ModBuilder's rules:
 - Structures' health fields need `allow_unverified_effect` (`structureAcknowledgement`).
 
 `tests/catalog_report.lua` validates every row with `domains/patches.validate`. Result: 16,401 of 16,402 rows. The exception is one enemy field whose reviewed domain is "-1, or above 0", and the test's sample value falls in the excluded gap.
+
+## Non-numeric fields (r50)
+
+Rows of kind `choice` (booleans, statuses, enums), `code` (calldown codes), `uses` (mission uses) and `reference` (projectile swaps, terminal explosions) go through the same four steps. The live handle is then a script choice (`mod:choice`, HD2Runtime r50) over just the values the change needs: the value held now, the target and the base.
+
+- **Acknowledgements:** the ensure's bind-time proof validates every value of the choice. So before registering, the editor asks the Runtime's validator about each value and adds exactly the acknowledgements it names, for example `allow_unverified_reference` for a donor that is not live-tested, or `allow_unverified_effect` for a code equal to another stratagem's.
+- **Donors:** projectile donors are the reviewed attack outputs. Terminal explosion donors are one player-weapon terminal action per reviewed explosion type, plus none. The picker offers only donors the validator accepts for that weapon.
+- **Ownership:** a move between two references is an owned transition. This was proven live for projectile choices (`LiberatorAttackOutputTest`). r50 also fixed the signature of catalogue explosion donors.
 
 ## Applying a value
 
@@ -57,6 +66,10 @@ These are not public API. A Runtime change here needs an editor update. The test
 - The upvalue `registry` of `hd2.diagnostics.operations`: `{kind, id, origin = {mod}, handle}`.
 - Validated spec keys: `kind`, `weapon`, `stratagem`, `entity`, `family`, `throwable`, `booster`, `enemy`, `attachment`, `changes[].descriptor`, `changes[].value`, `changes[].expect`, `allow_*`.
 - `hd2runtime/domains/patches.validate`: tests only.
+
+## Text placement
+
+The Runtime's FS Sinclair glyphs land 0.41 × size below the baseline `Gui.text` is given (measured from a 3838 × 2158 screenshot, sizes 12–22). r50's overlay lifts its text by that much, so the editor's cap-height centring is exact. Runtime GUIs that pass baselines directly are not corrected yet.
 
 ## Runtime additions that would make this first-class
 

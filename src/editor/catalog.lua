@@ -120,6 +120,93 @@ local function make_row(object,spec)
 end
 M.make_row=make_row
 
+-- A row whose value is not a plain number: kind = 'choice' (booleans, statuses, enums), 'code' (calldown codes),
+-- 'uses' (mission uses: a count or 'unlimited') or 'reference' (projectile swaps, terminal explosions). spec adds:
+-- expect = function() -> the request's expect (references; default the vanilla value), options = function(row) ->
+-- {{value, label, sub}} (choices and references), labels = {{value, label}} (display names), min / max (uses),
+-- directions / min_length / max_length (codes).
+local function make_value_row(object,spec)
+    local row={key=object.key..'|'..spec.id,object=object,section=spec.section or'Fields',kind=spec.kind,
+        label=util.plain(spec.label or util.humanize(spec.field),60),unit=spec.unit,vanilla=spec.vanilla,
+        held_vanilla=spec.vanilla,field=spec.field,target=spec.target,expect=spec.expect,shared=spec.shared==true,
+        unverified=spec.unverified==true,descriptor=spec.descriptor,
+        acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
+            allow_unverified_reference=spec.unverified_reference==true or nil},
+        editable=spec.editable~=false,reason=spec.reason,semantic=spec.field,options=spec.options,labels=spec.labels,
+        min=spec.min,max=spec.max,integer=spec.kind=='uses'or nil,directions=spec.directions,
+        min_length=spec.min_length,max_length=spec.max_length,unlimited=spec.unlimited}
+    row.loc=location(spec.descriptor,'row:'..row.key)
+    return row
+end
+M.make_value_row=make_value_row
+
+-- A row's value as text (its own labels first).
+function M.text(row,value)
+    for _,item in ipairs(row.labels or{})do
+        if util.same(item.value,value)then return item.label end
+    end
+    return util.value_text(value)
+end
+-- The value a request expects (vanilla; references build their own handle).
+function M.expect(row)
+    if row.expect then return row.expect()end
+    return row.vanilla
+end
+
+-- Validates a request for `value` with the Runtime's own validator, adding each acknowledgement the validator asks
+-- for (at most three). Returns true and the acknowledgements, or false and why. Without the validator (an unknown
+-- Runtime) every value passes with the row's own acknowledgements; the ensure's bind-time proof still applies.
+local patches
+function M.probe(row,value,acks)
+    if patches==nil then
+        local ok,module=pcall(require,'hd2runtime/domains/patches')
+        patches=ok and type(module)=='table'and type(module.validate)=='function'and module or false
+    end
+    local use={}
+    for k,v in pairs(acks or row.acks or{})do if v then use[k]=true end end
+    if not patches then return true,use end
+    for _=1,4 do
+        local ok,err=pcall(function()
+            local request={id='hd2editor-probe',target=row.target(),field=row.field,expect=M.expect(row),value=value}
+            for k in pairs(use)do request[k]=true end
+            return patches.validate(request)
+        end)
+        if ok then return true,use end
+        local text=tostring(err)
+        local missing=text:match('requires (allow_[%w_]+)')
+        if missing and not use[missing]then use[missing]=true
+        else return false,(text:gsub('^[^:]+:%d+: ',''))end
+    end
+    return false,'too many acknowledgements'
+end
+
+-- Storable forms of values (presets, the saved session): numbers, booleans, strings and codes as they are; reference
+-- handles by what names them.
+function M.encode(row,value)
+    if type(value)~='table'then return value end
+    if getmetatable(value)==nil and rawget(value,'path')~='no_explosion'then return value end
+    local output=rawget(value,'output')
+    if output then return {ref='output',id=output}end
+    if rawget(value,'path')=='no_explosion'then return {ref='none'}end
+    local weapon,attack,phase=rawget(value,'weapon'),rawget(value,'attack'),rawget(value,'phase')
+    if weapon and phase then return {ref='terminal',weapon=weapon,attack=attack,phase=phase}end
+    if weapon and attack then return {ref='projectile',weapon=weapon,attack=attack}end
+    return nil
+end
+function M.decode(cat,row,stored)
+    if type(stored)~='table'or stored.ref==nil then return stored end
+    local hd2=cat.hd2
+    local ok,value=pcall(function()
+        if stored.ref=='output'then return hd2.attack_output(stored.id)end
+        if stored.ref=='none'then return row.target():no_explosion()end
+        if stored.ref=='terminal'then
+            return hd2.weapon(stored.weapon):attack(stored.attack):projectile():terminal_action(stored.phase):explosion()
+        end
+        if stored.ref=='projectile'then return hd2.weapon(stored.weapon):attack(stored.attack):projectile()end
+    end)
+    return ok and value or nil
+end
+
 local function numeric(field_type,value)return NUMERIC[field_type or'']and type(value)=='number'end
 local function unverified(f)
     if f.acknowledgement=='allow_unverified_effect'then return true end
@@ -154,12 +241,64 @@ M.strip=strip
 local function builds(fn)return(pcall(fn))end
 
 ------------------------------------------------------------------------------------------- player weapons --
+-- Donor projectiles: every reviewed projectile attack output (labels from its owner).
+local function projectile_options(hd2,row)
+    local out={{value=M.expect(row),label='Own projectile',sub=row.object.name}}
+    local A=load('attack_outputs')
+    if A then
+        local ids=util.sorted_keys(A.outputs or{})
+        for _,id in ipairs(ids)do
+            local o=A.outputs[id]
+            if o.family=='projectile'and o.editable~=false then
+                local owner=type(o.owner)=='table'and o.owner.name or'?'
+                local ok,value=pcall(hd2.attack_output,id)
+                if ok then out[#out+1]={value=value,label=tostring(owner),sub=(id:match('([^/]+)$')or id)}end
+            end
+        end
+    end
+    return out
+end
+-- Donor terminal explosions: none, and one player weapon terminal action per reviewed explosion type.
+local function explosion_options(hd2,row)
+    local out={}
+    local okn,none=pcall(function()return row.target():no_explosion()end)
+    if okn then out[1]={value=none,label='None',sub='no terminal explosion'}end
+    local W=load('player_weapon_authoring')
+    local seen={}
+    for _,wname in ipairs(util.sorted_keys(W and W.weapons or{},util.natural_less))do
+        for _,f in ipairs(W.weapons[wname].fields or{})do
+            local d=type(f.currentDefault)=='table'and f.currentDefault
+            if f.type=='explosion_reference'and d and(d.explosionType or 0)>0 and not seen[d.explosionType]then
+                local ok,value=pcall(function()
+                    return hd2.weapon(d.weapon):attack(d.attack):projectile():terminal_action(d.phase):explosion()
+                end)
+                if ok then
+                    seen[d.explosionType]=true
+                    out[#out+1]={value=value,label=tostring(d.weapon),sub=util.humanize(d.phase)..' explosion '..d.explosionType}
+                end
+            end
+        end
+    end
+    return out
+end
+local function bool_labels()return {{value=false,label='Off'},{value=true,label='On'}}end
+local function static_options(labels)
+    return function()
+        local out={}
+        for i,item in ipairs(labels)do out[i]={value=item.value,label=item.label}end
+        return out
+    end
+end
 local function player_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
+        -- (a reorder-only enum such as the default fire mode refuses its own value, so nothing can hold it: left out)
+        local value_kind=f.type=='boolean'or f.type=='status_reference'
+            or(f.type=='enum'and type(f.allowedValues)=='table'and f.writeKind~='reorder_native_mode_vector')
+            or f.type=='projectile_reference'or f.type=='explosion_reference'
         if f.editable and f.preferred and not f.deprecated and not f.derivedReadOnly
-            and numeric(f.type,f.currentDefault)then
+            and(numeric(f.type,f.currentDefault)or value_kind)then
             local b=f.backing or{}
             local id=f.semanticFieldId
             local domain=domain_of(id)
@@ -186,9 +325,72 @@ local function player_rows(hd2,object,entry)
                 field=id
                 section=domain_label(id)
             end
-            rows[#rows+1]=make_row(object,{id=id,label=f.displayName,unit=f.unit,vanilla=f.currentDefault,
-                min=f.min,max=f.max,type=f.type,storage=b.storage,field=field,target=target,
-                shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=section})
+            local common={id=id,label=f.displayName,unit=f.unit,field=field,target=target,shared=shared_ack(f),
+                unverified=unverified(f),descriptor=f,section=section}
+            if numeric(f.type,f.currentDefault)then
+                common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,b.storage
+                rows[#rows+1]=make_row(object,common)
+            elseif f.type=='boolean'then
+                common.kind,common.vanilla,common.labels='choice',f.currentDefault==true,bool_labels()
+                common.options=static_options(common.labels)
+                rows[#rows+1]=make_value_row(object,common)
+            elseif f.type=='status_reference'then
+                local labels={}
+                if f.allowNone then labels[1]={value='none',label='None'}end
+                for _,v in ipairs(f.allowedValues or{})do labels[#labels+1]={value=v,label=util.humanize(v)}end
+                common.kind,common.vanilla,common.labels='choice',f.currentDefault,labels
+                common.options=static_options(labels)
+                common.section=join(section,'Status')
+                rows[#rows+1]=make_value_row(object,common)
+            elseif f.type=='enum'then
+                local names={}
+                for label,v in pairs(f.enumValues or{})do names[v]=util.humanize(label)end
+                -- a reordered mode vector can only start with a mode the weapon already has
+                local native
+                if type(f.nativeModeVector)=='table'then
+                    native={}
+                    for _,v in pairs(f.nativeModeVector)do if v~=0 then native[v]=true end end
+                end
+                local labels={}
+                for _,v in ipairs(f.allowedValues)do
+                    if type(v)~='table'and(not native or native[v])then labels[#labels+1]={value=v,label=names[v]or tostring(v)}end
+                end
+                common.kind,common.vanilla,common.labels='choice',f.currentDefault,labels
+                common.options=static_options(labels)
+                rows[#rows+1]=make_value_row(object,common)
+            elseif f.type=='projectile_reference'then
+                local role=f.referenceRole or b.branch or'primary'
+                if builds(function()return hd2.weapon(name):attack(role):projectile()end)then
+                    common.kind='reference'
+                    common.target=function()return hd2.weapon(name):attack(role)end
+                    common.field='attack.projectile'
+                    common.expect=function()return hd2.weapon(name):attack(role):projectile()end
+                    common.vanilla=common.expect()
+                    common.label='Projectile'
+                    common.section=join('Projectile',role_label(role),'Swap')
+                    common.options=function(row)return projectile_options(hd2,row)end
+                    rows[#rows+1]=make_value_row(object,common)
+                end
+            elseif f.type=='explosion_reference'and b.branch and b.phase then
+                local role,phase=b.branch,b.phase
+                local terminal=function()return hd2.weapon(name):attack(role):projectile():terminal_action(phase)end
+                if builds(terminal)then
+                    local d=type(f.currentDefault)=='table'and f.currentDefault or{}
+                    local none=(d.explosionType or 0)==0
+                    common.kind='reference'
+                    common.target=terminal
+                    common.field='terminal.explosion'
+                    common.expect=function()local t=terminal();if none then return t:no_explosion()end return t:explosion()end
+                    local ok,vanilla=pcall(common.expect)
+                    if ok then
+                        common.vanilla=vanilla
+                        common.label=util.humanize(phase)..' payload'
+                        common.section=join('Explosion',role_label(role),util.humanize(phase))
+                        common.options=function(row)return explosion_options(hd2,row)end
+                        rows[#rows+1]=make_value_row(object,common)
+                    end
+                end
+            end
         end
     end
     return rows
@@ -199,8 +401,9 @@ local function support_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
+        local value_kind=f.type=='boolean'or f.type=='status_reference'
         if f.editable and not f.derivedReadOnly and not f.deprecated and(f.preferred~=false)
-            and numeric(f.type,f.currentDefault)then
+            and(numeric(f.type,f.currentDefault)or value_kind)then
             local t=f.target or{}
             local role=t.attack
             local id=f.semanticFieldId
@@ -222,9 +425,25 @@ local function support_rows(hd2,object,entry)
                 field=id
                 section=domain_label(id)
             end
-            rows[#rows+1]=make_row(object,{id=id..(role and('@'..role)or''),label=f.displayName,unit=f.unit,
-                vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,storage=(f.backing or{}).storage,field=field,
-                target=target,shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=section})
+            local common={id=id..(role and('@'..role)or''),label=f.displayName,unit=f.unit,field=field,target=target,
+                shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=section}
+            if numeric(f.type,f.currentDefault)then
+                common.vanilla,common.min,common.max,common.type=f.currentDefault,f.min,f.max,f.type
+                common.storage=(f.backing or{}).storage
+                rows[#rows+1]=make_row(object,common)
+            elseif f.type=='boolean'then
+                common.kind,common.vanilla,common.labels='choice',f.currentDefault==true,bool_labels()
+                common.options=static_options(common.labels)
+                rows[#rows+1]=make_value_row(object,common)
+            else
+                local labels={}
+                if f.allowNone then labels[1]={value='none',label='None'}end
+                for _,v in ipairs(f.allowedValues or{})do labels[#labels+1]={value=v,label=util.humanize(v)}end
+                common.kind,common.vanilla,common.labels='choice',f.currentDefault,labels
+                common.options=static_options(labels)
+                common.section=join(section,'Status')
+                rows[#rows+1]=make_value_row(object,common)
+            end
         end
     end
     return rows
@@ -268,7 +487,37 @@ local function stratagem_rows(hd2,object,entry)
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
-        if f.editable and numeric(f.type,f.currentDefault)then
+        if f.editable and f.type=='calldown_code'and type(f.currentDefault)=='table'then
+            local directions={}
+            for i,d in ipairs(f.directions or{'up','right','down','left'})do directions[i]=d end
+            rows[#rows+1]=make_value_row(object,{id=f.instanceKey or'stratagem.calldown_code',kind='code',
+                label=f.displayName or'Calldown code',field=f.semanticFieldId,target=stratagem_target(hd2,name,t),
+                vanilla=util.copy(f.currentDefault),descriptor=f,section='Call-in',directions=directions,
+                min_length=f.minLength or 1,max_length=f.maxLength or 9})
+        elseif f.editable and f.type=='stratagem_uses'then
+            local allowed={}
+            for _,tr in ipairs(f.transitions or{})do allowed[tr]=true end
+            local vanilla=f.currentDefault
+            local unlimited=vanilla=='unlimited'or allowed.finite_to_unlimited==true
+            rows[#rows+1]=make_value_row(object,{id=f.instanceKey or'stratagem.max_uses',kind='uses',
+                label=f.displayName or'Mission uses',field=f.semanticFieldId,target=stratagem_target(hd2,name,t),
+                vanilla=vanilla,descriptor=f,section='Call-in',min=f.min or 1,max=f.max or 100,unlimited=unlimited,
+                unverified=unverified(f),
+                labels={{value='unlimited',label='Unlimited'}}})
+        elseif f.editable and f.type=='enum'and type(f.allowedValues)=='table'then
+            local labels={}
+            for _,v in ipairs(f.allowedValues)do
+                if type(v)=='table'then labels[#labels+1]={value=v.value,label=util.humanize(v.name or tostring(v.value))}
+                else labels[#labels+1]={value=v,label=tostring(v)}end
+            end
+            local target=stratagem_target(hd2,name,t)
+            if target then
+                rows[#rows+1]=make_value_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.path)),
+                    kind='choice',label=f.displayName,field=f.semanticFieldId,target=target,vanilla=f.currentDefault,
+                    descriptor=f,section=PATH_LABELS[t.path]or util.humanize(t.path or''),labels=labels,
+                    options=static_options(labels),shared=shared_ack(f),unverified=unverified(f)})
+            end
+        elseif f.editable and numeric(f.type,f.currentDefault)then
             local target=stratagem_target(hd2,name,t)
             if target then
                 local section=PATH_LABELS[t.path]

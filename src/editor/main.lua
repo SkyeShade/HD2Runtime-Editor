@@ -6,9 +6,15 @@ local ledger_module=require('mods/skyeshade/hd2runtime_editor/editor/ledger')
 local layer_module=require('mods/skyeshade/hd2runtime_editor/editor/layer')
 local presets_module=require('mods/skyeshade/hd2runtime_editor/editor/presets')
 local app_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/app')
+-- The game's own icons, when tools/game_icons.py generated them for this build (optional; never committed).
+local game_icons
+do
+    local ok,value=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/generated/game_icons')
+    if ok and type(value)=='table'then game_icons=value end
+end
 local M={}
 
-M.VERSION='0.1.0'
+M.VERSION='0.2.0'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -58,9 +64,28 @@ function M.start(hd2,id)
     local presets=presets_module.new(store)
     local hotkey=presets:setting('hotkey',M.HOTKEY)
     local overlay=hd2.ui.overlay({id='editor',visible=false})
+    -- Icons: one image handle per generated icon (needs the overlay's d:image, HD2Runtime r50).
+    local icons
+    if game_icons and type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
+        icons={stratagems={},boosters={}}
+        local count=0
+        for kind,list in pairs({stratagems=game_icons.stratagems or{},boosters=game_icons.boosters or{}})do
+            for name,entry in pairs(list)do
+                local ok,handle=pcall(hd2.resources.image,entry.image)
+                if ok and handle then icons[kind][name]={handle=handle,accent=entry.accent};count=count+1 end
+            end
+        end
+        log(count..' game icons available')
+    end
+    -- The cursor capture (HD2Runtime r50, experimental): freed while the editor is open, when the setting is on.
+    local function set_free_cursor(on)
+        if type(overlay.free_cursor)=='function'then pcall(overlay.free_cursor,overlay,on)end
+    end
+    set_free_cursor(presets:setting('free_cursor',true))
     local app=app_module.new({hd2=hd2,catalog=catalog,layer=layer,ledger=ledger,presets=presets,hotkey=hotkey,
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
-        mouse=function()return overlay:mouse()end,log=log})
+        mouse=function()return overlay:mouse()end,log=log,icons=icons,choices=type(mod.choice)=='function',
+        set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
 
     -- Drawing: a failing frame is logged once per message and replaced by a one-line notice.
@@ -84,6 +109,7 @@ function M.start(hd2,id)
         end
     end
     state.toggle=toggle
+    app.ctx.close=function()if overlay:status().visible then toggle()end end
     local binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle})
     if type(binding)=='table'and binding.state=='conflict'then
         log('the hotkey '..hotkey..' is used by another mod; rebind it in the Presets tab settings or saved data')
@@ -103,9 +129,9 @@ function M.start(hd2,id)
                 if restore then
                     local values=presets:session()
                     local applied,missing_rows=0,0
-                    for key,value in pairs(values)do
-                        local row=catalog:row(key)
-                        if row and row.editable and layer:set(row,value)then applied=applied+1 else missing_rows=missing_rows+1 end
+                    for key,stored in pairs(values)do
+                        local row,value=app:decode_value(key,stored)
+                        if row and value~=nil and layer:set(row,value)then applied=applied+1 else missing_rows=missing_rows+1 end
                     end
                     if applied+missing_rows>0 then
                         log('restored '..applied..' saved values'..(missing_rows>0 and(' ('..missing_rows..' no longer available)')or''))
@@ -117,7 +143,7 @@ function M.start(hd2,id)
         if restored and(app.save_session or layer.version~=saved_version)and not layer:busy()then
             app.save_session=false
             saved_version=layer.version
-            presets:set_session(layer:overrides())
+            presets:set_session(app:encode_values(layer:overrides()))
         end
     end,{id='hd2runtime_editor.layer'})
     log('HD2Runtime Editor '..M.VERSION..' ready; press '..hotkey..' to open')

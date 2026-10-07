@@ -65,6 +65,15 @@ class EditorTests(unittest.TestCase):
                      'rebind ok', 'refusals ok', 'reset all ok'):
             self.assertIn(line, result)
 
+    def test_value_fields_over_script_choices(self):
+        # calldown codes, mission uses, booleans, statuses, projectile swaps, terminal explosions (HD2Runtime r50)
+        result = lua_host.run('local f=assert(loadfile(%s)) return f(%s)' % (
+            lua_host._lua_string((LUA / 'test_layer_values.lua').as_posix()),
+            lua_host._lua_string((LUA / 'sim.lua').as_posix())))
+        for line in ('calldown code ok', 'mission uses ok', 'boolean ok', 'status ok', 'projectile swap ok',
+                     'terminal explosion ok', 'refusals ok', 'mod code takeover ok'):
+            self.assertIn(line, result)
+
     def test_window_frames_stay_inside_overlay_limits(self):
         result = lua_file('test_ui.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                           'harness': (LUA / 'ui_harness.lua').as_posix()})

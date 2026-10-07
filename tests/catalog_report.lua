@@ -9,6 +9,8 @@ local cat=catalog.new(hd2)
 local CATEGORIES=...
 local out,groups,order={}, {},{}
 local total,passed,rows_total=0,0,0
+local values,refs_total,refs_ok
+local DONORS=select(2,...)
 local function test_value(row)
     local v=row.held_vanilla
     local step=row.integer and 1 or math.max(0.5,math.abs(v)*0.1)
@@ -32,7 +34,36 @@ for _,group in ipairs(catalog.GROUPS)do
                 if object.error then out[#out+1]='OBJECT '..object.key..' failed: '..object.error end
                 for _,row in ipairs(object.rows)do
                     c_rows=c_rows+1
-                    if row.editable then
+                    if row.editable and row.kind then
+                        -- value rows: the vanilla value and one other value pass the validator (acknowledgements added
+                        -- as the validator asks, as the editor does)
+                        c_total=c_total+1
+                        local other
+                        if row.kind=='code'then
+                            other={}
+                            for i,d in ipairs(row.vanilla)do other[i]=d end
+                            other[#other]=other[#other]=='up'and'down'or'up'
+                        elseif row.kind=='uses'then
+                            other=row.vanilla=='unlimited'and 3 or(row.unlimited and'unlimited'or math.max(row.min,(row.vanilla or 1)-1))
+                        elseif row.options and row.kind=='choice'then
+                            for _,o in ipairs(row.options(row))do if not util.same(o.value,row.vanilla)then other=o.value;break end end
+                        end
+                        local ok,err=catalog.probe(row,catalog.expect(row))
+                        if ok and other~=nil then ok,err=catalog.probe(row,other)end
+                        if row.kind=='reference'and DONORS then
+                            for _,o in ipairs(row.options(row))do
+                                refs_total=(refs_total or 0)+1
+                                if catalog.probe(row,o.value)then refs_ok=(refs_ok or 0)+1 end
+                            end
+                        end
+                        values=(values or 0)+1
+                        if ok then c_pass=c_pass+1 else
+                            local sig=item.id..' | '..row.kind..' | '..tostring(err):gsub('[%d%.]+','#'):sub(1,100)
+                            local g=groups[sig]
+                            if not g then g={n=0,example=row.key..' ['..tostring(row.field)..'] '..tostring(err):sub(1,200)};groups[sig]=g;order[#order+1]=sig end
+                            g.n=g.n+1
+                        end
+                    elseif row.editable then
                         c_total=c_total+1
                         local request={id='editor-contract',field=row.field,expect=row.vanilla,value=test_value(row)}
                         for k,v in pairs(row.acks)do request[k]=v end
@@ -56,6 +87,7 @@ for _,group in ipairs(catalog.GROUPS)do
     end
 end
 out[#out+1]=string.format('TOTAL rows=%d editable=%d valid=%d',rows_total,total,passed)
+out[#out+1]='VALUE ROWS '..tostring(values or 0)..(DONORS and('  reference donors valid '..tostring(refs_ok)..' of '..tostring(refs_total))or'')
 table.sort(order,function(a,b)return groups[a].n>groups[b].n end)
 for i=1,math.min(#order,60)do
     local g=groups[order[i]]

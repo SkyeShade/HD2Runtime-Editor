@@ -29,9 +29,20 @@ local input={pressed={},down={},mouse=nil}
 local fake={input={
     pressed=function(name)return input.pressed[name]==true end,
     down=function(name)return input.down[name]==true or input.pressed[name]==true end}}
+-- icons: the generated map when present, with stand-in handles naming their image
+local icons
+do
+    local ok,gi=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/generated/game_icons')
+    if ok and type(gi)=='table'then
+        icons={stratagems={},boosters={}}
+        for kind,list in pairs({stratagems=gi.stratagems or{},boosters=gi.boosters or{}})do
+            for name,entry in pairs(list)do icons[kind][name]={handle={image=entry.image},accent=entry.accent}end
+        end
+    end
+end
 local app=require('mods/skyeshade/hd2runtime_editor/editor/ui/app').new({hd2=fake,catalog=catalog,layer=layer,
-    ledger=ledger,presets=presets,hotkey='F8',label='HD2Runtime 0.30.0-dev  ·  Editor 0.1.0',
-    mouse=function()return input.mouse end})
+    ledger=ledger,presets=presets,hotkey='F8',label='HD2Runtime 0.30.0-dev  ·  Editor 0.2.0',
+    mouse=function()return input.mouse end,icons=icons,choices=true,set_free_cursor=function()end})
 
 local W,H=args.width or 1920,args.height or 1080
 local function frame_builder()
@@ -54,6 +65,16 @@ local function frame_builder()
         if z%1~=0 or z<0 or 1011+z>1023 then return refuse('text z '..tostring(z))end
         local c=o.colour or{255,255,255,255}
         self.items[#self.items+1]={k='t',s=s,x=x,y=y,size=size,c={c[1],c[2],c[3],c[4]or 255},z=z,font=o.font or'body'}
+    end
+    function d:image(handle,x,y,w,h,o)
+        o=o or{}
+        if type(handle)~='table'then return refuse('image handle')end
+        if not(finite(x)and finite(y)and finite(w)and finite(h)and w>0 and h>0)then return refuse('image box')end
+        local z=o.z or 0
+        if z%1~=0 or z<0 or 1011+z>1023 then return refuse('image z')end
+        if x<0 or y<0 or x+w>self.width or y+h>self.height then return end
+        local r=o.colours and o.colours.r or{255,255,255,255}
+        self.items[#self.items+1]={k='i',image=handle.image,x=x,y=y,w=w,h=h,z=z,c={r[1],r[2],r[3],r[4]or 255}}
     end
     function d:text_width(s,size,role)return ui_fonts.width(fonts[role or'body']or fonts.body,tostring(s),size or 18)end
     return d
@@ -86,7 +107,10 @@ function H_.dump(d)
     local out={'{"width":'..d.width..',"height":'..d.height..',"items":['}
     for i,it in ipairs(d.items)do
         local c=string.format('[%d,%d,%d,%d]',it.c[1],it.c[2],it.c[3],it.c[4])
-        if it.k=='r'then
+        if it.k=='i'then
+            out[#out+1]=string.format('%s{"k":"i","image":"%s","x":%.2f,"y":%.2f,"w":%.2f,"h":%.2f,"z":%d,"c":%s}',
+                i>1 and','or'',tostring(it.image),it.x,it.y,it.w,it.h,it.z,c)
+        elseif it.k=='r'then
             out[#out+1]=string.format('%s{"k":"r","x":%.2f,"y":%.2f,"w":%.2f,"h":%.2f,"z":%d,"c":%s}',i>1 and','or'',it.x,it.y,it.w,it.h,it.z,c)
         else
             local s=it.s:gsub('\\','\\\\'):gsub('"','\\"')

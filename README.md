@@ -7,19 +7,23 @@
 HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows which HD2Runtime mods you have installed and what each one changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
 - **See what your mods do.** The Mods tab lists every installed HD2Runtime mod with the values it applied this session, and any operation the Runtime refused, with the reason. Select a value to jump to that field.
-- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Support Weapons, Throwables, Magazines), Stratagems (Offensive, Defensive, Support Call-ins), Equipment (Backpacks, Vehicles, Vehicle Weapons, Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 16,400 numeric fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
+- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Support Weapons, Throwables, Magazines), Stratagems (Offensive, Defensive, Support Call-ins), Equipment (Backpacks, Vehicles, Vehicle Weapons, Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,200 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
+- **More than numbers.** Calldown codes (arrow-key code editor), mission uses (a count or unlimited), projectile swaps and terminal explosion payloads (a searchable donor list), statuses, on/off switches and enums. A donor appears only if the Runtime's own validator accepts it for that weapon.
+- **The game's own icons.** Stratagems and boosters show the icons from your installed game, coloured as on the loadout screen (an opt-in local build step, see [Game icons](#game-icons)).
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
 - **Optimised apply.** Edits are staged as pending changes and applied together. Only fields whose value changed are written, and each change is a single guarded write.
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.1.0, development build.** All of this is tested offline against the real HD2Runtime source (see [Tests](#tests)). It has not been run in the game yet, and neither have the Runtime's overlay services it uses.
+> **Status: 0.2.0, development build for HD2Runtime r50.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). The 0.1.0 window was seen in game; the r50 additions (text placement, icons, cursor capture, non-numeric editing) are not live-tested yet.
 
 ## Requirements
 
 - Helldivers 2
 - Bingus Shared Loader v15+
-- **HD2Runtime 0.30.0-dev with the UI and game-mod services** (`hd2.ui.overlay`, `hd2.store`, `hd2.on_frame`, `hd2.input.pressed`; HD2Runtime commit `a020369` "Scripting services for UI and game mods" or later). The older `HD2Runtime-0.30.0-dev-runtime.zip` build does not have them. In that case the editor stays inactive and writes the reason to `HD2Runtime.log`.
+- **HD2Runtime 0.30.0-dev r50 or later.** r50 adds what this version uses: script choices (`mod:choice`, for non-numeric fields), overlay images (`d:image`, for icons), cursor capture (`overlay:free_cursor`), the overlay text placement fix, and naming the mod behind each applied value for mods built without the SDK wrapper.
+  - On an older 0.30.0-dev with the UI services (`hd2.ui.overlay`, `hd2.store`, `hd2.on_frame`, `hd2.input.pressed`), numbers still edit. Non-numeric fields then explain that they need r50, and icons and cursor capture are simply absent.
+  - Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
 
 ## Installation
 
@@ -27,7 +31,9 @@ Install `HD2RuntimeEditor-<version>.zip` with your mod manager (HD2 Arsenal show
 
 ## Using it
 
-Press **F8** in game to open or close the editor. Opening it aboard the ship is the most comfortable: the game still receives every key and click while the editor is open, because HD2Runtime cannot block input.
+Press **F8** in game to open or close the editor, or **Esc** to close it (the game's pause menu also opens on Esc). The window is centred on the screen.
+
+While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental in r50; turn it off in Presets → settings if it misbehaves. Keys and clicks still also reach the game, because HD2Runtime cannot block input, so the ship is the most comfortable place to edit.
 
 | Key | Action |
 | --- | --- |
@@ -36,6 +42,7 @@ Press **F8** in game to open or close the editor. Opening it aboard the ship is 
 | → / ← | Go deeper or back (categories, objects, fields). In the field list: nudge the value (Shift ×10, Ctrl ÷10) |
 | Tab / Shift+Tab | Next pane / next tab (Browse, Mods, Presets) |
 | Digits, `.`, `-` | Type a value for the selected field. Tab, ↑ or ↓ confirms; Del cancels |
+| Enter | Choose a value for a non-numeric field (picker or calldown code editor) |
 | Del | Remove a field's pending change, or stage it back to its default |
 | Ctrl+F | Search the object list |
 | F9 | Apply pending changes |
@@ -71,11 +78,21 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 
 ## Limitations
 
-- **Numeric fields only.** Lists, references, status choices, traits and other non-numeric values are not editable here yet. ModBuilder covers them.
+- **Not every value type.** Traits, fire-mode and rate lists, sounds, weapon functions, function projectiles, mount swaps, hellpod contents and stratagem presentation stay with ModBuilder. The default fire mode is left out: it can only be reordered, never held at its own value.
 - **Three decimals.** Values are held with at most three decimals (the Runtime's live-value precision). A float32 default such as `0.30000001192` is the same stored value as `0.3`, so every catalogued default qualifies.
 - **When values apply.** Some values (fire rate, magazines, heat) are copied when the game builds a weapon, so a weapon you are holding may keep its old value until it is re-equipped or the next mission. Projectile, damage and explosion values apply on the next shot.
 - **A mod's in-game options after a takeover.** Once the editor has taken a field over from a mod's `ensure`, that mod's Mod Options sliders no longer move that field for the rest of the session.
 - **Multiplayer.** Writes follow HD2Runtime's rules. They change this machine's game data; what the host decides still wins.
+
+## Game icons
+
+`py tools/game_icons.py` reads the stratagem and booster icon libraries from your installed game, read-only, through the HD2Runtime SDK's game-data reader. It turns them into the game's icon masks under `images/`, plus a map in `src/editor/generated/`, and the next build packs them in. `py tools/game_icons.py --clean` removes them again.
+
+The icons are derived from Arrowhead's artwork. They are git-ignored and only end up in builds you make yourself, so publish such a build only if you are allowed to redistribute them. Without them the editor simply shows no icons.
+
+## UI art
+
+`tools/ui-art/art.html` is a page of HTML/CSS artboards in the editor's look: the mark, category and tab icons, buttons, chips and a README banner. `py tools/ui-art/export.py` renders each artboard to a transparent PNG (`@1x` and `@2x`) with headless Microsoft Edge, into `assets/ui/`. With `--game`, the 256 × 256 icon artboards also go to `images/`, ready for `d:image`.
 
 ## Building
 
@@ -95,9 +112,10 @@ py -m unittest discover -s tests -v
 
 The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that DLL is loaded, never the game. They load modules from an HD2Runtime checkout beside this folder (`HD2RUNTIME_ROOT` overrides the path).
 
-- **Catalogue contract:** every one of the ~16,400 rows the editor builds passes HD2Runtime's own validator (`domains/patches.validate`) with a changed value and the acknowledgements the row carries.
+- **Catalogue contract:** every one of the ~17,200 rows the editor builds passes HD2Runtime's own validator (`domains/patches.validate`) with a changed value. Non-numeric rows check their vanilla value and another value, with the acknowledgements the validator asks for.
 - **Override layer:** the real `hd2.ensure`, script values, bind-time proofs and conflict rule run over a simulated byte store. The scenarios: vanilla edit and reset, taking over a mod's ensure (including its other fields), a one-time mod patch, a value outside the handle range, refusals, and reset-all.
-- **UI:** the whole window, driven by scripted keys. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
+- **Value fields:** calldown codes, mission uses, booleans, statuses, projectile swaps and terminal explosions over r50 script choices, plus a mod's calldown code taken over and given back.
+- **UI:** the whole window, driven by scripted keys, including the picker, the code editor and Escape. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
 
 ## License and credit
 
