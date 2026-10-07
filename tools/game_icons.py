@@ -15,7 +15,12 @@ What it does:
 4. Rasterises every icon at 256 x 256 in one headless Microsoft Edge pass and writes images/si_<key>.png (stratagems)
    and images/bi_<key>.png (boosters), only for icons the HD2Runtime catalogues bind to a stratagem or booster
    (StratagemAuthoringCapabilities uiIcon, BoosterAuthoringCapabilities identity.uiIcon).
-5. Writes src/editor/generated/game_icons.lua: stratagem and booster name -> {image id, accent colour}.
+5. Every stratagem and booster the vector library leaves out (unbound or empty templates: Maxigun, Meltagun, Jump
+   Pack, Resupply, Integrated Extinguishers, Surplus EAT Allocation, ...) gets its own HUD icon instead: the atlas
+   sprite its native record names, extracted by the SDK's tools/hd2_hud_icons.py (HD2Runtime r51). Stratagem sprites
+   are already masks; a booster sprite's yellow plate becomes the R mask. Its accent is the colour the vector icons
+   of the same family use. SG-88 and CQC-72 have no call-in stratagem and so no icon anywhere in the game.
+6. Writes src/editor/generated/game_icons.lua: stratagem and booster name -> {image id, accent colour}.
 
 The images are derived from Arrowhead's artwork. They are git-ignored and are packed only into builds you make
 yourself; publish a build with them only if you are allowed to redistribute them.
@@ -61,10 +66,14 @@ def find_sdk(explicit=None):
     sys.exit('HD2Runtime SDK not found: pass --sdk or set HD2RUNTIME_SDK (the folder holding hd2.py and tools/).')
 
 
-def read_libraries(sdk, game):
+def game_data(sdk, game):
     sys.path.insert(0, str(sdk / 'tools'))
     import hd2_game_data
-    data = hd2_game_data.Data(game) if game else hd2_game_data.Data()
+    return hd2_game_data.Data(game) if game else hd2_game_data.Data()
+
+
+def read_libraries(sdk, data):
+    import hd2_game_data
     xaml_type = hd2_game_data.murmur64(b'xaml')
     wanted = {kind: (hd2_game_data.murmur64(name.encode()), xaml_type) for kind, name in LIBRARIES.items()}
     found = data.find(set(wanted.values()))
@@ -78,6 +87,50 @@ def read_libraries(sdk, game):
         if size > len(raw) - 16:
             sys.exit('unexpected XAML resource layout for ' + LIBRARIES[kind])
         out[kind] = (raw[16:16 + size].decode('utf-8'), hashlib.sha256(raw).hexdigest())
+    return out
+
+
+def families(sdk):
+    """{stratagem name: family} from the SDK catalogue."""
+    strat = json.loads((sdk / 'StratagemAuthoringCapabilities.json').read_text(encoding='utf-8'))
+    return {s['name']: s.get('family') for s in strat.get('stratagems', [])}
+
+
+def hud_icons(sdk, data, wanted):
+    """{kind: {name: PIL image 256 x 256 RGB mask}} of the HUD icons of the wanted {kind: [names]}, through the SDK's
+    hd2_hud_icons (HD2Runtime r51); empty with a note when the SDK predates it."""
+    from PIL import Image
+    if not (sdk / 'tools' / 'hd2_hud_icons.py').is_file() or not (sdk / 'HudIconSprites.json').is_file():
+        print('note: this HD2Runtime SDK has no tools/hd2_hud_icons.py (r51); items without a vector icon stay plain')
+        return {'stratagem': {}, 'booster': {}}
+    import hd2_hud_icons
+    icons = hd2_hud_icons.HudIcons(data)
+    out = {'stratagem': {}, 'booster': {}}
+    for kind, names in wanted.items():
+        for name in names:
+            got = icons.icon(kind, name)
+            if got is None:
+                continue
+            w, h, rgba = got
+            image = Image.frombytes('RGBA', (w, h), rgba)
+            if (w, h) != (256, 256):
+                image = image.resize((256, 256), Image.LANCZOS)
+            r, g, _b, a = image.split()
+            black = Image.new('L', image.size, 0)
+            if kind == 'booster':
+                # a colour sprite: the yellow plate (saturated) becomes the R mask; the dark glyph and outside nothing
+                pixels = image.load()
+                mask = Image.new('L', image.size, 0)
+                m = mask.load()
+                for y in range(image.height):
+                    for x in range(image.width):
+                        pr, pg, pb, pa = pixels[x, y]
+                        m[x, y] = min(255, (max(pr, pg, pb) - min(pr, pg, pb)) * pa // 224)
+                r, g = mask, black
+            else:
+                # already masks; cleared where a page carries transparency
+                r, g = Image.composite(r, black, a), Image.composite(g, black, a)
+            out[kind][name] = Image.merge('RGB', (r, g, black))
     return out
 
 
@@ -267,7 +320,8 @@ def main():
         clean()
         return 0
     sdk = find_sdk(args.sdk)
-    libraries = read_libraries(sdk, args.game)
+    data = game_data(sdk, args.game)
+    libraries = read_libraries(sdk, data)
     names = bindings(sdk)
     svgs, mapping, sources = {}, {'stratagem': {}, 'booster': {}}, {}
     for kind, (xaml, digest) in libraries.items():
@@ -280,6 +334,29 @@ def main():
             svgs[image_id] = icons[key][0]
             mapping[kind][name] = (image_id, icons[key][1])
     images = rasterise(svgs)
+    # everything the vector library leaves out: the item's own HUD icon
+    strat = json.loads((sdk / 'StratagemAuthoringCapabilities.json').read_text(encoding='utf-8'))
+    boost = json.loads((sdk / 'BoosterAuthoringCapabilities.json').read_text(encoding='utf-8'))
+    wanted = {'stratagem': [s['name'] for s in strat.get('stratagems', []) if s['name'] not in mapping['stratagem']],
+              'booster': [b['name'] for b in boost.get('boosters', []) if b['name'] not in mapping['booster']]}
+    hud = hud_icons(sdk, data, wanted)
+    family = families(sdk)
+    accents = {}
+    for name, (_image_id, accent) in mapping['stratagem'].items():
+        counts = accents.setdefault(family.get(name), {})
+        counts[accent] = counts.get(accent, 0) + 1
+
+    def family_accent(name):
+        counts = accents.get(family.get(name)) or accents.get('support') or {(255, 255, 255): 1}
+        return max(counts.items(), key=lambda kv: kv[1])[0]
+    booster_accents = [accent for _image_id, accent in mapping['booster'].values()]
+    booster_accent = max(booster_accents, key=booster_accents.count) if booster_accents else (255, 221, 31)
+    for kind, icons in hud.items():
+        for name, image in icons.items():
+            image_id = PREFIX[kind] + 'hud_' + re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
+            images[image_id] = image
+            mapping[kind][name] = (image_id, family_accent(name) if kind == 'stratagem' else booster_accent)
+        sources[kind]['hud'] = len(icons)
     clean_quiet = [p for p in IMAGES.glob('*.png') if p.name.startswith(tuple(PREFIX.values()))]
     for path in clean_quiet:
         path.unlink()
@@ -291,8 +368,8 @@ def main():
              'return {format=1,sources={']
     for kind in ('stratagem', 'booster'):
         s = sources[kind]
-        lines.append('  %s={resource=%s,sha256=%s,icons=%d},' % (kind, lua_string(s['resource']), lua_string(s['sha256']),
-                                                                 s['icons']))
+        lines.append('  %s={resource=%s,sha256=%s,icons=%d,hud=%d},' % (kind, lua_string(s['resource']),
+                                                                        lua_string(s['sha256']), s['icons'], s.get('hud', 0)))
     lines.append('},')
     for kind, field in (('stratagem', 'stratagems'), ('booster', 'boosters')):
         lines.append(field + '={')
@@ -302,8 +379,10 @@ def main():
         lines.append('},')
     lines.append('}')
     GENERATED.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
-    print('%d stratagem and %d booster icons -> images/ (%s)' % (len(mapping['stratagem']), len(mapping['booster']),
-                                                                  GENERATED.relative_to(PROJECT)))
+    missing = sorted(set(wanted['stratagem'] + wanted['booster']) - set(mapping['stratagem']) - set(mapping['booster']))
+    print('%d stratagem and %d booster icons (%d from the HUD atlas) -> images/ (%s)%s' % (
+        len(mapping['stratagem']), len(mapping['booster']), sum(len(v) for v in hud.values()),
+        GENERATED.relative_to(PROJECT), ('; no icon in the game: ' + ', '.join(missing)) if missing else ''))
     return 0
 
 

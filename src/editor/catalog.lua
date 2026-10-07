@@ -569,9 +569,64 @@ local function stratagem_rows(hd2,object,entry)
 end
 
 ----------------------------------------------------------------------------------------- vehicles, backpacks --
+-- A mounted weapon's readable name: its display name, made unique with a short id when several share it.
+local mount_names
+local function mounted_weapon_name(id)
+    if not mount_names then
+        mount_names={}
+        local E=load('entity_authoring')
+        local count={}
+        for _,w in pairs(E and E.mountedWeapons or{})do
+            local n=w.displayName or'?'
+            count[n]=(count[n]or 0)+1
+        end
+        for key,w in pairs(E and E.mountedWeapons or{})do
+            local n=util.humanize(w.displayName or key):gsub('^%l',string.upper)
+            if(count[w.displayName or'?']or 0)>1 then n=n..' #'..(tostring(key):match('/(%x%x%x%x)%x*$')or'?')end
+            mount_names[key]=n
+        end
+    end
+    return mount_names[id]or tostring(id):match('mounted%-weapon/v1/([^/]+)')or tostring(id)
+end
+M.mounted_weapon_name=mounted_weapon_name
+-- The catalogued vehicle (or drone) weapon that IS a mounted weapon (same attack resource), or nil: its key and entry.
+function M.mounted_weapon_entry(id)
+    local E,V=load('entity_authoring'),load('vehicle_weapon_authoring')
+    local w=E and E.mountedWeapons and E.mountedWeapons[id]
+    if not(w and V)then return nil end
+    for _,key in ipairs(util.sorted_keys(V.weapons or{}))do
+        if V.weapons[key].attackResource==w.resource then return key,V.weapons[key]end
+    end
+    return nil
+end
 local function vehicle_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    -- mounts: which weapon each slot holds (a same-family swap, as ModBuilder offers it)
+    for _,f in ipairs(entry.fields or{})do
+        local t=f.target or{}
+        if f.editable and t.path=='mount'and f.type=='mounted_weapon_reference'and type(f.currentDefault)=='string'then
+            local slot=t.mount
+            local info=entry.mounts and entry.mounts[slot]or{}
+            local labels={{value=f.currentDefault,label=mounted_weapon_name(f.currentDefault)}}
+            for _,id in ipairs(f.allowedValues or{})do labels[#labels+1]={value=id,label=mounted_weapon_name(id)}end
+            local vanilla=f.currentDefault
+            rows[#rows+1]=make_value_row(object,{id=f.instanceKey or('mount.weapon@'..tostring(slot)),kind='reference',
+                label=util.humanize(info.role or slot),field=f.semanticFieldId,descriptor=f,section='Mounted Weapons',
+                target=function()return hd2.vehicle(name):mount(slot)end,expect=function()return vanilla end,
+                vanilla=vanilla,labels=labels,unverified_reference=true,
+                options=function()
+                    local out={}
+                    for i,item in ipairs(labels)do
+                        local key=M.mounted_weapon_entry(item.value)
+                        out[#out+1]={value=item.value,label=item.label..(i==1 and' (vanilla)'or''),
+                            sub=key and('stats editable: '..key)or'stats not editable'}
+                    end
+                    return out
+                end})
+            rows[#rows].mount_slot=slot
+        end
+    end
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
         if f.editable and numeric(f.type,f.currentDefault)and(t.path=='entity'or t.path=='damage_zone')then
@@ -990,7 +1045,7 @@ function CATEGORY.support_backpacks(cat)
                     for _,d in ipairs(drones)do
                         append(rows,part_rows(object,'vw:'..(d.entry.mount or'gun'),function(p)
                             return vehicle_weapon_rows(cat.hd2,p,d.entry)end,
-                            function(row)row.group='Drone Weapon'end))
+                            function(row)row.group='Drone Weapon';row.vw_key=d.key end))
                     end
                     if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
                     return rows
@@ -1023,8 +1078,10 @@ function CATEGORY.vehicles(cat)
                 append(rows,part_rows(object,'vh',function(p)return vehicle_rows(cat.hd2,p,vehicle)end))
                 for _,m in ipairs(mounts)do
                     local label='Weapon · '..util.humanize(m.entry.mount or m.key)
+                    local slot=m.entry.slot and('slot_'..m.entry.slot)or nil
                     append(rows,part_rows(object,'vw:'..(m.entry.mount or m.key),function(p)
-                        return vehicle_weapon_rows(cat.hd2,p,m.entry)end,function(row)row.group=label end))
+                        return vehicle_weapon_rows(cat.hd2,p,m.entry)end,function(row)
+                            row.group=label;row.vw_key=m.key;row.home_slot=slot end))
                 end
                 return rows
             end}
@@ -1191,6 +1248,15 @@ function Catalog:find(object_key,loc,descriptor)
         for _,row in ipairs(object.rows)do if row.loc==loc then return row end end
     end
     return self:row_at(loc)
+end
+-- The rows of a catalogued vehicle or drone weapon (vehicle_weapon_authoring key), from the object that carries it.
+function Catalog:weapon_rows(key)
+    local object=self:object('vw|'..key)
+    if not object then return {},nil end
+    self:open(object)
+    local out={}
+    for _,row in ipairs(object.rows)do if row.vw_key==key then out[#out+1]=row end end
+    return out,object
 end
 -- Every open row on the same native bytes.
 function Catalog:siblings(row)return self.by_loc[row.loc]or{row}end

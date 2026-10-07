@@ -43,20 +43,50 @@ end
 M.pretty_mod=pretty_mod
 local function category_item(self)return self.categories[self.cat]end
 
--- The objects of the selected category, filtered by the search text.
+-- The game's weapon groups, in the armory's order, with the short chip labels the filter shows.
+local WEAPON_GROUPS={
+    primary={'Assault Rifle','Marksman Rifle','Submachine Gun','Shotgun','Explosive','Energy-Based','Special'},
+    secondary={'Pistol','Melee','Special'}}
+local GROUP_LABELS={['Assault Rifle']='Assault',['Marksman Rifle']='Marksman',['Submachine Gun']='SMG',
+    ['Energy-Based']='Energy'}
+-- The weapon groups present in a weapon category (nil for every other category): {'All', groups...}.
+function App:weapon_groups(category)
+    local order=WEAPON_GROUPS[category]
+    if not order then return nil end
+    local present={}
+    for _,object in ipairs(self.catalog:objects(category))do present[object.subtitle or'']=true end
+    local out={'All'}
+    for _,g in ipairs(order)do if present[g]then out[#out+1]=g end end
+    for g in pairs(present)do
+        local known=false
+        for _,o in ipairs(out)do if o==g then known=true end end
+        if not known and g~=''then out[#out+1]=g end
+    end
+    return out
+end
+function App:set_weapon_group(category,group)
+    self.weapon_group=self.weapon_group or{}
+    if self.weapon_group[category]~=group then
+        self.weapon_group[category]=group
+        self.obj,self.obj_scroll,self.field,self.field_scroll,self.filter_key=1,0,1,0,nil
+    end
+end
+-- The objects of the selected category, filtered by the weapon group and the search text.
 function App:objects()
     local item=category_item(self)
     if not item or item.group then return {}end
     local list,why=self.catalog:objects(item.id)
     self.objects_error=why
+    local group=self.weapon_group and self.weapon_group[item.id]
+    if group=='All'then group=nil end
     local q=self.search and self.search.text~=''and self.search.text:lower()
-    if not q then return list end
-    local key=item.id..'\0'..q
+    if not q and not group then return list end
+    local key=item.id..'\0'..(q or'')..'\0'..(group or'')
     if self.filter_key==key then return self.filtered end
     local out={}
     for _,object in ipairs(list)do
         local hay=(object.name..' '..(object.subtitle or'')):lower()
-        if hay:find(q,1,true)then out[#out+1]=object end
+        if(not q or hay:find(q,1,true))and(not group or object.subtitle==group)then out[#out+1]=object end
     end
     self.filter_key,self.filtered=key,out
     return out
@@ -76,16 +106,61 @@ function App:toggle(object,key,open)
     self.expanded[id]=open or nil
     self.expand_version=self.expand_version+1
 end
+-- An object's sections as shown: a mount that holds another weapon shows THAT weapon's rows (its own catalogued
+-- vehicle weapon, edited through its home vehicle) instead of the slot's original weapon, whose records the Runtime
+-- refuses to write while the slot holds something else. Returns sections and a signature of the swaps.
+function App:effective_sections(object)
+    local swapped,sig={},{}
+    for _,row in ipairs(object.rows or{})do
+        if row.mount_slot then
+            local value=self:row_view(row)
+            if value~=nil and value~=row.vanilla then swapped[row.mount_slot]=value;sig[#sig+1]=row.mount_slot..'='..value end
+        end
+    end
+    if#sig==0 then return object.sections or{},''end
+    table.sort(sig)
+    local out,done={},{}
+    for _,section in ipairs(object.sections or{})do
+        local slot=section.rows[1]and section.rows[1].home_slot
+        local id=slot and swapped[slot]
+        if not id then out[#out+1]=section
+        elseif not done[slot]then
+            done[slot]=true
+            local name=catalog_module.mounted_weapon_name(id)
+            local key=catalog_module.mounted_weapon_entry(id)
+            local role=section.group and section.group:match('^Weapon · (.+)$')or util.humanize(slot)
+            local group=role..' · now '..name
+            local rows,home=key and self.catalog:weapon_rows(key)or{},nil
+            if key then _,home=self.catalog:weapon_rows(key)end
+            if#rows==0 then
+                out[#out+1]={label='No editable stats for this weapon',group=group,rows={}}
+            else
+                local by,order={},{}
+                for _,r in ipairs(rows)do
+                    local label=(home and home~=object and(r.section..' · shared with '..home.name))or r.section
+                    if not by[label]then by[label]={label=label,group=group,rows={}};order[#order+1]=by[label]end
+                    local list=by[label].rows
+                    list[#list+1]=r
+                end
+                for _,sec in ipairs(order)do out[#out+1]=sec end
+            end
+        end
+    end
+    return out,table.concat(sig,';')
+end
 function App:field_items(object)
     if not object then return {},{}end
-    if object.items and object.items_version==self.expand_version then return object.items,object.selectable end
+    local sections,sig=self:effective_sections(object)
+    if object.items and object.items_version==self.expand_version and object.items_swaps==sig then
+        return object.items,object.selectable
+    end
     local items,selectable={},{}
     local function add(item,pick)
         items[#items+1]=item
         if pick then selectable[#selectable+1]=#items end
     end
     local groups,order={},{}
-    for _,section in ipairs(object.sections or{})do
+    for _,section in ipairs(sections)do
         if section.group then
             if not groups[section.group]then groups[section.group]={};order[#order+1]=section.group end
             local list=groups[section.group]
@@ -93,7 +168,7 @@ function App:field_items(object)
         end
     end
     local emitted={}
-    for _,section in ipairs(object.sections or{})do
+    for _,section in ipairs(sections)do
         if not section.group then
             add({section=section.label,count=#section.rows})
             for _,row in ipairs(section.rows)do add({row=row,depth=0},true)end
@@ -117,7 +192,7 @@ function App:field_items(object)
             end
         end
     end
-    object.items,object.selectable,object.items_version=items,selectable,self.expand_version
+    object.items,object.selectable,object.items_version,object.items_swaps=items,selectable,self.expand_version,sig
     return items,selectable
 end
 -- The focused field-list item (a row or a collapsible header), or nil.
@@ -364,6 +439,16 @@ function App:handle_browse_keys(f)
         if k.DOWN then self:move_category(1)end
         if k.RIGHT or k.ENTER then self.focus='objects'end
     elseif self.focus=='objects'then
+        local groups=f.ctrl and(k.LEFT or k.RIGHT)and self:weapon_groups(category_item(self).id)
+        if groups then
+            local id=category_item(self).id
+            local current=self.weapon_group and self.weapon_group[id]or'All'
+            local index=1
+            for i,g in ipairs(groups)do if g==current then index=i end end
+            index=(index-1+(k.LEFT and-1 or 1))%#groups+1
+            self:set_weapon_group(id,groups[index])
+            return
+        end
         if k.UP then self:select_object(clamp_index(self.obj-1,#objects))end
         if k.DOWN then self:select_object(clamp_index(self.obj+1,#objects))end
         if k.PAGEUP then self:select_object(clamp_index(self.obj-page,#objects))end
@@ -773,13 +858,41 @@ function App:draw_objects(y0,h)
     self.search_action=self.search_action or{click=function()
         self.search=self.search or{text=''};self.search.active=true;self.focus='objects'end}
     cv:hit(x0+12,sy,OBJ_W-24,32,self.search_action)
+    -- the weapon-group filter (Primary and Secondary only), wrapped onto as many rows as it needs
+    local ly=sy+44
+    local item=category_item(self)
+    local groups=item and not item.group and self:weapon_groups(item.id)
+    if groups then
+        self.group_actions=self.group_actions or{}
+        local current=self.weapon_group and self.weapon_group[item.id]or'All'
+        local cx,cy=x0+12,sy+40
+        for _,g in ipairs(groups)do
+            local label=GROUP_LABELS[g]or g
+            local w=cv:measure(label,SZ.tiny,'title')+18
+            if cx+w>x0+OBJ_W-12 then cx,cy=x0+12,cy+28 end
+            local key=item.id..'|'..g
+            local action=self.group_actions[key]
+            if not action then
+                local id,group=item.id,g
+                action={click=function()self:set_weapon_group(id,group);self.focus='objects'end}
+                self.group_actions[key]=action
+            end
+            local on=g==current
+            cv:rect(cx,cy,w,22,on and C.gold or(self.hover==action and C.hover or C.box),3)
+            if not on then cv:frame(cx,cy,w,22,C.line_strong,4)end
+            cv:text(label,cx+w/2,cy+11,{size=SZ.tiny,font='title',colour=on and C.inverse or C.dim,align='center',z=5})
+            cv:hit(cx,cy,w,22,action)
+            cx=cx+w+6
+        end
+        ly=cy+32
+    end
     local objects=self:objects()
     self.obj=clamp_index(self.obj,#objects)
     local markers=self:markers()
     local focused=self.focus=='objects'
-    local ly=sy+44
     self.obj_actions_key=self.obj_actions_key or''
-    local akey=tostring(self.cat)..'\0'..(self.search and self.search.text or'')
+    local akey=tostring(self.cat)..'\0'..(self.search and self.search.text or'')..'\0'
+        ..tostring(item and self.weapon_group and self.weapon_group[item.id]or'')
     if self.obj_actions_key~=akey then self.obj_actions,self.obj_actions_key={},akey end
     if#objects==0 then
         local msg=self.objects_error and('Unavailable on this Runtime: '..self.objects_error)

@@ -96,7 +96,14 @@ function Input:poll(dt,opts)
         else
             self.prev_left=false
         end
-        frame.wheel=wheel()
+        -- HD2Runtime r51: hd2.input.wheel (the engine axis and a read-only message hook); before, the engine axis only
+        local runtime_wheel=self.hd2.input and self.hd2.input.wheel
+        if type(runtime_wheel)=='function'then
+            local ok,v=pcall(runtime_wheel)
+            frame.wheel=(ok and type(v)=='number'and v>0 and 1)or(ok and type(v)=='number'and v<0 and-1)or 0
+        else
+            frame.wheel=wheel()
+        end
     end
     return frame
 end

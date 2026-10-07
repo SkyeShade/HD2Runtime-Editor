@@ -272,6 +272,42 @@ local shut=false
 H.app.ctx.close=function()shut=true end
 H.app.btn_close.click()
 assert(shut,'the window X closes the editor')
+-- the weapon-group filter: Primary only, the game's groups
+for i,item in ipairs(H.app.categories)do if item.id=='primary'then H.app:select_category(i)end end
+H.app.focus='objects'
+step({})
+local groups=H.app:weapon_groups('primary')
+assert(groups[1]=='All'and groups[2]=='Assault Rifle','groups in the armory order: '..table.concat(groups,','))
+assert(H.app:weapon_groups('offensive')==nil,'no filter on stratagems')
+H.app.group_actions['primary|Shotgun'].click()
+step({},nil,'26_filter')
+for _,o in ipairs(H.app:objects())do assert(o.subtitle=='Shotgun','only shotguns: '..o.name)end
+step({'RIGHT'},{down={'CTRL'}})
+assert(H.app.weapon_group.primary=='Explosive','Ctrl+Right steps to the next group: '..tostring(H.app.weapon_group.primary))
+H.app:set_weapon_group('primary','All')
+-- vehicle mounts: swap the Patriot's left arm; its stats section then edits the weapon now mounted
+local patriot=open_object('ve|EXO-45 Patriot Exosuit')
+local mount
+for _,r in ipairs(patriot.rows)do if r.mount_slot=='slot_0'then mount=r end end
+assert(mount,'a mount row for slot_0')
+local donor
+for _,o in ipairs(mount.options(mount))do
+    if o.value~=mount.vanilla and o.sub:find('EXO%-49')then donor=o.value;break end
+end
+assert(donor,'an Emancipator arm among the candidates')
+assert(H.app:stage(mount,donor),'swap staged: '..tostring(H.app.toast_msg and H.app.toast_msg.text))
+local items=H.app:field_items(patriot)
+local swapped_header
+for _,it in ipairs(items)do if it.header and it.header:find('now')then swapped_header=it end end
+assert(swapped_header,'the arm group names the weapon now mounted')
+H.app:reveal(mount)
+H.app:toggle(patriot,swapped_header.key,true)
+items=H.app:field_items(patriot)
+local shared=false
+for _,it in ipairs(items)do if it.header and it.header:find('shared with EXO%-49')then shared=true end end
+assert(shared,'the donor stats say they are shared with their home vehicle')
+step({},nil,'27_mount_swap')
+H.app:unstage(mount)
 -- search: Ctrl+F, type, filter
 H.app:set_view('browse')
 H.app.focus='objects'
@@ -290,6 +326,29 @@ step({},nil,'13_automatons')
 for i,item in ipairs(H.app.categories)do if item.id=='offensive'then H.app:select_category(i)end end
 H.app.focus='objects'
 step({},nil,'19_icons')
+-- with generated icons, every stratagem and booster has one (vector library or HUD atlas), except the two items
+-- without a call-in stratagem, which have no icon anywhere in the game
+local icons=H.app.ctx.icons
+if icons then
+    local NONE={['SG-88 Break-Action Shotgun']=true,['CQC-72 Entrenchment Tool']=true}
+    local missing={}
+    for _,id in ipairs({'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply','boosters'})do
+        for _,object in ipairs(H.catalog:objects(id))do
+            local list=id=='boosters'and icons.boosters or icons.stratagems
+            local name=id=='boosters'and object.name or(object.stratagem or object.name)
+            -- a vehicle without a stratagem (FRV Super Earth variant, GATER Oil Rig) has no stratagem icon
+            local plain=object.key:match('^ve|')and not object.stratagem
+            if not list[name]and not NONE[name]and not plain then missing[#missing+1]=id..': '..name end
+        end
+    end
+    assert(#missing==0,'no icon: '..table.concat(missing,', '))
+end
+for i,item in ipairs(H.app.categories)do if item.id=='support_weapons'then H.app:select_category(i)end end
+H.app.obj_scroll=0
+step({},nil,'28_support_icons')
+for i,item in ipairs(H.app.categories)do if item.id=='boosters'then H.app:select_category(i)end end
+step({},nil,'29_booster_icons')
+for i,item in ipairs(H.app.categories)do if item.id=='offensive'then H.app:select_category(i)end end
 H.app.focus='fields'
 for _=1,40 do step({'DOWN'})end
 step({},nil,'14_enemy_fields')

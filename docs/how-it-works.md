@@ -11,7 +11,7 @@
 | `editor/layer.lua` | The override layer: adopt, hand-over, steer, reset (below). |
 | `editor/presets.lua` | Presets, the saved session and settings in `hd2.store`. |
 | `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel), the app (views, staging, dialogs) and pickers (the value picker and the calldown code editor). |
-| `editor/generated/game_icons.lua` | Optional, written by `tools/game_icons.py`: stratagem and booster name → icon image and accent colour. |
+| `editor/generated/game_icons.lua` | Optional, written by `tools/game_icons.py`: stratagem and booster name → icon image and accent colour. Vector library icons first, then each remaining item's HUD atlas sprite (HD2Runtime r51 SDK `tools/hd2_hud_icons.py`). |
 
 ## Rows
 
@@ -40,6 +40,26 @@ Rows of kind `choice` (booleans, statuses, enums), `code` (calldown codes), `use
 - **Acknowledgements:** the ensure's bind-time proof validates every value of the choice. So before registering, the editor asks the Runtime's validator about each value and adds exactly the acknowledgements it names, for example `allow_unverified_reference` for a donor that is not live-tested, or `allow_unverified_effect` for a code equal to another stratagem's.
 - **Donors:** projectile donors are the reviewed attack outputs. Terminal explosion donors are one player-weapon terminal action per reviewed explosion type, plus none. The picker offers only donors the validator accepts for that weapon.
 - **Ownership:** a move between two references is an owned transition. This was proven live for projectile choices (`LiberatorAttackOutputTest`). r50 also fixed the signature of catalogue explosion donors.
+
+## Mount swaps
+
+A vehicle's mount row (kind `reference`, field `mount.weapon`, target `hd2.vehicle(name):mount(slot)`) offers the
+slot's vanilla weapon and the catalogue's `allowedValues`. Its `expect` is always the vanilla weapon, and a swap
+needs `allow_unverified_reference`.
+
+- **Which weapon is it?** A mounted weapon id maps to the catalogued vehicle weapon whose `attackResource` equals the
+  mounted weapon's `resource` (`catalog.mounted_weapon_entry`). 21 of the 79 mounted weapons have one.
+- **What the list shows.** While a mount holds another weapon, the Runtime refuses writes to the slot's original
+  weapon records. So the field list replaces that slot's weapon group with the held weapon's rows, from the vehicle
+  that carries it (`App:effective_sections`, `Catalog:weapon_rows`).
+- **Shared records.** Those rows are the held weapon's own records, so an edit also changes it on its home vehicle.
+  The sections say so (`· shared with <vehicle>`).
+
+## The mouse wheel (r51)
+
+`ui/input.lua` reads `hd2.input.wheel()` once per frame when the Runtime has it (r51), and the engine's wheel axis
+otherwise. The Runtime samples the engine axis and a read-only message hook on the game window's thread (see its
+docs/ui-overlay.md "The mouse wheel").
 
 ## Applying a value
 
@@ -77,4 +97,4 @@ The Runtime's FS Sinclair glyphs land 0.41 × size below the baseline `Gui.text`
 2. **`hd2.diagnostics.operations({changes = true})`**: each operation's target, field and value.
 3. **Script choices and an exact restore** for non-numeric fields (references, statuses, lists, booleans). An ensure can restore its `expect` today only through a menu toggle.
 4. **A public catalogue API** (for example `hd2.catalog.categories()`, `:fields(target)`), so editors stop reading the generated tables directly.
-5. **Overlay input capture**: show and free the cursor, and keep keys and clicks away from the game while a mod window is open.
+5. **Overlay input capture**: keep keys, clicks and the wheel away from the game while a mod window is open (r50 frees the cursor; r51 reads the wheel).
