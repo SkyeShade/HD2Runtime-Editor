@@ -7,15 +7,30 @@
 HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows which HD2Runtime mods you have installed and what each one changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
 - **See what your mods do.** The Mods tab lists every installed HD2Runtime mod with the values it applied this session, and any operation the Runtime refused, with the reason. Select a value to jump to that field.
-- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Support Weapons, Throwables, Magazines), Stratagems (Offensive, Defensive, Support Call-ins), Equipment (Backpacks, Vehicles, Vehicle Weapons, Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,200 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
-- **More than numbers.** Calldown codes (arrow-key code editor), mission uses (a count or unlimited), projectile swaps and terminal explosion payloads (a searchable donor list), statuses, on/off switches and enums. A donor appears only if the Runtime's own validator accepts it for that weapon.
-- **The game's own icons.** Stratagems and boosters show the icons from your installed game, coloured as on the loadout screen (an opt-in local build step, see [Game icons](#game-icons)).
+- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,300 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
+- **One stratagem, one place.**
+  - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
+  - A support backpack holds its call-in, the backpack, its drone weapon (Guard Dogs) and its hellpod.
+  - A vehicle holds its call-in, the vehicle and every mounted weapon.
+  - A backpack that comes with a support weapon is never shown on its own.
+  - Magazine options sit inside each weapon that uses them.
+- **Tidy long lists.** Damage zones (vehicles, deployables, enemies), enemy attacks, magazines and vehicle weapons are groups that start closed. Each part inside them opens on its own.
+- **More than numbers.**
+  - **Calldown codes:** an arrow-key code editor. Right-click an arrow to remove it; DEFAULT restores the game's code.
+  - **Fire modes and rate-of-fire modes**, as in ModBuilder.
+  - **Mission uses:** a count or unlimited.
+  - **Hellpod contents:** the items a support weapon, backpack or Resupply pod drops, and how many.
+  - **Projectile swaps and terminal explosion payloads**, from a searchable donor list.
+  - **Statuses, on/off switches and enums.**
+
+  Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
+- **The game's own icons.** Stratagems and boosters show the icons from your installed game, coloured as on the loadout screen (an opt-in local build step, see [Game icons](#game-icons)). The 11 stratagems the game's vector library has no icon for show a category glyph in their category colour. Values a mod sets carry a mod icon.
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
 - **Optimised apply.** Edits are staged as pending changes and applied together. Only fields whose value changed are written, and each change is a single guarded write.
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.2.0, development build for HD2Runtime r50.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). The 0.1.0 window was seen in game; the r50 additions (text placement, icons, cursor capture, non-numeric editing) are not live-tested yet.
+> **Status: 0.3.0, development build for HD2Runtime r50.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 was seen in game (text placement, icons, value editing). The 0.3.0 changes (categories, groups, fire modes, hellpods, scrolling) are not live-tested yet.
 
 ## Requirements
 
@@ -42,14 +57,16 @@ While it is open, the editor asks the engine to free the mouse from the camera: 
 | → / ← | Go deeper or back (categories, objects, fields). In the field list: nudge the value (Shift ×10, Ctrl ÷10) |
 | Tab / Shift+Tab | Next pane / next tab (Browse, Mods, Presets) |
 | Digits, `.`, `-` | Type a value for the selected field. Tab, ↑ or ↓ confirms; Del cancels |
-| Enter | Choose a value for a non-numeric field (picker or calldown code editor) |
+| Enter | Choose a value for a non-numeric field (picker, code, fire mode or rate editor); open a group |
+| → / ← on a group | Open / close it (← on a field inside it jumps back to its group) |
+| Right-click | Remove an arrow in the calldown code editor |
 | Del | Remove a field's pending change, or stage it back to its default |
 | Ctrl+F | Search the object list |
 | F9 | Apply pending changes |
 | F10 | Reset to defaults (asks first) |
 | Ins | Save a new preset (Presets tab) |
 
-Wherever the cursor is free, the mouse works too: click tabs, rows, value boxes and buttons, and scroll lists with the wheel.
+Wherever the cursor is free, the mouse works too: click tabs, rows, groups, value boxes and buttons. To scroll a list, drag its scrollbar, click the track, or use the wheel. The window and every popup have an × to close them.
 
 What each field shows:
 
@@ -78,7 +95,10 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 
 ## Limitations
 
-- **Not every value type.** Traits, fire-mode and rate lists, sounds, weapon functions, function projectiles, mount swaps, hellpod contents and stratagem presentation stay with ModBuilder. The default fire mode is left out: it can only be reordered, never held at its own value.
+- **Not every value type.** Traits, sounds, weapon functions, function projectiles, mount swaps and stratagem presentation stay with ModBuilder.
+- **Two field rules need more than one field at a time.**
+  - The default fire mode can only be reordered, never held at its own value, so it is left out.
+  - Filling an empty rate-of-fire slot on a weapon without a rate selector needs the selector bound in the same write. The editor shows the Runtime's reason, so change the slots the weapon already has.
 - **Three decimals.** Values are held with at most three decimals (the Runtime's live-value precision). A float32 default such as `0.30000001192` is the same stored value as `0.3`, so every catalogued default qualifies.
 - **When values apply.** Some values (fire rate, magazines, heat) are copied when the game builds a weapon, so a weapon you are holding may keep its old value until it is re-equipped or the next mission. Projectile, damage and explosion values apply on the next shot.
 - **A mod's in-game options after a takeover.** Once the editor has taken a field over from a mod's `ensure`, that mod's Mod Options sliders no longer move that field for the rest of the session.

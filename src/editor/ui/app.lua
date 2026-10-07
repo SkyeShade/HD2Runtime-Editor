@@ -20,12 +20,12 @@ function M.new(ctx)
         presets=ctx.presets,canvas=canvas_module.new(),input=input_module.new(ctx.hd2),
         view='browse',focus='categories',cat=1,obj=1,obj_scroll=0,field=1,field_scroll=0,cat_scroll=0,
         pending={},pending_n=0,time=0,mod_index=1,mod_scroll=0,write_scroll=0,preset_index=1,preset_scroll=0,
-        preset_action=1,detail_scroll=0},App)
+        preset_action=1,detail_scroll=0,expanded={},expand_version=0},App)
     self.categories={}
     for _,group in ipairs(catalog_module.GROUPS)do
         self.categories[#self.categories+1]={group=true,label=group.label}
         for _,item in ipairs(group.items)do
-            self.categories[#self.categories+1]={id=item.id,label=item.label}
+            self.categories[#self.categories+1]={id=item.id,label=item.label,tone=item.tone}
         end
     end
     self.cat=2
@@ -68,19 +68,72 @@ function App:object()
     return object
 end
 -- The selected object's flat field list: {{section=label} | {row=row}}, and the indices of rows.
+function App:is_open(object,key)return self.expanded[object.key..'\0'..key]==true end
+function App:toggle(object,key,open)
+    local id=object.key..'\0'..key
+    if open==nil then open=not self.expanded[id]end
+    if(self.expanded[id]==true)==open then return end
+    self.expanded[id]=open or nil
+    self.expand_version=self.expand_version+1
+end
 function App:field_items(object)
     if not object then return {},{}end
-    if object.items then return object.items,object.selectable end
+    if object.items and object.items_version==self.expand_version then return object.items,object.selectable end
     local items,selectable={},{}
+    local function add(item,pick)
+        items[#items+1]=item
+        if pick then selectable[#selectable+1]=#items end
+    end
+    local groups,order={},{}
     for _,section in ipairs(object.sections or{})do
-        items[#items+1]={section=section.label,count=#section.rows}
-        for _,row in ipairs(section.rows)do
-            items[#items+1]={row=row}
-            selectable[#selectable+1]=#items
+        if section.group then
+            if not groups[section.group]then groups[section.group]={};order[#order+1]=section.group end
+            local list=groups[section.group]
+            list[#list+1]=section
         end
     end
-    object.items,object.selectable=items,selectable
+    local emitted={}
+    for _,section in ipairs(object.sections or{})do
+        if not section.group then
+            add({section=section.label,count=#section.rows})
+            for _,row in ipairs(section.rows)do add({row=row,depth=0},true)end
+        elseif not emitted[section.group]then
+            emitted[section.group]=true
+            local g=section.group
+            local count=0
+            for _,sec in ipairs(groups[g])do count=count+#sec.rows end
+            local gkey='g|'..g
+            local open=self:is_open(object,gkey)
+            add({header=g,key=gkey,open=open,count=count,subs=#groups[g],depth=0},true)
+            if open then
+                for _,sec in ipairs(groups[g])do
+                    local skey='s|'..g..'|'..sec.label
+                    local sopen=self:is_open(object,skey)
+                    add({header=sec.label,key=skey,open=sopen,count=#sec.rows,depth=1,parent=gkey},true)
+                    if sopen then
+                        for _,row in ipairs(sec.rows)do add({row=row,depth=2,parent=skey},true)end
+                    end
+                end
+            end
+        end
+    end
+    object.items,object.selectable,object.items_version=items,selectable,self.expand_version
     return items,selectable
+end
+-- The focused field-list item (a row or a collapsible header), or nil.
+function App:focused_item()
+    if self.view~='browse'then return nil end
+    local object=self:object()
+    local items,selectable=self:field_items(object)
+    local index=selectable[self.field]
+    return index and items[index]or nil,object
+end
+-- Opens or closes a header, keeping it selected.
+function App:toggle_item(item,object,open)
+    if not(item and item.header)then return end
+    self:toggle(object,item.key,open)
+    local items,selectable=self:field_items(object)
+    for s,index in ipairs(selectable)do if items[index].key==item.key then self.field=s end end
 end
 function App:focused_row()
     if self.view~='browse'then return nil end
@@ -109,7 +162,12 @@ function App:markers()
         if slot.user and slot.row and slot.row.object then m.editor[slot.row.object.key]=true end
     end
     for _,claims in pairs(self.ledger.by_loc)do
-        for _,claim in ipairs(claims)do if claim.object then m.mod[claim.object]=true end end
+        for _,claim in ipairs(claims)do
+            if claim.object then
+                local object=self.catalog:object(claim.object)
+                m.mod[object and object.key or claim.object]=true
+            end
+        end
     end
     self.marker_key,self.marker_cache=key,m
     return m
@@ -124,6 +182,10 @@ function App:stage(row,value)
         end
         local current=self.layer:value(row)
         local existing=self.pending[row.key]
+        if not util.same(current,value)then
+            local ok,why=catalog_module.probe(row,value)
+            if not ok then self:toast(row.label..': '..tostring(why),C.error);return false end
+        end
         if util.same(current,value)then
             if existing then self.pending[row.key]=nil;self.pending_n=self.pending_n-1 end
             return true
@@ -228,6 +290,8 @@ function App:begin_edit(row,text,fresh)
         return
     end
     if row.kind=='code'then return self:open_code(row)end
+    if row.kind=='modes'then return self:open_modes(row)end
+    if row.kind=='rates'then return self:open_rates(row)end
     if row.kind then return self:open_picker(row,row.kind=='uses'and text or nil)end
     self.edit={row=row,buffer=text or util.format((self:row_view(row))),fresh=fresh}
 end
@@ -315,6 +379,16 @@ function App:handle_browse_keys(f)
         if k.PAGEDOWN then self.field=clamp_index(self.field+page,#selectable)end
         if k.HOME then self.field=1 end
         if k.END then self.field=#selectable end
+        local item=self:focused_item()
+        if item and item.header then
+            if k.RIGHT or k.ENTER then self:toggle_item(item,object,true)end
+            if k.LEFT then
+                if item.open then self:toggle_item(item,object,false)
+                elseif item.parent then
+                    for s,index in ipairs(selectable)do if items[index].key==item.parent then self.field=s end end
+                end
+            end
+        end
         if row then
             if k.LEFT then self:nudge(row,-1,f.shift,f.ctrl)end
             if k.RIGHT then self:nudge(row,1,f.shift,f.ctrl)end
@@ -349,6 +423,8 @@ function App:handle_keys(f)
     local k=f.keys
     if self.picker then return self:handle_picker_keys(f)end
     if self.coder then return self:handle_code_keys(f)end
+    if self.moder then return self:handle_modes_keys(f)end
+    if self.rater then return self:handle_rates_keys(f)end
     if self.confirm then
         if k.ENTER or k.F10 and self.confirm.kind=='reset'or k.INSERT then self:confirm_yes()
         elseif k.ESCAPE or k.BACKSPACE or k.DELETE then self.confirm=nil end
@@ -437,13 +513,18 @@ function App:handle_mouse(f)
     if not m then self.hover=nil;return end
     local ux,uy=self.canvas:to_units(m.x,m.y)
     local action=self.canvas:hit_at(ux,uy)
-    self.hover=action and action.hover
+    self.hover=action
     self.mouse_units={x=ux,y=uy,moved=m.moved}
+    if self.drag then
+        if m.left then self.drag.move(uy)else self.drag=nil end
+        return
+    end
     if f.wheel~=0 then
         local scroller=self.canvas:scroll_at(ux,uy)
         if scroller then scroller.scroll(-f.wheel)end
     end
     if m.clicked and action and action.click then action.click(ux,uy)end
+    if m.rclicked and action and action.rclick then action.rclick(ux,uy)end
 end
 
 ------------------------------------------------------------------------------------------------- frame --
@@ -457,7 +538,8 @@ function App:frame(d,dt)
     self.canvas:begin(d,math.max(0,ox),math.max(0,oy))
     local typing=self.edit~=nil or(self.view=='browse'and self.focus=='fields')
     local letters=(self.search and self.search.active)or self.rename~=nil or self.picker~=nil
-    if self.coder then typing=false end
+    if self.coder or self.moder then typing=false end
+    if self.rater then typing=true end
     local f=self.input:poll(dt or 0,{typing=typing,letters=letters,mouse=self.ctx.mouse})
     self.frame_input=f
     self:handle_keys(f)
@@ -548,8 +630,14 @@ function App:draw_header()
         cv:hit(tx,6,w,h-6,action)
         tx=tx+w+4
     end
-    -- status chips, right to left
-    local rx=L.w-18
+    -- the close button, then the status chips, right to left
+    self.btn_close=self.btn_close or{click=function()if self.ctx.close then self.ctx.close()end end}
+    local hovered=self.hover==self.btn_close
+    cv:rect(L.w-50,12,36,34,hovered and C.error_soft or C.panel,3)
+    cv:frame(L.w-50,12,36,34,hovered and C.error or C.line_strong,4)
+    cv:text('×',L.w-32,29,{size=24,colour=hovered and C.error or C.dim,align='center',z=6})
+    cv:hit(L.w-50,12,36,34,self.btn_close)
+    local rx=L.w-62
     local active,applying,errors=self.layer:counts()
     if errors>0 then rx=rx-chip(cv,errors..(errors==1 and' ERROR'or' ERRORS'),rx,h/2,C.error,C.error_soft,'right')-8 end
     if applying>0 then
@@ -591,13 +679,27 @@ function App:list(opts)
             cv:hit(opts.x,y,opts.w,opts.row_h,action)
         end
     end
-    -- scrollbar
+    -- scrollbar: drawn thin, grabbed wide; click the track to jump, drag to scroll
     if opts.count>rows then
-        local track_h=opts.h-4
+        local track_y,track_h=opts.y+2,opts.h-4
         local thumb_h=math.max(24,track_h*rows/opts.count)
         local t=scroll/math.max(1,opts.count-rows)
-        cv:rect(opts.x+opts.w-4,opts.y+2,3,track_h,C.line,3)
-        cv:rect(opts.x+opts.w-4,opts.y+2+(track_h-thumb_h)*t,3,thumb_h,opts.focused and C.gold or C.line_strong,4)
+        local dragging=self.drag and self.drag.key==opts.scroll_key
+        cv:rect(opts.x+opts.w-4,track_y,3,track_h,C.line,3)
+        cv:rect(opts.x+opts.w-(dragging and 6 or 4),track_y+(track_h-thumb_h)*t,dragging and 5 or 3,thumb_h,
+            (opts.focused or dragging)and C.gold or C.line_strong,4)
+        local key,count=opts.scroll_key,opts.count
+        local function move(uy)
+            local f=(uy-track_y-thumb_h/2)/math.max(1,track_h-thumb_h)
+            f=math.max(0,math.min(1,f))
+            self[key]=math.floor(f*math.max(0,count-rows)+0.5)
+        end
+        self.scrollbars=self.scrollbars or{}
+        local bar=self.scrollbars[key]or{}
+        self.scrollbars[key]=bar
+        bar.click=function(_,uy)move(uy);self.drag={key=key,move=move}end
+        bar.scroll=function(delta)self[key]=math.max(0,math.min((self[key]or 0)+delta*3,math.max(0,count-rows)))end
+        bar.after_list=true
     end
     -- wheel over the list
     local key=opts.scroll_key
@@ -608,6 +710,10 @@ function App:list(opts)
     -- row hits must win over the wheel region: move it to the front
     local hits=cv.hits
     table.insert(hits,1,table.remove(hits))
+    -- the scrollbar above the rows
+    if opts.count>rows and self.scrollbars and self.scrollbars[opts.scroll_key]then
+        cv:hit(opts.x+opts.w-14,opts.y,14,opts.h,self.scrollbars[opts.scroll_key])
+    end
     return rows,scroll
 end
 
@@ -632,10 +738,12 @@ function App:draw_categories(y0,h)
                 action={click=function()self:select_category(index);self.focus='categories'end}
                 self.cat_actions[i]=action
             end
+            local tone=item.tone and theme.tone[item.tone]
             if selected then
-                cv:rect(8,y,CAT_W-16,rh,focused and C.select or C.gold_wash,2)
-                cv:rect(8,y,3,rh,focused and C.gold or C.gold_dim,3)
+                cv:rect(8,y,CAT_W-16,rh,tone and theme.tone_soft[item.tone]or(focused and C.select or C.gold_wash),2)
+                cv:rect(8,y,3,rh,tone or(focused and C.gold or C.gold_dim),3)
             elseif self.hover==action then cv:rect(8,y,CAT_W-16,rh,C.hover,2)end
+            if tone and not selected then cv:rect(8,y+9,3,rh-18,tone,3)end
             cv:text(item.label,22,y+rh/2,{size=SZ.label,colour=selected and C.text or C.dim,max=CAT_W-80})
             local count=self.catalog:count(item.id)
             cv:text(tostring(count),CAT_W-20,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
@@ -684,9 +792,10 @@ function App:draw_objects(y0,h)
         draw=function(i,x,y,w,rh)
             local object=objects[i]
             local selected=i==self.obj
+            local tone=object.tone and theme.tone[object.tone]
             if selected then
-                cv:rect(x+8,y+2,w-16,rh-4,focused and C.select or C.gold_wash,2)
-                cv:rect(x+8,y+2,3,rh-4,focused and C.gold or C.gold_dim,3)
+                cv:rect(x+8,y+2,w-16,rh-4,tone and theme.tone_soft[object.tone]or(focused and C.select or C.gold_wash),2)
+                cv:rect(x+8,y+2,3,rh-4,tone or(focused and C.gold or C.gold_dim),3)
             elseif self.hover==(self.obj_actions[i])then cv:rect(x+8,y+2,w-16,rh-4,C.hover,2)end
             local tx=x+22
             if self:draw_icon(object,x+18,y+5,rh-10)then tx=x+18+rh end
@@ -695,7 +804,9 @@ function App:draw_objects(y0,h)
             local mx=x+w-20
             if markers.pending[object.key]then cv:rect(mx-7,y+rh/2-4,8,8,C.pending,4);mx=mx-14 end
             if markers.editor[object.key]then cv:rect(mx-7,y+rh/2-4,8,8,C.gold,4);mx=mx-14 end
-            if markers.mod[object.key]then cv:rect(mx-7,y+rh/2-4,8,8,C.mod,4)end
+            if markers.mod[object.key]then
+                if not self:draw_ui_icon('mod',mx-14,y+rh/2-9,18,C.mod)then cv:rect(mx-7,y+rh/2-4,8,8,C.mod,4)end
+            end
         end})
 end
 
@@ -737,7 +848,9 @@ function App:draw_fields(y0,h)
     local focused=self.focus=='fields'
     local ly=hy+24
     local rh=theme.row_h
-    if self.fields_actions_object~=object then self.fields_actions,self.fields_actions_object={},object end
+    if self.fields_actions_object~=object or self.fields_actions_version~=self.expand_version then
+        self.fields_actions,self.fields_actions_object,self.fields_actions_version={},object,self.expand_version
+    end
     local actions=self.fields_actions
     self:list({x=x0,y=ly,w=w,h=y0+h-ly-4,count=#items,row_h=rh,selected=selected_item,scroll_key='field_scroll',
         focused=focused,actions=nil,
@@ -747,6 +860,38 @@ function App:draw_fields(y0,h)
                 cv:text(string.upper(item.section),x+FX.label,y+rh/2+3,{size=SZ.tiny,font='title',colour=C.gold_dim,max=lw-120})
                 local tw=math.min(cv:measure(string.upper(item.section),SZ.tiny,'title'),lw-120)
                 cv:rect(x+FX.label+tw+10,y+rh/2+3,lw-FX.label-tw-24,1,C.line,2)
+                return
+            end
+            if item.header then
+                -- a collapsible group (Damage Zones, Attacks, Magazines, a vehicle weapon) or one of its sections
+                local selected=i==selected_item
+                local action=actions[i]
+                if not action then
+                    local index,it=i,item
+                    action={click=function()
+                        for s2,idx in ipairs(selectable)do if idx==index then self.field=s2 end end
+                        self.focus='fields'
+                        self:toggle_item(it,object)
+                    end}
+                    actions[i]=action
+                end
+                cv:hit(x,y,lw,rh,action)
+                local indent=FX.label+(item.depth or 0)*20
+                if item.depth==0 then cv:rect(x+6,y+2,lw-12,rh-4,C.header,1)end
+                if selected then
+                    cv:rect(x+6,y+1,lw-12,rh-2,focused and C.select or C.gold_wash,2)
+                    cv:rect(x+6,y+1,3,rh-2,focused and C.gold or C.gold_dim,3)
+                elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
+                local cy=y+rh/2
+                cv:text(item.open and'↓'or'→',x+indent,cy,{size=SZ.small,colour=C.gold,font='title'})
+                if item.depth==0 then
+                    cv:text(string.upper(item.header),x+indent+20,cy,{size=SZ.small,font='title',colour=C.gold,max=lw-indent-170})
+                    cv:text(item.subs..(item.subs==1 and' part · 'or' parts · ')..item.count..' fields',x+lw-18,cy,
+                        {size=SZ.tiny,colour=C.faint,align='right'})
+                else
+                    cv:text(item.header,x+indent+20,cy,{size=SZ.label,colour=selected and C.text or C.dim,max=lw-indent-150})
+                    cv:text(item.count..(item.count==1 and' field'or' fields'),x+lw-18,cy,{size=SZ.tiny,colour=C.faint,align='right'})
+                end
                 return
             end
             local row=item.row
@@ -768,8 +913,9 @@ function App:draw_fields(y0,h)
                 cv:rect(x+6,y+1,3,rh-2,focused and C.gold or C.gold_dim,3)
             elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
             local cy=y+rh/2
-            cv:text(row.label,x+FX.label,cy,{size=SZ.label,colour=row.editable and(selected and C.text or C.dim)or C.faint,
-                max=FX.default_right-FX.label-90})
+            local indent=(item.depth or 0)*20
+            cv:text(row.label,x+FX.label+indent,cy,{size=SZ.label,colour=row.editable and(selected and C.text or C.dim)or C.faint,
+                max=FX.default_right-FX.label-90-indent})
             cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
             -- value box
             local value,source,state,holder,err=self:row_view(row)
@@ -1048,13 +1194,35 @@ function App:current_values()
 end
 -- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the
 -- loadout screen colours it. False when there is none (the layout keeps its text-only form).
+local GLYPHS={offensive='orbital',defensive='defensive',support_weapons='support',support_backpacks='backpack',
+    vehicles='vehicle',resupply='resupply'}
+local STRATAGEM_FAMILIES={st=true,sp=true,sb=true,ve=true,rs=true}
 function App:draw_icon(object,x,y,size)
+    if type(self.canvas.d.image)~='function'then return false end
     local icons=self.ctx.icons
-    if not icons or type(self.canvas.d.image)~='function'then return false end
-    local family,name=tostring(object.key):match('^(%a+)|(.+)$')
-    local entry=family=='st'and icons.stratagems[name]or family=='bo'and icons.boosters[name]
-    if not entry then return false end
-    self.canvas:image(entry.handle,x,y,size,size,{colours={r=entry.accent,g={255,255,238,255}},z=4})
+    local family=tostring(object.key):match('^(%a+)|')
+    local entry
+    if icons and STRATAGEM_FAMILIES[family]then entry=icons.stratagems[object.stratagem or object.name]
+    elseif icons and family=='bo'then entry=icons.boosters[object.name]end
+    if entry then
+        self.canvas:image(entry.handle,x,y,size,size,{colours={r=entry.accent,g={255,255,238,255}},z=4})
+        return true
+    end
+    -- no game icon: the category's glyph (eagles get the jet)
+    local glyph=GLYPHS[object.category]
+    if glyph=='orbital'and object.subtitle=='Eagle'then glyph='eagle'end
+    if glyph then
+        local tone=object.tone and theme.tone[object.tone]or C.gold
+        return self:draw_ui_icon(glyph,x+size*0.12,y+size*0.12,size*0.76,tone)
+    end
+    return false
+end
+-- One of the editor's own mask icons (images/ui_<name>.png) in a colour; false when it is not available.
+function App:draw_ui_icon(name,x,y,size,colour)
+    local ui=self.ctx.ui_icons
+    local handle=ui and ui[name]
+    if not handle or type(self.canvas.d.image)~='function'then return false end
+    self.canvas:image(handle,x,y,size,size,{colours={r=colour,g=colour},z=5})
     return true
 end
 -- A value's text for a row (its labels, arrows for codes, names for references).
@@ -1296,6 +1464,8 @@ function App:draw()
     self:draw_confirm()
     self:draw_picker()
     self:draw_code()
+    self:draw_modes()
+    self:draw_rates()
 end
 
 return M

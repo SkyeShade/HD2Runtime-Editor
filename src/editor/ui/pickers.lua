@@ -27,6 +27,27 @@ local function natives()
 end
 local function code_key(code)return table.concat(code,',')end
 
+-- A popup's close button (top-right) and a plain text button; both register their click region.
+local function close_button(self,cv,x,y,w,on_close)
+    local action=self.popup_close or{}
+    self.popup_close=action
+    action.click=on_close
+    local hovered=self.hover==action
+    cv:rect(x+w-44,y+12,30,30,hovered and C.error_soft or C.panel_alt,10)
+    cv:frame(x+w-44,y+12,30,30,hovered and C.error or C.line_strong,11)
+    cv:text('×',x+w-29,y+27,{size=22,colour=hovered and C.error or C.dim,align='center',z=12})
+    cv:hit(x+w-44,y+12,30,30,action)
+end
+local function text_button(self,cv,label,x,y,w,h,action,style)
+    local hovered=self.hover==action
+    local bg=style=='primary'and C.gold or(hovered and C.hover or C.panel)
+    cv:rect(x,y,w,h,bg,10)
+    if style~='primary'then cv:frame(x,y,w,h,C.line_strong,11)end
+    cv:text(label,x+w/2,y+h/2,{size=SZ.tab,font='title',colour=style=='primary'and C.inverse or C.text,align='center',z=12})
+    cv:hit(x,y,w,h,action)
+end
+M.close_button,M.text_button=close_button,text_button
+
 function M.install(App)
     ------------------------------------------------------------------------------------------------ picker --
     -- The picker's items for a row: static choices, mission uses, or donors (each checked with the Runtime's own
@@ -100,8 +121,9 @@ function M.install(App)
         cv:frame(x,y,w,h,C.line_strong,10)
         cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
-        cv:text(string.upper(p.row.label),x+24,y+30,{size=18,font='title',colour=C.text,max=w-48,z=11})
-        cv:text(p.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-48,z=11})
+        cv:text(string.upper(p.row.label),x+24,y+30,{size=18,font='title',colour=C.text,max=w-90,z=11})
+        cv:text(p.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
+        close_button(self,cv,x,y,w,function()self.picker=nil end)
         -- filter
         local fy=y+74
         cv:rect(x+20,fy,w-40,32,C.box,10)
@@ -196,21 +218,30 @@ function M.install(App)
         cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
         cv:text('CALLDOWN CODE',x+24,y+30,{size=18,font='title',colour=C.text,z=11})
-        cv:text(c.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-48,z=11})
+        cv:text(c.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-120,z=11})
+        close_button(self,cv,x,y,w,function()self.coder=nil end)
         -- the code as arrow tiles
         local max=c.row.max_length or 9
         local tile,gap=52,8
         local total=max*tile+(max-1)*gap
         local tx=x+(w-total)/2
         local ty=y+80
+        self.code_tiles=self.code_tiles or{}
         for i=1,max do
             local d=c.code[i]
             local bx=tx+(i-1)*(tile+gap)
-            cv:rect(bx,ty,tile,tile,d and C.gold_wash or C.box,10)
-            cv:frame(bx,ty,tile,tile,d and C.gold_dim or C.line,11)
+            local action=self.code_tiles[i]or{}
+            self.code_tiles[i]=action
+            local index=i
+            -- right click removes this arrow
+            action.rclick=function()if c.code[index]then table.remove(c.code,index)end end
+            local hovered=d and self.hover==action
+            cv:rect(bx,ty,tile,tile,hovered and C.error_soft or(d and C.gold_wash or C.box),10)
+            cv:frame(bx,ty,tile,tile,hovered and C.error or(d and C.gold_dim or C.line),11)
             if d then cv:text(util.ARROWS[d],bx+tile/2,ty+tile/2,{size=30,font='title',colour=C.gold,align='center',z=12})end
+            cv:hit(bx,ty,tile,tile,action)
         end
-        cv:text(#c.code..' / '..max,x+w-24,y+54,{size=SZ.small,colour=C.faint,align='right',z=11})
+        cv:text(#c.code..' / '..max,x+w-60,y+54,{size=SZ.small,colour=C.faint,align='right',z=11})
         -- arrow buttons for the mouse
         local bw=48
         local bx=x+24
@@ -222,21 +253,178 @@ function M.install(App)
             cv:text(util.ARROWS[d],bx+(i-1)*(bw+8)+bw/2,by+18,{size=20,colour=C.text,align='center',z=12})
             cv:hit(bx+(i-1)*(bw+8),by,bw,36,action)
         end
-        local undo={click=function()c.code[#c.code]=nil end}
-        cv:rect(bx+4*(bw+8),by,90,36,C.panel,10);cv:frame(bx+4*(bw+8),by,90,36,C.line_strong,11)
-        cv:text('UNDO',bx+4*(bw+8)+45,by+18,{size=SZ.tab,font='title',colour=C.text,align='center',z=12})
-        cv:hit(bx+4*(bw+8),by,90,36,undo)
-        local save={click=function()self:code_save()end}
-        cv:rect(x+w-24-120,by,120,36,C.gold,10)
-        cv:text('SAVE',x+w-24-60,by+18,{size=SZ.tab,font='title',colour=C.inverse,align='center',z=12})
-        cv:hit(x+w-24-120,by,120,36,save)
+        self.code_undo=self.code_undo or{}
+        self.code_undo.click=function()c.code[#c.code]=nil end
+        text_button(self,cv,'UNDO',bx+4*(bw+8),by,84,36,self.code_undo)
+        self.code_reset=self.code_reset or{}
+        self.code_reset.click=function()c.code=util.copy(c.row.vanilla)end
+        text_button(self,cv,'DEFAULT',bx+4*(bw+8)+92,by,100,36,self.code_reset)
+        self.code_save_btn=self.code_save_btn or{}
+        self.code_save_btn.click=function()self:code_save()end
+        text_button(self,cv,'SAVE',x+w-24-110,by,110,36,self.code_save_btn,'primary')
         -- notes
         local ny=by+56
         for i,note in ipairs(self:code_notes(c.code))do
             cv:text(note[1],x+24,ny+(i-1)*20,{size=SZ.small,colour=note[2],max=w-48,z=11})
         end
-        cv:text('Arrow keys add   Backspace undo   Del clear   Enter / Tab save   Esc cancel',x+24,y+h-22,
+        cv:text('Arrow keys add   Right-click an arrow to remove it   Backspace undo   Del clear   Enter save',x+24,y+h-22,
             {size=SZ.tiny,colour=C.faint,max=w-48,z=11})
+    end
+
+    ------------------------------------------------------------------------------------------- fire modes --
+    function App:open_modes(row)
+        local current=self:row_view(row)
+        self.moder={row=row,list=util.copy(type(current)=='table'and current or{}),cursor=1}
+    end
+    local function has(list,m)for i,v in ipairs(list)do if v==m then return i end end end
+    function App:mode_toggle(m)
+        local e=self.moder
+        local at=has(e.list,m)
+        if at then
+            if#e.list>1 then table.remove(e.list,at)else self:toast('A weapon keeps at least one fire mode',C.dim)end
+        elseif#e.list<(e.row.max_modes or 4)then e.list[#e.list+1]=m
+        else self:toast('At most '..(e.row.max_modes or 4)..' fire modes',C.dim)end
+    end
+    function App:modes_save()
+        local e=self.moder
+        self.moder=nil
+        if e then self:stage(e.row,e.list)end
+    end
+    function App:handle_modes_keys(f)
+        local e,k=self.moder,f.keys
+        local n=#e.row.modes
+        if k.UP then e.cursor=math.max(1,e.cursor-1)end
+        if k.DOWN then e.cursor=math.min(n,e.cursor+1)end
+        if k.LEFT or k.RIGHT then self:mode_toggle(e.row.modes[e.cursor])end
+        if k.DELETE then e.list=util.copy(e.row.vanilla)end
+        if k.ESCAPE then self.moder=nil;return end
+        if k.ENTER or k.TAB then self:modes_save()end
+    end
+    function App:draw_modes()
+        local e=self.moder
+        if not e then return end
+        local cv=self.canvas
+        local L=theme.panel
+        cv:rect(0,0,L.w,L.h,C.scrim,8)
+        cv:hit(-10000,-10000,20000,20000,{click=function()self.moder=nil end})
+        local n=#e.row.modes
+        local w,h=560,190+n*44
+        local x,y=(L.w-w)/2,(L.h-h)/2-30
+        cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
+        cv:hit(x,y,w,h,{})
+        cv:text('FIRE MODES',x+24,y+30,{size=18,font='title',colour=C.text,z=11})
+        cv:text(e.row.object.name..'   '..#e.list..' of at most '..(e.row.max_modes or 4),x+24,y+54,
+            {size=SZ.small,colour=C.faint,max=w-90,z=11})
+        close_button(self,cv,x,y,w,function()self.moder=nil end)
+        self.mode_rows=self.mode_rows or{}
+        for i,m in ipairs(e.row.modes)do
+            local ry=y+76+(i-1)*44
+            local at=has(e.list,m)
+            local action=self.mode_rows[i]or{}
+            self.mode_rows[i]=action
+            local index=i
+            action.click=function()e.cursor=index;self:mode_toggle(m)end
+            local selected=i==e.cursor
+            if selected then cv:rect(x+12,ry,w-24,40,C.select,10);cv:rect(x+12,ry,3,40,C.gold,11)
+            elseif self.hover==action then cv:rect(x+12,ry,w-24,40,C.hover,10)end
+            cv:rect(x+28,ry+11,18,18,at and C.gold or C.box,11)
+            cv:frame(x+28,ry+11,18,18,at and C.gold or C.line_strong,11)
+            if at then cv:text(tostring(at),x+37,ry+20,{size=SZ.tiny,font='title',colour=C.inverse,align='center',z=12})end
+            cv:text(util.humanize(m),x+60,ry+20,{size=SZ.label,colour=at and C.text or C.dim,z=12})
+            if has(e.row.vanilla,m)then cv:text('default',x+w-28,ry+20,{size=SZ.tiny,colour=C.faint,align='right',z=12})end
+            cv:hit(x+12,ry,w-24,40,action)
+        end
+        local by=y+h-56
+        self.modes_reset=self.modes_reset or{}
+        self.modes_reset.click=function()e.list=util.copy(e.row.vanilla)end
+        text_button(self,cv,'DEFAULT',x+24,by,110,36,self.modes_reset)
+        self.modes_save_btn=self.modes_save_btn or{}
+        self.modes_save_btn.click=function()self:modes_save()end
+        text_button(self,cv,'SAVE',x+w-24-110,by,110,36,self.modes_save_btn,'primary')
+        cv:text('↑↓ choose   ←→ toggle   numbers = selector order',x+150,by+18,{size=SZ.tiny,colour=C.faint,max=w-300,z=11})
+    end
+
+    --------------------------------------------------------------------------------------- rate-of-fire modes --
+    function App:open_rates(row)
+        local current=self:row_view(row)
+        self.rater={row=row,slots=util.copy(type(current)=='table'and current or{0,0,0}),cursor=1}
+        for i=1,3 do if(self.rater.slots[i]or 0)>0 then self.rater.cursor=i;break end end
+    end
+    function App:rates_commit()
+        local e=self.rater
+        if not e or not e.buffer then return true end
+        local v=tonumber(e.buffer)
+        e.buffer=nil
+        if v==nil then return true end
+        v=math.floor(v+0.5)
+        if v~=0 and(v<(e.row.min or 1)or v>(e.row.max or 3000))then
+            self:toast('A rate is 0 (unused) or '..(e.row.min or 1)..' to '..(e.row.max or 3000)..' rpm',C.error)
+            return false
+        end
+        e.slots[e.cursor]=v
+        return true
+    end
+    function App:rates_save()
+        if not self:rates_commit()then return end
+        local e=self.rater
+        self.rater=nil
+        if e then self:stage(e.row,e.slots)end
+    end
+    function App:handle_rates_keys(f)
+        local e,k=self.rater,f.keys
+        for _,ch in ipairs(f.chars)do
+            if ch:match('%d')then e.buffer=(e.buffer or'')..ch;if#e.buffer>5 then e.buffer=e.buffer:sub(1,5)end end
+        end
+        if k.BACKSPACE then e.buffer=(e.buffer or tostring(e.slots[e.cursor])):sub(1,-2)end
+        if k.DELETE then e.buffer=nil;e.slots[e.cursor]=0 end
+        if k.UP or k.DOWN then
+            if self:rates_commit()then e.cursor=math.max(1,math.min(3,e.cursor+(k.UP and-1 or 1)))end
+        end
+        if k.ESCAPE then self.rater=nil;return end
+        if k.ENTER or k.TAB then self:rates_save()end
+    end
+    function App:draw_rates()
+        local e=self.rater
+        if not e then return end
+        local cv=self.canvas
+        local L=theme.panel
+        cv:rect(0,0,L.w,L.h,C.scrim,8)
+        cv:hit(-10000,-10000,20000,20000,{click=function()self.rater=nil end})
+        local w,h=560,330
+        local x,y=(L.w-w)/2,(L.h-h)/2-30
+        cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
+        cv:hit(x,y,w,h,{})
+        cv:text('RATE-OF-FIRE MODES',x+24,y+30,{size=18,font='title',colour=C.text,z=11})
+        cv:text(e.row.object.name..'   0 = unused slot',x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
+        close_button(self,cv,x,y,w,function()self.rater=nil end)
+        self.rate_rows=self.rate_rows or{}
+        for i=1,3 do
+            local ry=y+76+(i-1)*48
+            local action=self.rate_rows[i]or{}
+            self.rate_rows[i]=action
+            local index=i
+            action.click=function()if self:rates_commit()then e.cursor=index end end
+            local selected=i==e.cursor
+            if selected then cv:rect(x+12,ry,w-24,44,C.select,10);cv:rect(x+12,ry,3,44,C.gold,11)
+            elseif self.hover==action then cv:rect(x+12,ry,w-24,44,C.hover,10)end
+            local slot=e.row.slots and e.row.slots[i]or tostring(i)
+            cv:text('Slot '..string.upper(slot),x+28,ry+22,{size=SZ.label,colour=C.dim,z=12})
+            local text=(selected and e.buffer)or(e.slots[i]==0 and'unused'or util.format(e.slots[i]))
+            cv:rect(x+w-200,ry+8,150,28,C.box,11)
+            cv:frame(x+w-200,ry+8,150,28,selected and C.box_focus or C.box_edge,11)
+            cv:text(text,x+w-60,ry+22,{size=SZ.label,colour=e.slots[i]==0 and not(selected and e.buffer)and C.faint or C.text,
+                align='right',z=12})
+            cv:text('rpm',x+w-40,ry+22,{size=SZ.tiny,colour=C.faint,z=12})
+            cv:hit(x+12,ry,w-24,44,action)
+        end
+        local by=y+h-56
+        self.rates_reset=self.rates_reset or{}
+        self.rates_reset.click=function()e.slots=util.copy(e.row.vanilla);e.buffer=nil end
+        text_button(self,cv,'DEFAULT',x+24,by,110,36,self.rates_reset)
+        self.rates_save_btn=self.rates_save_btn or{}
+        self.rates_save_btn.click=function()self:rates_save()end
+        text_button(self,cv,'SAVE',x+w-24-110,by,110,36,self.rates_save_btn,'primary')
+        cv:text('↑↓ slot   digits type   Del unused',x+150,by+18,{size=SZ.tiny,colour=C.faint,max=w-300,z=11})
     end
 end
 

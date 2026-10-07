@@ -35,6 +35,11 @@
   .icon.plate { background: var(--panel); border-radius: 44px; box-shadow: inset 0 0 0 4px rgba(255,255,255,.08); }
   .icon.plate svg { width: 70%; height: 70%; }
 
+  /* ---- in-game icon masks (data-game="raw"): black = empty, red = the shape the overlay colours ---- */
+  .mask { width: 256px; height: 256px; background: #000; display: grid; place-items: center; }
+  .mask svg { width: 78%; height: 78%; }
+  .mask svg * { fill: #ff0000; }
+
   /* ---- buttons (2x of the in-game 150 x 34) ---- */
   .btn { width: 300px; height: 68px; display: grid; place-items: center; font: 600 30px var(--font);
          letter-spacing: .06em; text-transform: uppercase; border: 2px solid var(--line); background: var(--panel); color: var(--text); }
@@ -107,6 +112,24 @@
   <div class="artboard icon plate" data-name="tab-presets" data-w="256" data-h="256" data-game="raw">
     <svg viewBox="0 0 100 100" fill="#ffc72c"><path d="M24 12h52v78L50 72 24 90z"/></svg>
   </div></div>
+
+<!-- In-game masks (exported with --game into images/ as the mod's own icons; coloured in game) -->
+<div class="slot"><label>ui_mod (mask)</label><div class="artboard mask" data-name="ui_mod" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M18 30h18a10 10 0 1 1 20 0h18v18a10 10 0 1 1 0 20v18H56a10 10 0 1 0-20 0H18V68a10 10 0 1 0 0-20z"/></svg></div></div>
+<div class="slot"><label>ui_orbital (mask)</label><div class="artboard mask" data-name="ui_orbital" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M44 6h12v30h12L50 58 32 36h12z"/><path d="M10 74a40 18 0 0 1 80 0v8H10z"/></svg></div></div>
+<div class="slot"><label>ui_eagle (mask)</label><div class="artboard mask" data-name="ui_eagle" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M50 8l7 26 33 18v10L57 54l-2 22 12 8v6H33v-6l12-8-2-22-33 8V52l33-18z"/></svg></div></div>
+<div class="slot"><label>ui_defensive (mask)</label><div class="artboard mask" data-name="ui_defensive" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M30 40h30l26-10v12L60 52H30z"/><path d="M26 54h38v10H26z"/><path d="M40 64h10v12h20v12H20V76h20z"/></svg></div></div>
+<div class="slot"><label>ui_support (mask)</label><div class="artboard mask" data-name="ui_support" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M8 40h58l8-10h18v16H76l-6 8H44l-8 22H20l8-22H8z"/></svg></div></div>
+<div class="slot"><label>ui_backpack (mask)</label><div class="artboard mask" data-name="ui_backpack" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M34 12h32v10h10v66H24V22h10zM42 22h16v-2H42z"/><path d="M32 46h36v8H32z" style="fill:#000"/></svg></div></div>
+<div class="slot"><label>ui_vehicle (mask)</label><div class="artboard mask" data-name="ui_vehicle" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M30 14h40v28H30z"/><path d="M14 30h14v18H14zM72 30h14v18H72z"/><path d="M34 44h12v40H32l2-8zM54 44h12l2 32 2 8H54z"/></svg></div></div>
+<div class="slot"><label>ui_resupply (mask)</label><div class="artboard mask" data-name="ui_resupply" data-w="256" data-h="256" data-game="raw">
+  <svg viewBox="0 0 100 100"><path d="M14 30l36-16 36 16v40L50 86 14 70z"/><path d="M50 40v40M14 30l36 16 36-16" style="fill:none;stroke:#000;stroke-width:6"/></svg></div></div>
 
 <div class="slot"><label>btn-apply</label><div class="artboard btn primary" data-name="btn-apply" data-w="300" data-h="68">Apply</div></div>
 <div class="slot"><label>btn-apply-hover</label><div class="artboard btn primary hover" data-name="btn-apply-hover" data-w="300" data-h="68">Apply</div></div>

@@ -61,7 +61,12 @@ step({'0'},nil,'03_typing')
 assert(H.app.edit and H.app.edit.buffer=='1300','typed 1300: '..tostring(H.app.edit and H.app.edit.buffer))
 step({'DOWN'})
 assert(H.app.pending[rof.key]and H.app.pending[rof.key].value==1300,'1300 pending')
--- nudge the next field up by ten steps
+-- nudge the next numeric field up by ten steps
+for _=1,10 do
+    local r=H.app:focused_row()
+    if r and not r.kind then break end
+    step({'DOWN'})
+end
 local nudged=H.app:focused_row()
 step({'RIGHT'},{down={'SHIFT'}},'04_pending')
 assert(H.app.pending[nudged.key],'nudge staged')
@@ -165,6 +170,108 @@ local closed=false
 H.app.ctx.close=function()closed=true end
 step({'ESCAPE'})
 assert(closed,'Escape closes the editor')
+-- composites: a support weapon with its call-in and hellpod; a backpack with its drone; a vehicle with zones
+local function open_object(key)
+    local o=assert(H.catalog:object(key),'no '..key);H.catalog:open(o);return o
+end
+local ac=open_object('sp|AC-8 Autocannon')
+local has={}
+for _,r in ipairs(ac.rows)do
+    local part=r.key:match('^sp|AC%-8 Autocannon|(%w+)')
+    has[part]=true
+end
+assert(has.st and has.sw and has.pod,'support weapon composite: call-in, weapon and hellpod')
+assert(H.catalog:object('st|AC-8 Autocannon')==ac and H.catalog:object('sw|AC-8 Autocannon')==ac,'old keys resolve to the composite')
+local dog=open_object('sb|AX/AR-23 Guard Dog')
+local drone=false
+for _,r in ipairs(dog.rows)do if r.group=='Drone Weapon'then drone=true end end
+assert(drone,'guard dog carries its drone weapon')
+assert(H.catalog:object('bp|AX/AR-23 Guard Dog')==dog,'the backpack key resolves to the backpack stratagem')
+-- a vehicle: Damage Zones closed by default, opened by Enter, a zone opened by Enter
+local frv=open_object('ve|M-103 Supply FRV')
+H.app:reveal(frv.rows[1])
+local items,selectable=H.app:field_items(frv)
+local zones_index
+for s2,index in ipairs(selectable)do if items[index].header=='Damage Zones'then zones_index=s2 end end
+assert(zones_index,'a Damage Zones header')
+local before=#items
+H.app.field=zones_index
+step({},nil,'20_vehicle_closed')
+step({'ENTER'})
+items,selectable=H.app:field_items(frv)
+assert(#items>before,'Damage Zones opened')
+step({'DOWN'})
+step({'ENTER'})
+local opened=#H.app:field_items(frv)
+assert(opened>#items,'a zone opened')
+step({},nil,'21_vehicle_zones')
+step({'LEFT'})
+assert(#H.app:field_items(frv)<opened,'Left closes the zone')
+-- magazines live inside the weapon that uses them
+local conc=open_object('pw|AR-23C Liberator Concussive')
+local mags=0
+for _,r in ipairs(conc.rows)do if r.group=='Magazines'then mags=mags+1 end end
+assert(mags>0,'the Concussive carries its magazine options')
+-- fire modes and rate-of-fire modes
+local p19=open_object('pw|P-19 Redeemer')
+local modes,rates
+for _,r in ipairs(p19.rows)do if r.kind=='modes'then modes=r end if r.kind=='rates'then rates=r end end
+assert(modes and rates,'fire mode and rate rows')
+H.app:reveal(modes)
+step({'ENTER'})
+assert(H.app.moder,'fire mode editor open')
+step({'DOWN'});step({'DOWN'});step({'RIGHT'})
+step({},nil,'22_modes')
+step({'ENTER'})
+assert(H.app.pending[modes.key],'fire modes staged: '..tostring(H.app.toast_msg and H.app.toast_msg.text))
+H.app:reveal(rates)
+step({'ENTER'})
+assert(H.app.rater,'rate editor open')
+-- the editor opens on the weapon's own rate slot; filling a second slot would need a selector binding (refused with
+-- the Runtime's reason), so change the slot it has
+local slot=H.app.rater.cursor
+step({'9'});step({'0'});step({'0'})
+step({},nil,'23_rates')
+step({'ENTER'})
+assert(H.app.pending[rates.key]and H.app.pending[rates.key].value[slot]==900,'rates staged: '..tostring(H.app.toast_msg and H.app.toast_msg.text))
+-- the calldown editor: right-click removes an arrow, DEFAULT restores the native code, the X closes
+local smoke=row_where('st|Eagle Smoke Strike',function(r)return r.kind=='code'end)
+H.app:reveal(smoke)
+step({'ENTER'})
+step({})
+local n=#H.app.coder.code
+H.app.code_tiles[1].rclick()
+assert(#H.app.coder.code==n-1,'right-click removed an arrow')
+H.app.code_reset.click()
+assert(#H.app.coder.code==#smoke.vanilla,'DEFAULT restored the native code')
+step({},nil,'24_code_buttons')
+H.app.popup_close.click()
+assert(H.app.coder==nil,'the X closes the popup')
+-- a hellpod slot offers pickups
+local pod
+for _,r in ipairs(ac.rows)do if r.field=='payload.entity'then pod=r;break end end
+H.app:reveal(pod)
+step({'ENTER'})
+assert(H.app.picker and#H.app.picker.items>5,'pickups offered: '..tostring(H.app.picker and#H.app.picker.items))
+step({},nil,'25_pod_picker')
+H.app.picker=nil
+-- the scrollbar: a click on its track jumps, and dragging follows the mouse
+for i,item in ipairs(H.app.categories)do if item.id=='automatons'then H.app:select_category(i)end end
+H.app.focus='objects'
+step({})
+local bar=H.app.scrollbars and H.app.scrollbars.obj_scroll
+assert(bar,'the object list has a scrollbar')
+local top=H.app.obj_scroll
+bar.click(nil,700)
+assert(H.app.obj_scroll>top and H.app.drag,'track click scrolled and started a drag')
+H.app.drag.move(200)
+assert(H.app.obj_scroll<70,'dragging follows the mouse')
+H.app.drag=nil
+-- the window X closes the editor
+local shut=false
+H.app.ctx.close=function()shut=true end
+H.app.btn_close.click()
+assert(shut,'the window X closes the editor')
 -- search: Ctrl+F, type, filter
 H.app:set_view('browse')
 H.app.focus='objects'

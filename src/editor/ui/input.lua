@@ -24,22 +24,28 @@ function Input:query(kind,name)
     if not ok then self.unknown[name]=true;return false end
     return value==true
 end
+-- The engine mouse wheel this frame (+ up), as the Runtime's own panel reads it: the 'wheel' axis of stingray.Mouse, its
+-- y read on its own (a failed field read must not hide the vector form). 0 when unavailable.
 local function wheel()
     local stingray=rawget(_G,'stingray')
     local mouse=type(stingray)=='table'and stingray.Mouse
-    if type(mouse)~='table'or type(mouse.axis)~='function'or type(mouse.axis_index)~='function'then return 0 end
-    local ok,value=pcall(function()
-        local v=mouse.axis(mouse.axis_index('wheel'))
-        if type(v)=='number'then return v end
-        local y=v and v.y
-        if type(y)~='number'and stingray.Vector3 and stingray.Vector3.to_elements then
-            local _,ey=stingray.Vector3.to_elements(v);y=ey
-        end
-        return y
-    end)
-    if ok and type(value)=='number'and value==value then
-        if value>0 then return 1 elseif value<0 then return -1 end
+    if type(mouse)~='table'then return 0 end
+    local ok,v=pcall(function()return mouse.axis(mouse.axis_index('wheel'))end)
+    if not ok or v==nil then return 0 end
+    if type(v)=='number'then return v>0 and 1 or v<0 and-1 or 0 end
+    local y
+    local oky,value=pcall(function()return v.y end)
+    if oky and type(value)=='number'then y=value end
+    if y==nil then
+        local oke,_,ey=pcall(function()return stingray.Vector3.to_elements(v)end)
+        if oke and type(ey)=='number'then y=ey end
     end
+    if y==nil then
+        local oki,value2=pcall(function()return v[2]end)
+        if oki and type(value2)=='number'then y=value2 end
+    end
+    if type(y)~='number'or y~=y then return 0 end
+    if y>0 then return 1 elseif y<0 then return-1 end
     return 0
 end
 
@@ -84,7 +90,7 @@ function Input:poll(dt,opts)
         if ok and type(m)=='table'and type(m.x)=='number'then
             local moved=not self.last_mouse or math.abs(m.x-self.last_mouse.x)+math.abs(m.y-self.last_mouse.y)>1.5
             frame.mouse={x=m.x,y=m.y,left=m.left==true,clicked=m.left==true and not self.prev_left,
-                released=m.left~=true and self.prev_left,moved=moved}
+                released=m.left~=true and self.prev_left,moved=moved,rclicked=self:query('pressed','MOUSE2')}
             self.prev_left=m.left==true
             if moved then self.last_mouse={x=m.x,y=m.y}end
         else

@@ -42,7 +42,9 @@ do
 end
 local app=require('mods/skyeshade/hd2runtime_editor/editor/ui/app').new({hd2=fake,catalog=catalog,layer=layer,
     ledger=ledger,presets=presets,hotkey='F8',label='HD2Runtime 0.30.0-dev  ·  Editor 0.2.0',
-    mouse=function()return input.mouse end,icons=icons,choices=true,set_free_cursor=function()end})
+    mouse=function()return input.mouse end,icons=icons,choices=true,set_free_cursor=function()end,
+    ui_icons={mod={image='ui_mod'},orbital={image='ui_orbital'},eagle={image='ui_eagle'},defensive={image='ui_defensive'},
+        support={image='ui_support'},backpack={image='ui_backpack'},vehicle={image='ui_vehicle'},resupply={image='ui_resupply'}}})
 
 local W,H=args.width or 1920,args.height or 1080
 local function frame_builder()

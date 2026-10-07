@@ -52,10 +52,12 @@ class EditorTests(unittest.TestCase):
         self.assertIsNotNone(total, report)
         rows, editable, valid = map(int, total.groups())
         self.assertGreater(rows, 15000, report)
-        # The one known exception: an enemy field whose reviewed domain is "-1, or above 0" (the sample value is 0).
-        self.assertGreaterEqual(valid, editable - 1, report)
+        # Known exceptions: an enemy field whose reviewed domain is "-1, or above 0" (the sample value is 0), and the
+        # M-1000 Maxigun's rate slots, which need a selector binding in the same transaction (the editor shows the
+        # Runtime's reason when such a value is chosen).
+        self.assertGreaterEqual(valid, editable - 2, report)
         for failure in re.findall(r'^\s+\d+ x (.+)$', report, re.M):
-            self.assertIn('gore', failure, report)
+            self.assertTrue('gore' in failure or 'SELECTOR_REQUIRED' in failure, report)
 
     def test_override_layer_over_the_real_ensure(self):
         # test_layer.lua takes the simulator's path as its only argument

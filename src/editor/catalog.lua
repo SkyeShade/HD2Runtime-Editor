@@ -13,13 +13,13 @@ local M={}
 
 M.GROUPS={
     {id='weapons',label='WEAPONS',items={
-        {id='primary',label='Primary'},{id='secondary',label='Secondary'},{id='support',label='Support Weapons'},
-        {id='throwables',label='Throwables'},{id='magazines',label='Magazines'}}},
+        {id='primary',label='Primary'},{id='secondary',label='Secondary'},{id='throwables',label='Throwables'}}},
     {id='stratagems',label='STRATAGEMS',items={
-        {id='offensive',label='Offensive'},{id='defensive',label='Defensive'},{id='callins',label='Support Call-ins'}}},
-    {id='equipment',label='EQUIPMENT',items={
-        {id='backpacks',label='Backpacks'},{id='vehicles',label='Vehicles'},{id='vehicle_weapons',label='Vehicle Weapons'},
-        {id='boosters',label='Boosters'}}},
+        {id='offensive',label='Offensive',tone='offensive'},{id='defensive',label='Defensive',tone='defensive'},
+        {id='support_weapons',label='Support Weapons',tone='support'},
+        {id='support_backpacks',label='Support Backpacks',tone='support'},
+        {id='vehicles',label='Vehicles',tone='support'},{id='resupply',label='Resupply',tone='support'}}},
+    {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'}}},
     {id='enemies',label='ENEMIES',items={
         {id='terminids',label='Terminids'},{id='automatons',label='Automatons'},{id='illuminate',label='Illuminate'},
         {id='structures',label='Structures'}}},
@@ -108,7 +108,7 @@ local function make_row(object,spec)
         shared=spec.shared==true,unverified=spec.unverified==true,descriptor=spec.descriptor,
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
             allow_unverified_reference=spec.unverified_reference==true or nil},
-        editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field}
+        editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group}
     row.loc=location(spec.descriptor,'row:'..row.key)
     if row.editable then
         local held=util.representable(row.vanilla,integer,spec.storage)
@@ -134,7 +134,8 @@ local function make_value_row(object,spec)
             allow_unverified_reference=spec.unverified_reference==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.field,options=spec.options,labels=spec.labels,
         min=spec.min,max=spec.max,integer=spec.kind=='uses'or nil,directions=spec.directions,
-        min_length=spec.min_length,max_length=spec.max_length,unlimited=spec.unlimited}
+        min_length=spec.min_length,max_length=spec.max_length,unlimited=spec.unlimited,group=spec.group,
+        modes=spec.modes,max_modes=spec.max_modes,slots=spec.slots}
     row.loc=location(spec.descriptor,'row:'..row.key)
     return row
 end
@@ -187,6 +188,7 @@ function M.encode(row,value)
     if getmetatable(value)==nil and rawget(value,'path')~='no_explosion'then return value end
     local output=rawget(value,'output')
     if output then return {ref='output',id=output}end
+    if rawget(value,'resource')=='pickup'then return {ref='pickup',id=rawget(value,'semanticId')}end
     if rawget(value,'path')=='no_explosion'then return {ref='none'}end
     local weapon,attack,phase=rawget(value,'weapon'),rawget(value,'attack'),rawget(value,'phase')
     if weapon and phase then return {ref='terminal',weapon=weapon,attack=attack,phase=phase}end
@@ -198,6 +200,7 @@ function M.decode(cat,row,stored)
     local hd2=cat.hd2
     local ok,value=pcall(function()
         if stored.ref=='output'then return hd2.attack_output(stored.id)end
+        if stored.ref=='pickup'then return hd2.pickup(stored.id)end
         if stored.ref=='none'then return row.target():no_explosion()end
         if stored.ref=='terminal'then
             return hd2.weapon(stored.weapon):attack(stored.attack):projectile():terminal_action(stored.phase):explosion()
@@ -282,6 +285,25 @@ local function explosion_options(hd2,row)
     return out
 end
 local function bool_labels()return {{value=false,label='Off'},{value=true,label='On'}}end
+-- Fire modes (a list of 'automatic' / 'single' / 'burst' ...) and rate-of-fire modes (three rpm slots, 0 = unused).
+local function mode_row(object,common,f)
+    local modes={}
+    for _,m in ipairs(f.allowedModes or{})do modes[#modes+1]=m end
+    if#modes==0 then return nil end
+    common.kind,common.modes,common.max_modes='modes',modes,f.maxModes or#modes
+    common.vanilla=util.copy(f.currentDefault)
+    common.section='Fire Mode'
+    return make_value_row(object,common)
+end
+local function rate_row(object,common,f)
+    if type(f.currentDefault)~='table'or#f.currentDefault~=3 then return nil end
+    common.kind='rates'
+    common.vanilla=util.copy(f.currentDefault)
+    common.min,common.max=f.min or 1,f.max or 3000
+    common.slots=f.slotNames or{'x','y','z'}
+    common.section='Fire Mode'
+    return make_value_row(object,common)
+end
 local function static_options(labels)
     return function()
         local out={}
@@ -297,6 +319,7 @@ local function player_rows(hd2,object,entry)
         local value_kind=f.type=='boolean'or f.type=='status_reference'
             or(f.type=='enum'and type(f.allowedValues)=='table'and f.writeKind~='reorder_native_mode_vector')
             or f.type=='projectile_reference'or f.type=='explosion_reference'
+            or f.type=='fire_mode_set'or f.type=='fire_rate_set'
         if f.editable and f.preferred and not f.deprecated and not f.derivedReadOnly
             and(numeric(f.type,f.currentDefault)or value_kind)then
             local b=f.backing or{}
@@ -330,6 +353,10 @@ local function player_rows(hd2,object,entry)
             if numeric(f.type,f.currentDefault)then
                 common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,b.storage
                 rows[#rows+1]=make_row(object,common)
+            elseif f.type=='fire_mode_set'then
+                rows[#rows+1]=mode_row(object,common,f)
+            elseif f.type=='fire_rate_set'then
+                rows[#rows+1]=rate_row(object,common,f)
             elseif f.type=='boolean'then
                 common.kind,common.vanilla,common.labels='choice',f.currentDefault==true,bool_labels()
                 common.options=static_options(common.labels)
@@ -401,7 +428,7 @@ local function support_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
-        local value_kind=f.type=='boolean'or f.type=='status_reference'
+        local value_kind=f.type=='boolean'or f.type=='status_reference'or f.type=='fire_mode_set'or f.type=='fire_rate_set'
         if f.editable and not f.derivedReadOnly and not f.deprecated and(f.preferred~=false)
             and(numeric(f.type,f.currentDefault)or value_kind)then
             local t=f.target or{}
@@ -431,6 +458,10 @@ local function support_rows(hd2,object,entry)
                 common.vanilla,common.min,common.max,common.type=f.currentDefault,f.min,f.max,f.type
                 common.storage=(f.backing or{}).storage
                 rows[#rows+1]=make_row(object,common)
+            elseif f.type=='fire_mode_set'then
+                rows[#rows+1]=mode_row(object,common,f)
+            elseif f.type=='fire_rate_set'then
+                rows[#rows+1]=rate_row(object,common,f)
             elseif f.type=='boolean'then
                 common.kind,common.vanilla,common.labels='choice',f.currentDefault==true,bool_labels()
                 common.options=static_options(common.labels)
@@ -521,7 +552,8 @@ local function stratagem_rows(hd2,object,entry)
             local target=stratagem_target(hd2,name,t)
             if target then
                 local section=PATH_LABELS[t.path]
-                if t.path=='damage_zone'then section=join('Damage Zone',t.zone)
+                local group
+                if t.path=='damage_zone'then section=util.humanize(t.zone or'');group='Damage Zones'
                 elseif t.path=='attack'then
                     section=join(t.weapon=='mine'and'Mine'or(t.weapon and'Mounted Weapon')or'Attack',
                         util.humanize(t.attack or''),DOMAIN_LABELS[domain_of(f.semanticFieldId)])
@@ -529,7 +561,7 @@ local function stratagem_rows(hd2,object,entry)
                 rows[#rows+1]=make_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.path)),
                     label=f.displayName,unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
                     storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=shared_ack(f),
-                    unverified=unverified(f),descriptor=f,section=section or util.humanize(t.path or'')})
+                    unverified=unverified(f),descriptor=f,section=section or util.humanize(t.path or''),group=group})
             end
         end
     end
@@ -550,12 +582,13 @@ local function vehicle_rows(hd2,object,entry)
             else
                 local zone=t.zone
                 target=function()return hd2.vehicle(name):damage_zone(zone)end
-                section=join('Damage Zone',zone)
+                section=util.humanize(zone)
             end
             rows[#rows+1]=make_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.zone)),
                 label=f.displayName,unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
                 storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=shared_ack(f),
-                unverified=unverified(f),descriptor=f,section=section})
+                unverified=unverified(f),descriptor=f,section=section,
+                group=t.path=='damage_zone'and'Damage Zones'or nil})
         end
     end
     return rows
@@ -581,13 +614,14 @@ local function backpack_rows(hd2,object,entry)
                 elseif linked=='energy_shield'then
                     target=function()return hd2.backpack(name):energy_shield():damage_zone(zone)end
                 else target=function()return hd2.backpack(name):damage_zone(zone)end end
-                section=join(linked and util.humanize(linked)or nil,'Damage Zone',zone)
+                section=join(linked and util.humanize(linked)or nil,util.humanize(zone))
             end
             if target then
                 rows[#rows+1]=make_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.path)),
                     label=f.displayName,unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
                     storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=shared_ack(f),
-                    unverified=unverified(f),descriptor=f,section=section})
+                    unverified=unverified(f),descriptor=f,section=section,
+                    group=t.path=='damage_zone'and'Damage Zones'or nil})
             end
         end
     end
@@ -721,19 +755,21 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
     for _,f in ipairs(entry.fields or{})do
         local s=schema[f.id]or{}
         if f.editable and type(f.currentDefault)=='number'and NUMERIC[s.type or'number']then
-            local target,section
+            local target,section,group
             if f.path=='entity'then target=root;section='Health & Armor'
             elseif f.path=='damage_zone'then
                 local zone=f.zone
                 local z=zones[zone]or{}
                 target=function()return root():zone(zone)end
-                section=join('Zone',z.wikiZone or util.humanize(z.name or zone))
+                section=z.wikiZone or util.humanize(z.name or zone)
+                group='Damage Zones'
             elseif f.path=='attack'then
                 local attack=f.attack
                 local base=tostring(attack):match('^(slot_%d+)')
                 local a=attacks[attack]or attacks[base]or{}
                 target=function()return root():attack(attack)end
-                section=join('Attack',util.humanize(attack),a.role and util.humanize(a.role)or nil)
+                section=join(util.humanize(attack),a.role and util.humanize(a.role)or nil)
+                group='Attacks'
             end
             if target then
                 local ack=s.acknowledgement
@@ -747,7 +783,7 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
                 rows[#rows+1]=make_row(object,{id=f.path..':'..tostring(f.zone or f.attack or'')..':'..f.id,
                     label=util.humanize(f.id),vanilla=f.currentDefault,min=s.min,max=s.max,type=s.type,
                     storage=s.storage or(f.backing or{}).storage,field=f.id,target=target,shared=s.shared==true,
-                    unverified=ack=='allow_unverified_effect',descriptor=f,section=section})
+                    unverified=ack=='allow_unverified_effect',descriptor=f,section=section,group=group})
             end
         end
     end
@@ -755,12 +791,98 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
 end
 
 ------------------------------------------------------------------------------------------------ families --
--- Each category: {family, list = function(cat) -> {{key, name, subtitle, build = function() -> rows}}}.
+-- Each category: list = function(cat) -> {{key, name, subtitle, build = function(object) -> rows}}.
 local CATEGORY={}
 local function sorted_objects(list)
     table.sort(list,function(a,b)return util.natural_less(a.name,b.name)end)
     return list
 end
+-- Rows of one part of a composite object (a stratagem with its weapon, backpack, drone, vehicle weapons and pod):
+-- the part's rows keep stable keys under the composite (<composite key>|<prefix>|<field>) and belong to the
+-- composite. decorate(row) may rename the row's section or put it in a collapsible group.
+local function part_rows(object,prefix,build,decorate)
+    local proxy=setmetatable({key=object.key..'|'..prefix},{__index=object})
+    local ok,rows=pcall(build,proxy)
+    if not ok or type(rows)~='table'then return {}end
+    for _,row in ipairs(rows)do
+        row.object=object
+        if decorate then decorate(row)end
+    end
+    return rows
+end
+local function append(into,rows)for _,r in ipairs(rows)do into[#into+1]=r end return into end
+
+-- Magazine options of a player weapon: attachment id -> entry, for the weapon's own magazines (a collapsed group).
+local function weapon_magazines(name)
+    local A=load('attachment_authoring')
+    if not A or type(A.weapons)~='table'then return {}end
+    local out={}
+    local ids=A.weapons[name]
+    if type(ids)~='table'then return out end
+    for _,item in pairs(ids)do
+        local id=type(item)=='table'and(item.semanticId or item.attachment or item.id)or item
+        local entry=type(id)=='string'and A.attachments and A.attachments[id]
+        if entry then out[#out+1]={id=id,entry=entry}end
+    end
+    table.sort(out,function(a,b)return util.natural_less(a.entry.name or a.id,b.entry.name or b.id)end)
+    return out
+end
+
+-- Hellpod contents of a stratagem's pod rack (pod_payload_authoring): spawn count and the four payload slots.
+local function pickup_options(hd2,row)
+    local P=load('pod_payload_authoring')
+    local out={{value='empty',label='Empty',sub='nothing in this slot'}}
+    local ids=util.sorted_keys(P and P.pickups or{},function(a,b)
+        return util.natural_less(P.pickups[a].name or a,P.pickups[b].name or b)end)
+    for _,id in ipairs(ids)do
+        local p=P.pickups[id]
+        local ok,value=pcall(hd2.pickup,id)
+        if ok then out[#out+1]={value=value,label=tostring(p.name or id),sub=util.humanize(p.category or'')}end
+    end
+    return out
+end
+local function pod_rows(hd2,object,rack)
+    local rows={}
+    local name=rack.name
+    local target=function()return hd2.pod_rack(name)end
+    local shared=rack.shared==true or(type(rack.consumers)=='table'and#rack.consumers>1)
+    local locked=rack.writable==false
+    local reason=locked and(rack.reason or rack.readOnlyReason or'this pod is read-only')or nil
+    if type(rack.spawnCount)=='number'then
+        rows[#rows+1]=make_row(object,{id='payload.spawn_count',label='Items spawned',vanilla=rack.spawnCount,min=1,max=4,
+            type='integer',field='payload.spawn_count',target=target,unverified=true,section='Hellpod',
+            unit='items',shared=shared,editable=not locked,reason=reason})
+    end
+    for i=1,4 do
+        local slot=rack.slots and(rack.slots[tostring(i)]or rack.slots[i])
+        if type(slot)=='table'then
+            local index=i
+            local current=slot.current
+            local expect=function()
+                if current then return hd2.pickup(current)end
+                return 'empty'
+            end
+            local ok,vanilla=pcall(expect)
+            if ok then
+                rows[#rows+1]=make_value_row(object,{id='payload.slot_'..i,kind='reference',
+                    label='Slot '..i..(slot.active==false and' (spare)'or''),field='payload.entity',
+                    target=function()return hd2.pod_rack(name):slot(index)end,expect=expect,vanilla=vanilla,
+                    section='Hellpod',options=function(row)return pickup_options(hd2,row)end,shared=shared,
+                    editable=not locked and slot.writable~=false,reason=reason or slot.reason})
+            end
+        end
+    end
+    return rows
+end
+local function rack_for(stratagem)
+    local P=load('pod_payload_authoring')
+    if not P then return nil end
+    local rack=P.byStratagem and P.byStratagem[stratagem]
+    if type(rack)=='string'then rack=P.racks and P.racks[rack]end
+    if type(rack)=='table'and rack.name==nil then rack=P.racks and P.racks[stratagem..' pod']end
+    return type(rack)=='table'and rack or nil
+end
+
 local function player_category(slot)
     return function(cat)
         local W,why=load('player_weapon_authoring')
@@ -769,7 +891,16 @@ local function player_category(slot)
         for name,entry in pairs(W.weapons or{})do
             if entry.slot==slot then
                 list[#list+1]={key='pw|'..name,name=name,subtitle=entry.category,
-                    build=function(object)return player_rows(cat.hd2,object,entry)end}
+                    build=function(object)
+                        local rows=player_rows(cat.hd2,object,entry)
+                        for _,m in ipairs(weapon_magazines(name))do
+                            local label=util.plain((m.entry.name or m.id):gsub('%s+',' '),60)
+                            append(rows,part_rows(object,'mag:'..m.id,function(proxy)
+                                return attachment_rows(cat.hd2,proxy,m.entry)
+                            end,function(row)row.group='Magazines';row.section=label end))
+                        end
+                        return rows
+                    end}
             end
         end
         return sorted_objects(list)
@@ -777,16 +908,6 @@ local function player_category(slot)
 end
 CATEGORY.primary=player_category('primary')
 CATEGORY.secondary=player_category('secondary')
-function CATEGORY.support(cat)
-    local S,why=load('support_weapon_authoring')
-    if not S then return nil,why end
-    local list={}
-    for name,entry in pairs(S.weapons or{})do
-        list[#list+1]={key='sw|'..name,name=name,subtitle='Support weapon',
-            build=function(object)return support_rows(cat.hd2,object,entry)end}
-    end
-    return sorted_objects(list)
-end
 local function stratagem_category(families,subtitles)
     return function(cat)
         local ST,why=load('stratagem_authoring')
@@ -804,36 +925,127 @@ end
 CATEGORY.offensive=stratagem_category({orbital=true,eagle=true},{orbital='Orbital',eagle='Eagle'})
 CATEGORY.defensive=stratagem_category({sentry=true,emplacement=true,mine=true},
     {sentry='Sentry',emplacement='Emplacement',mine='Mines'})
-CATEGORY.callins=stratagem_category({support=true,vehicle=true,backpack=true,mission=true},
-    {support='Support weapon call-in',vehicle='Vehicle call-in',backpack='Backpack call-in',mission='Mission'})
+
+-- Support weapons: the call-in, the weapon, the backpack it comes with and its hellpod, as one stratagem.
+function CATEGORY.support_weapons(cat)
+    local S,why=load('support_weapon_authoring')
+    if not S then return nil,why end
+    local ST=load('stratagem_authoring')or{stratagems={}}
+    local E=load('entity_authoring')or{backpacks={}}
+    local list={}
+    for name,weapon in pairs(S.weapons or{})do
+        local stratagem=ST.stratagems and ST.stratagems[name]
+        local backpack=E.backpacks and E.backpacks[name..' Backpack']
+        local rack=rack_for(name)
+        local subtitle=stratagem and'Support weapon'or'Support weapon (no call-in)'
+        -- comes with a backpack: an authored one, or a backpack in its hellpod
+        local bundled=backpack~=nil
+        if rack and not bundled then
+            local P=load('pod_payload_authoring')
+            for _,slot in pairs(rack.slots or{})do
+                local pickup=type(slot)=='table'and slot.active~=false and P and P.pickups and P.pickups[slot.current]
+                if pickup and pickup.category=='backpack'then bundled=true end
+            end
+        end
+        if bundled then subtitle='Support weapon + backpack'end
+        list[#list+1]={key='sp|'..name,name=name,subtitle=subtitle,stratagem=stratagem and name or nil,
+            aliases={'st|'..name,'sw|'..name,backpack and('bp|'..name..' Backpack')or nil},
+            build=function(object)
+                local rows={}
+                if stratagem then append(rows,part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end))end
+                append(rows,part_rows(object,'sw',function(p)return support_rows(cat.hd2,p,weapon)end))
+                if backpack then
+                    append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack)end,
+                        function(row)if not row.group then row.section=join('Backpack',row.section)end end))
+                end
+                if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
+                return rows
+            end}
+    end
+    return sorted_objects(list)
+end
+-- Support backpacks: backpack stratagems with the backpack, its drone weapon and its hellpod.
+function CATEGORY.support_backpacks(cat)
+    local ST,why=load('stratagem_authoring')
+    if not ST then return nil,why end
+    local E=load('entity_authoring')or{backpacks={}}
+    local V=load('vehicle_weapon_authoring')or{weapons={}}
+    local list={}
+    for name,stratagem in pairs(ST.stratagems or{})do
+        if stratagem.family=='backpack'then
+            local backpack=E.backpacks and E.backpacks[name]
+            local drones={}
+            for key,w in pairs(V.weapons or{})do
+                if w.vehicle==name then drones[#drones+1]={key=key,entry=w}end
+            end
+            table.sort(drones,function(a,b)return a.key<b.key end)
+            local rack=rack_for(name)
+            local aliases={'st|'..name,'bp|'..name}
+            for _,d in ipairs(drones)do aliases[#aliases+1]='vw|'..d.key end
+            list[#list+1]={key='sb|'..name,name=name,subtitle=#drones>0 and'Backpack + drone'or'Backpack',
+                stratagem=name,aliases=aliases,
+                build=function(object)
+                    local rows=part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end)
+                    if backpack then append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack)end))end
+                    for _,d in ipairs(drones)do
+                        append(rows,part_rows(object,'vw:'..(d.entry.mount or'gun'),function(p)
+                            return vehicle_weapon_rows(cat.hd2,p,d.entry)end,
+                            function(row)row.group='Drone Weapon'end))
+                    end
+                    if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
+                    return rows
+                end}
+        end
+    end
+    return sorted_objects(list)
+end
+-- Vehicles: the call-in, the vehicle, its damage zones and every mounted weapon (also vehicles without a call-in).
 function CATEGORY.vehicles(cat)
     local E,why=load('entity_authoring')
     if not E then return nil,why end
+    local ST=load('stratagem_authoring')or{stratagems={}}
+    local V=load('vehicle_weapon_authoring')or{weapons={}}
     local list={}
-    for name,entry in pairs(E.vehicles or{})do
-        list[#list+1]={key='vh|'..name,name=name,subtitle='Vehicle',
-            build=function(object)return vehicle_rows(cat.hd2,object,entry)end}
+    for name,vehicle in pairs(E.vehicles or{})do
+        local stratagem=ST.stratagems and ST.stratagems[name]
+        local mounts={}
+        for key,w in pairs(V.weapons or{})do
+            if w.vehicle==name and w.carrier~='backpack_drone'then mounts[#mounts+1]={key=key,entry=w}end
+        end
+        table.sort(mounts,function(a,b)return a.key<b.key end)
+        local aliases={'vh|'..name,stratagem and('st|'..name)or nil}
+        for _,m in ipairs(mounts)do aliases[#aliases+1]='vw|'..m.key end
+        list[#list+1]={key='ve|'..name,name=name,subtitle=stratagem and'Vehicle'or'Vehicle (no call-in)',
+            stratagem=stratagem and name or nil,aliases=aliases,
+            build=function(object)
+                local rows={}
+                if stratagem then append(rows,part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end))end
+                append(rows,part_rows(object,'vh',function(p)return vehicle_rows(cat.hd2,p,vehicle)end))
+                for _,m in ipairs(mounts)do
+                    local label='Weapon · '..util.humanize(m.entry.mount or m.key)
+                    append(rows,part_rows(object,'vw:'..(m.entry.mount or m.key),function(p)
+                        return vehicle_weapon_rows(cat.hd2,p,m.entry)end,function(row)row.group=label end))
+                end
+                return rows
+            end}
     end
     return sorted_objects(list)
 end
-function CATEGORY.backpacks(cat)
-    local E,why=load('entity_authoring')
-    if not E then return nil,why end
+-- The Resupply mission stratagem and its pod.
+function CATEGORY.resupply(cat)
+    local ST,why=load('stratagem_authoring')
+    if not ST then return nil,why end
     local list={}
-    for name,entry in pairs(E.backpacks or{})do
-        list[#list+1]={key='bp|'..name,name=name,subtitle='Backpack',
-            build=function(object)return backpack_rows(cat.hd2,object,entry)end}
-    end
-    return sorted_objects(list)
-end
-function CATEGORY.vehicle_weapons(cat)
-    local V,why=load('vehicle_weapon_authoring')
-    if not V then return nil,why end
-    local list={}
-    for key,entry in pairs(V.weapons or{})do
-        list[#list+1]={key='vw|'..key,name=key,
-            subtitle=entry.carrier=='backpack_drone'and'Drone weapon'or'Vehicle weapon',
-            build=function(object)return vehicle_weapon_rows(cat.hd2,object,entry)end}
+    for name,stratagem in pairs(ST.stratagems or{})do
+        if stratagem.family=='mission'then
+            local rack=rack_for(name)
+            list[#list+1]={key='rs|'..name,name=name,subtitle='Mission stratagem',stratagem=name,aliases={'st|'..name},
+                build=function(object)
+                    local rows=part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end)
+                    if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
+                    return rows
+                end}
+        end
     end
     return sorted_objects(list)
 end
@@ -854,31 +1066,6 @@ function CATEGORY.boosters(cat)
     for name,entry in pairs(B.boosters or{})do
         list[#list+1]={key='bo|'..name,name=name,subtitle='Booster',
             build=function(object)return booster_rows(cat.hd2,object,entry)end}
-    end
-    return sorted_objects(list)
-end
-function CATEGORY.magazines(cat)
-    local A,why=load('attachment_authoring')
-    if not A then return nil,why end
-    local users={}
-    for weapon,ids in pairs(A.weapons or{})do
-        if type(ids)=='table'then
-            for _,item in pairs(ids)do
-                local id=type(item)=='table'and(item.semanticId or item.attachment or item.id)or item
-                if type(id)=='string'then
-                    users[id]=users[id]or{}
-                    users[id][#users[id]+1]=weapon
-                end
-            end
-        end
-    end
-    local list={}
-    for id,entry in pairs(A.attachments or{})do
-        local names=users[id]or{}
-        table.sort(names,util.natural_less)
-        local name=util.plain((entry.name or id):gsub('%s+',' '),80)
-        list[#list+1]={key='mg|'..id,name=name,subtitle=#names>0 and table.concat(names,', ')or'Magazine option',
-            build=function(object)return attachment_rows(cat.hd2,object,entry)end}
     end
     return sorted_objects(list)
 end
@@ -906,16 +1093,18 @@ CATEGORY.illuminate=enemy_category(function(e)return e.kind=='enemy'and e.factio
 CATEGORY.structures=enemy_category(function(e)return e.kind=='structure'end)
 M.CATEGORY=CATEGORY
 
--- The category that holds an object key's family (for presets: a key names its object, the object its category).
-local FAMILY_CATEGORIES={pw={'primary','secondary'},sw={'support'},st={'offensive','defensive','callins'},
-    vh={'vehicles'},bp={'backpacks'},vw={'vehicle_weapons'},th={'throwables'},bo={'boosters'},mg={'magazines'},
+-- The categories that can hold an object key's family (presets name rows by key; mods' claims name family objects).
+local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boosters'},
+    st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
+    sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
+    vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},
     en={'terminids','automatons','illuminate','structures'}}
 
 ------------------------------------------------------------------------------------------------- catalogue --
 local Catalog={};Catalog.__index=Catalog
 
 function M.new(hd2)
-    return setmetatable({hd2=hd2,lists={},errors={},by_key={},rows={},by_loc={}},Catalog)
+    return setmetatable({hd2=hd2,lists={},errors={},by_key={},rows={},by_loc={},aliases={}},Catalog)
 end
 -- The category's objects (built once), or {} and the reason it is unavailable.
 function Catalog:objects(category)
@@ -925,9 +1114,14 @@ function Catalog:objects(category)
     local ok,result,why=pcall(function()return builder(self)end)
     if not ok then why=result;result=nil end
     list=result or{}
+    local tone
+    for _,group in ipairs(M.GROUPS)do
+        for _,item in ipairs(group.items)do if item.id==category then tone=item.tone end end
+    end
     for _,object in ipairs(list)do
-        object.category=category
+        object.category,object.tone=category,tone
         self.by_key[object.key]=object
+        for _,alias in pairs(object.aliases or{})do self.aliases[alias]=object end
     end
     self.lists[category]=list
     self.errors[category]=result==nil and tostring(why or'unavailable')or nil
@@ -945,16 +1139,17 @@ function Catalog:open(object)
     object.rows,object.sections={},{}
     local by_label={}
     for _,row in ipairs(rows)do
-        if not self.rows[row.key]then
+        if row and not self.rows[row.key]then
             object.rows[#object.rows+1]=row
             self.rows[row.key]=row
             local list=self.by_loc[row.loc]
             if not list then list={};self.by_loc[row.loc]=list end
             list[#list+1]=row
-            local section=by_label[row.section]
+            local label=(row.group or'')..'\0'..row.section
+            local section=by_label[label]
             if not section then
-                section={label=row.section,rows={}}
-                by_label[row.section]=section
+                section={label=row.section,group=row.group,rows={}}
+                by_label[label]=section
                 object.sections[#object.sections+1]=section
             end
             section.rows[#section.rows+1]=row
@@ -962,13 +1157,14 @@ function Catalog:open(object)
     end
     return object
 end
+-- An object by its key, or by the key of a part it holds (a stratagem, weapon, backpack or vehicle of a composite).
 function Catalog:object(key)
-    local object=self.by_key[key]
+    local object=self.by_key[key]or self.aliases[key]
     if object then return object end
     local family=tostring(key):match('^(%a+)|')
     for _,category in ipairs(FAMILY_CATEGORIES[family]or{})do
         self:objects(category)
-        object=self.by_key[key]
+        object=self.by_key[key]or self.aliases[key]
         if object then return object end
     end
     return nil

@@ -45,6 +45,17 @@ for _,group in ipairs(catalog.GROUPS)do
                             other[#other]=other[#other]=='up'and'down'or'up'
                         elseif row.kind=='uses'then
                             other=row.vanilla=='unlimited'and 3 or(row.unlimited and'unlimited'or math.max(row.min,(row.vanilla or 1)-1))
+                        elseif row.kind=='modes'then
+                            other={}
+                            for _,m in ipairs(row.modes)do
+                                local present=false
+                                for _,v in ipairs(row.vanilla)do if v==m then present=true end end
+                                if not present and#row.vanilla<row.max_modes then other={unpack(row.vanilla)};other[#other+1]=m;break end
+                            end
+                            if#other==0 then other={row.vanilla[1]}end
+                        elseif row.kind=='rates'then
+                            other={unpack(row.vanilla)}
+                            for i=1,3 do if other[i]>0 then other[i]=math.min(row.max,other[i]+50);break end end
                         elseif row.options and row.kind=='choice'then
                             for _,o in ipairs(row.options(row))do if not util.same(o.value,row.vanilla)then other=o.value;break end end
                         end

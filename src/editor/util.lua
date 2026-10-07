@@ -128,6 +128,11 @@ function M.value_text(v)
     if t~='table'then return tostring(v)end
     if getmetatable(v)==nil then
         if#v>0 and type(v[1])=='string'and ARROWS[v[1]]then return M.code_text(v)end
+        if#v==3 and type(v[1])=='number'and type(v[2])=='number'and type(v[3])=='number'then
+            local parts={}
+            for i,x in ipairs(v)do parts[i]=x==0 and'-'or M.format(x)end
+            return table.concat(parts,' / ')
+        end
         if rawget(v,'is_null')or rawget(v,'path')=='no_explosion'then return 'None'end
         local parts={}
         for i,x in ipairs(v)do parts[i]=M.value_text(x)end
@@ -136,6 +141,7 @@ function M.value_text(v)
     if rawget(v,'is_null')or rawget(v,'none')or rawget(v,'path')=='no_explosion'then return 'None'end
     local output=rawget(v,'output')
     if type(output)=='string'then return(output:match('([^/]+)$')or output):gsub('%-',' ')end
+    if rawget(v,'resource')=='pickup'then return tostring(rawget(v,'name')or'pickup')end
     local weapon,attack,phase=rawget(v,'weapon'),rawget(v,'attack'),rawget(v,'phase')
     if weapon then
         return tostring(weapon)..(attack and attack~='primary'and(' · '..M.humanize(attack))or'')

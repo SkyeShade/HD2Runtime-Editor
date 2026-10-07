@@ -40,6 +40,8 @@ LIBRARIES = {
     'booster': 'content/ui/shared/resources/generated_icons/booster_icons',
 }
 PREFIX = {'stratagem': 'si_', 'booster': 'bi_'}
+# Reviewed by hand: the library icon of a stratagem whose type binding is missing (uiIcon state 'unbound').
+UNBOUND = {'AC-8 Autocannon': 'StratagemWeaponAutocannon'}
 NS = '{http://schemas.microsoft.com/winfx/2006/xaml/presentation}'
 X = '{http://schemas.microsoft.com/winfx/2006/xaml}'
 KEY = re.compile(r'\A[A-Za-z][A-Za-z0-9]{0,63}\Z')
@@ -88,6 +90,9 @@ def bindings(sdk):
         icon = s.get('uiIcon') or {}
         if icon.get('state') == 'resolved' and icon.get('iconKey'):
             out['stratagem'][s['name']] = icon['iconKey']
+    # Stratagems whose native type the game's icon template leaves unbound, but whose icon the library has.
+    for name, key in UNBOUND.items():
+        out['stratagem'].setdefault(name, key)
     for b in boost.get('boosters', []):
         key = (b.get('identity') or {}).get('uiIcon')
         if key:

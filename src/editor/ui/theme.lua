@@ -15,6 +15,9 @@ T.colour={
     box={5,7,9,255},box_edge={255,255,255,46},box_focus={255,199,44,255},
     shadow={0,0,0,110},scrim={0,0,0,150},
 }
+-- Stratagem category tones (the game's own: offensive red, defensive green, support blue).
+T.tone={offensive={226,94,74,255},defensive={122,188,94,255},support={74,172,232,255}}
+T.tone_soft={offensive={226,94,74,40},defensive={122,188,94,40},support={74,172,232,40}}
 T.size={title=22,tab=15,heading=13,body=16,label=15,small=13,tiny=12}
 T.font={title='title',body='body'}
 

@@ -14,7 +14,7 @@ do
 end
 local M={}
 
-M.VERSION='0.2.0'
+M.VERSION='0.3.0'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -77,6 +77,15 @@ function M.start(hd2,id)
         end
         log(count..' game icons available')
     end
+    -- The editor's own mask icons (images/ui_*.png: the mod marker and the category glyphs).
+    local ui_icons
+    if type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
+        ui_icons={}
+        for _,name in ipairs({'mod','orbital','eagle','defensive','support','backpack','vehicle','resupply'})do
+            local ok,handle=pcall(hd2.resources.image,'ui_'..name)
+            if ok and handle then ui_icons[name]=handle end
+        end
+    end
     -- The cursor capture (HD2Runtime r50, experimental): freed while the editor is open, when the setting is on.
     local function set_free_cursor(on)
         if type(overlay.free_cursor)=='function'then pcall(overlay.free_cursor,overlay,on)end
@@ -84,7 +93,7 @@ function M.start(hd2,id)
     set_free_cursor(presets:setting('free_cursor',true))
     local app=app_module.new({hd2=hd2,catalog=catalog,layer=layer,ledger=ledger,presets=presets,hotkey=hotkey,
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
-        mouse=function()return overlay:mouse()end,log=log,icons=icons,choices=type(mod.choice)=='function',
+        mouse=function()return overlay:mouse()end,log=log,icons=icons,ui_icons=ui_icons,choices=type(mod.choice)=='function',
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
 
