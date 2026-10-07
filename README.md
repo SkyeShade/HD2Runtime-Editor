@@ -4,9 +4,14 @@
 
 **Live, in-game editing of every value [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) exposes, on top of the mods you have installed.**
 
-HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows which HD2Runtime mods you have installed and what each one changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
+HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows every mod you have deployed and what each HD2Runtime mod changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
-- **See what your mods do.** The Mods tab lists every installed HD2Runtime mod with the values it applied this session, and any operation the Runtime refused, with the reason. Select a value to jump to that field.
+- **See what your mods do.** The Mods tab lists every mod your mod manager (Echelon or HD2 Arsenal) deployed, with its icon (see [Mod icons](#mod-icons)).
+  - HD2Runtime mods show the values they applied this session, any operation the Runtime refused (with the reason), and their in-game options with the current settings and the operations they drive. Select a value to jump to that field.
+  - Other mods replace game files directly, so what they change cannot be read; their name, description and any Lua addons are shown.
+  - A field a mod sets names the mod and, when its in-game options drive it, the options page.
+- **Your changes in one place.** The Changes tab lists every value the editor applied or has pending (never your mods' own). Enter jumps to the field; Del or a right-click reverts it.
+- **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state. Their cooldown and uses can be tuned on this machine, from the next call.
 - **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,300 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
 - **One stratagem, one place.**
   - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
@@ -22,28 +27,32 @@ HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows wh
 - **Tidy long lists.** Damage zones (vehicles, deployables, enemies), enemy attacks, magazines and vehicle weapons are groups that start closed. Each part inside them opens on its own.
 - **More than numbers.**
   - **Calldown codes:** an arrow-key code editor. Right-click an arrow to remove it; DEFAULT restores the game's code.
-  - **Fire modes and rate-of-fire modes**, as in ModBuilder.
+  - **Fire modes and rate-of-fire modes**, as in ModBuilder. Filling an empty rate slot on a weapon without a rate selector (the Liberator, for example) binds the game's own selector in the same write.
+  - **The armory's presentation:** each weapon's displayed traits (up to five, in order) and displayed armor penetration.
   - **Mission uses:** a count or unlimited.
   - **Hellpod contents:** the items a support weapon, backpack or Resupply pod drops, and how many.
   - **Projectile swaps and terminal explosion payloads**, from a searchable donor list.
   - **Statuses, on/off switches and enums.**
 
   Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
-- **The game's own icons.** Every stratagem and booster shows its icon from your installed game, coloured as on the loadout screen (an opt-in local build step, see [Game icons](#game-icons)). Only SG-88 and CQC-72 show a category glyph instead: they have no call-in stratagem, so the game has no icon for them. Values a mod sets carry a mod icon.
+- **The game's own icons.** Every stratagem and booster shows its own HUD icon, the game's pixels from your installed game (an opt-in local build step, see [Game icons](#game-icons)). SG-88 and CQC-72 have no call-in stratagem, so the game has no icon for them: they show a plain square in their category colour.
+- **What is changed, at a glance.** In the object lists, a yellow pencil piece marks objects you edited and a blue piece marks objects a mod changed.
+- **Your language, your sounds.** The game's menu sounds play on the buttons (Settings). Every interface text can be translated with a plain text file (see [Localisation](#localisation)).
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
 - **Optimised apply.** Edits are staged as pending changes and applied together. Only fields whose value changed are written, and each change is a single guarded write.
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.4.0, development build for HD2Runtime r51.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 was seen in game (text placement, icons, value editing). The 0.3.0 and 0.4.0 changes (categories, groups, fire modes, hellpods, the wheel, the weapon filter, mount swaps, HUD icons) are not live-tested yet.
+> **Status: 0.5.0, development build for HD2Runtime r52.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. The 0.5.0 changes (the wheel's native hook, the new tabs, filling rate slots, the armory fields, localisation, sounds, mod icons) are not live-tested yet.
 
 ## Requirements
 
 - Helldivers 2
 - Bingus Shared Loader v15+
-- **HD2Runtime 0.30.0-dev r51 or later.**
+- **HD2Runtime 0.30.0-dev r52 or later.**
   - r50 adds script choices (`mod:choice`, for non-numeric fields), overlay images (`d:image`, for icons), cursor capture (`overlay:free_cursor`), the overlay text placement fix, and naming the mod behind each applied value for mods built without the SDK wrapper.
-  - r51 adds the mouse wheel (`hd2.input.wheel`) and, in its SDK, the HUD icon extractor that [Game icons](#game-icons) uses. On r50 everything else works; the lists scroll with the scrollbar only.
+  - r51 adds, in its SDK, the HUD icon extractor that [Game icons](#game-icons) uses.
+  - r52 adds the mouse wheel's native hook (`hd2.input.wheel`), following choices (filling empty rate slots), every mod's options (`hd2.diagnostics.options`) and custom stratagem tuning. On r50 or r51 the rest works: the lists scroll with the scrollbar, filling an empty rate slot is refused with the reason, and the Custom tab and the options are read-only or empty.
   - On an older 0.30.0-dev with the UI services (`hd2.ui.overlay`, `hd2.store`, `hd2.on_frame`, `hd2.input.pressed`), numbers still edit. Non-numeric fields then explain that they need r50, and icons and cursor capture are simply absent.
   - Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
 
@@ -55,7 +64,9 @@ Install `HD2RuntimeEditor-<version>.zip` with your mod manager (HD2 Arsenal show
 
 Press **F8** in game to open or close the editor, or **Esc** to close it (the game's pause menu also opens on Esc). The window is centred on the screen.
 
-While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental in r50; turn it off in Presets → settings if it misbehaves. Keys and clicks still also reach the game, because HD2Runtime cannot block input, so the ship is the most comfortable place to edit.
+While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental; turn it off in Settings if it misbehaves.
+
+The tabs are Browse, Changes, Mods, Custom, Presets and Settings (Shift+Tab cycles them). Keys and clicks still also reach the game, because HD2Runtime cannot block input, so the ship is the most comfortable place to edit.
 
 | Key | Action |
 | --- | --- |
@@ -103,25 +114,42 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 
 ## Limitations
 
-- **Not every value type.** Traits, sounds, weapon functions, function projectiles and stratagem presentation stay with ModBuilder.
-- **Two field rules need more than one field at a time.**
+- **Not every value type.** Weapon functions, function projectiles, sounds and stratagem presentation stay with ModBuilder.
+- **Fields that move together.**
   - The default fire mode can only be reordered, never held at its own value, so it is left out.
-  - Filling an empty rate-of-fire slot on a weapon without a rate selector needs the selector bound in the same write. The editor shows the Runtime's reason, so change the slots the weapon already has.
+  - A weapon's displayed traits and displayed armor penetration share its five label slots: the editor holds one of them at a time (reset one to edit the other).
+  - Filling an empty rate slot binds the rate selector with it (HD2Runtime r52); the M-1000 Maxigun's rate slots stay as the Runtime allows.
 - **Three decimals.** Values are held with at most three decimals (the Runtime's live-value precision). A float32 default such as `0.30000001192` is the same stored value as `0.3`, so every catalogued default qualifies.
 - **When values apply.** Some values (fire rate, magazines, heat) are copied when the game builds a weapon, so a weapon you are holding may keep its old value until it is re-equipped or the next mission. Projectile, damage and explosion values apply on the next shot.
 - **A mod's in-game options after a takeover.** Once the editor has taken a field over from a mod's `ensure`, that mod's Mod Options sliders no longer move that field for the rest of the session.
 - **Swapped mounts share records.** A mounted weapon's stats are one set of records, so a swapped mount edits the same weapon on its own vehicle too (the group says which). A mount without its own catalogued weapon shows that its stats are not editable.
+- **Mods that are not HD2Runtime mods.** The editor lists them from your mod manager's own records; it cannot see or change what they do.
+- **Custom stratagems.** Only their cooldown and uses can change after registration, and only on this machine.
 - **Multiplayer.** Writes follow HD2Runtime's rules. They change this machine's game data; what the host decides still wins.
 
 ## Game icons
 
-`py tools/game_icons.py` reads icons from your installed game, read-only, through the HD2Runtime SDK, and the next build packs them in.
+`py tools/game_icons.py` takes every stratagem's and booster's own HUD icon from your installed game, read-only, through the HD2Runtime SDK (r51+ `tools/hd2_hud_icons.py`), and the next build packs them in.
 
-- **Sources.** First, the loadout screen's vector icon libraries. Then, for every stratagem and booster those leave out, the item's own HUD icon from the game's texture atlases (the SDK's `tools/hd2_hud_icons.py`, HD2Runtime r51). The HUD icons cover Maxigun, Meltagun, Jump Pack, Rover, Hot Dog, Supply FRV, Maelstrom, Eagle Gas Airstrike, Resupply, Integrated Extinguishers and Surplus EAT Allocation.
-- **Output.** The game's icon masks go under `images/`, with a map in `src/editor/generated/`.
+- **The game's pixels only.** A stratagem's HUD sprite is already the game's icon masks and is used as it is. A booster's sprite (a yellow plate with a dark glyph) is split onto the masks with its own measured colours, so the overlay draws the same picture. Nothing is drawn or traced; the loadout screen's vector library only supplies each stratagem's accent colour.
+- **No icon:** an item the game has no sprite for (SG-88, CQC-72) gets a plain square in its category colour.
 - **Removing them.** `py tools/game_icons.py --clean` deletes them again.
 
 The icons are derived from Arrowhead's artwork. They are git-ignored and only end up in builds you make yourself, so publish such a build only if you are allowed to redistribute them. Without them the editor simply shows no icons.
+
+## Mod icons
+
+`py tools/mod_icons.py` reads the icons of the mods your mod manager deployed (Echelon or HD2 Arsenal, whichever deployed last) and packs them in at the next build. The overlay paints images as three colour masks, so each icon is reduced to its own nine most common colours and drawn as three stacked layers: the mod's own picture, with fewer colours. Mods installed after the build show the plain mod icon until you run the tool and build again. `--clean` removes them. The icons are their authors' artwork: like the game icons, they are git-ignored and stay in your own builds.
+
+## Localisation
+
+Every interface text goes through one lookup. To translate the editor:
+
+1. In game, open **Settings** and press **WRITE TEMPLATE**. It writes `template.txt` (every interface text) into `%LOCALAPPDATA%\HD2RuntimeEditor\localization\`.
+2. Copy it to a new name ending in `.txt`, set the `@language` line, and write each translation after ` = `. Keep `%d` and `%s` where they are. Lines without a translation are ignored, and field names may be added too.
+3. Press **RELOAD LANGUAGES**, then pick the language. The choice is saved.
+
+`src/editor/strings.lua` lists the interface texts; `py tools/locale_strings.py` regenerates it, and a test keeps it current.
 
 ## UI art
 
@@ -148,7 +176,9 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 - **Catalogue contract:** every one of the ~17,200 rows the editor builds passes HD2Runtime's own validator (`domains/patches.validate`) with a changed value. Non-numeric rows check their vanilla value and another value, with the acknowledgements the validator asks for.
 - **Override layer:** the real `hd2.ensure`, script values, bind-time proofs and conflict rule run over a simulated byte store. The scenarios: vanilla edit and reset, taking over a mod's ensure (including its other fields), a one-time mod patch, a value outside the handle range, refusals, and reset-all.
 - **Value fields:** calldown codes, mission uses, booleans, statuses, projectile swaps and terminal explosions over r50 script choices, plus a mod's calldown code taken over and given back.
-- **UI:** the whole window, driven by scripted keys and clicks, including the picker, the code editor, Escape, the weapon filter and a mount swap. With generated icons, every stratagem and booster must have one. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
+- **UI:** the whole window, driven by scripted keys and clicks, including the picker, the code editor, Escape, the weapon filter, a mount swap, the Changes, Mods (with in-game options), Custom (tuning) and Settings tabs, a language switch, the traits editor and the menu sounds. With generated icons, every stratagem and booster must have one.
+- **Value fields** also cover filling the Liberator's empty rate slots (with its selector binding), the displayed traits and penetration (one at a time), and the steer watchdog.
+- **Helpers:** the JSON reader (sliced), the mod managers' state, the localisation file format, and the interface text list. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
 
 ## License and credit
 

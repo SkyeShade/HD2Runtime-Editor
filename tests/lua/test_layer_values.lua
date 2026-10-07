@@ -65,6 +65,47 @@ check(not layer:set(code,{'up','sideways'}),'unknown direction refused')
 check(not layer:set(code,{'up','up','up','up','up','up','up','up','up','up'}),'too long refused')
 check(not layer:set(uses,0),'uses below the minimum refused')
 out[#out+1]='refusals ok'
+-- an empty rate slot filled on a weapon without a rate selector: one transaction binds the selector with the rates
+local rates=row_of('pw|AR-23 Liberator',function(r)return r.kind=='rates'end)
+check(catalog.rate_binding(rates,{450,640,950})~=nil,'the Liberator needs its selector bound for three rates')
+check(catalog.rate_binding(rates,{0,700,0})==nil,'one rate needs no binding')
+check(catalog.probe(rates,{450,640,950}),'three rates pass as a transaction')
+cycle(rates,{450,640,950},'rate slots with selector binding')
+-- the armory's displayed traits and displayed penetration: one at a time (they share five label slots)
+local traits=row_of('pw|AR-23 Liberator',function(r)return r.kind=='traits'end)
+local shown=row_of('pw|AR-23 Liberator',function(r)return r.field=='presentation.armor_penetration'end)
+check(traits.section=='Armory'and shown.section=='Armory','armory section')
+run(1)
+assert(layer:set(traits,{'light_armor_penetrating','explosive'}))
+check(settle(traits)=='active','traits active')
+local refused,why=layer:set(shown,'heavy')
+check(not refused and tostring(why):find('shares its game data'),'one at a time: '..tostring(why))
+layer:reset(traits)
+check(settle(traits)=='idle','traits released')
+cycle(shown,'heavy','displayed penetration')
+out[#out+1]='armory traits ok'
+-- the steer watchdog: an ensure that never confirms a steer is nudged once, then shown as an error (never applying
+-- forever); the ensure's state is in the message and the history
+local wd=row_of('st|Eagle Smoke Strike',function(r)return r.kind=='code'end)
+run(1)
+assert(layer:set(wd,{'up','down','up','down'}))
+check(settle(wd)=='active','watchdog field active')
+local slot=layer:slot_of(wd)
+local real=slot.watch
+slot.watch={status='waiting',runs=real.runs,rebinds=0,recoveries=0,cancel=function()end}
+assert(layer:set(wd,wd.vanilla))
+run(5)
+check(layer:state(wd)=='applying','still applying after 5 s')
+local nudged=false
+for _,line in ipairs(layer.history)do if line:find('nudging the handle')then nudged=true end end
+check(nudged,'nudged once')
+run(20)
+local state,why=layer:state(wd)
+check(state=='error'and tostring(why):find('did not confirm'),'gave up with the state: '..tostring(state)..' '..tostring(why))
+slot.watch=real
+layer:reset(wd)
+settle(wd)
+out[#out+1]='steer watchdog ok'
 
 -- a mod's ensure sets a calldown code; the editor takes it over and gives it back
 local precision=row_of('st|Orbital Precision Strike',function(r)return r.kind=='code'end)

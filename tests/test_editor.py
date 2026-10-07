@@ -45,6 +45,49 @@ class EditorTests(unittest.TestCase):
         ''')
         self.assertEqual(result, 'ok')
 
+    def test_json_mod_manager_state_and_localisation(self):
+        result = lua_host.run(r"""
+            local json=require('mods/skyeshade/hd2runtime_editor/editor/json')
+            local t=json.decode('{"a":[1,2,{"b":"x\\u00e9\\n"}],"c":true,"d":null,"e":-1.5e2,"f":{}}')
+            assert(t.a[3].b=='x\195\169\n' and t.c==true and t.d==nil and t.e==-150 and next(t.f)==nil,'decode')
+            assert(not pcall(json.decode,'{"a":}'),'bad JSON raises')
+            -- a large file is read in slices: decode yields every n values inside a coroutine
+            local yields=0
+            local co=coroutine.create(function()return json.decode('[1,2,3,4,5,6,7,8,9,10]',3)end)
+            local ok,value
+            repeat ok,value=coroutine.resume(co);assert(ok,value);yields=yields+1 until coroutine.status(co)=='dead'
+            assert(#value==10 and yields>3,'sliced: '..yields)
+            -- Echelon: deployed mods are the slots; a HD2Runtime mod is matched by the Lua addon Echelon scanned
+            local installed=require('mods/skyeshade/hd2runtime_editor/editor/installed')
+            local mods=installed.from_echelon({slots={a={'x.patch_0'},b={'y.patch_0'}},library={
+                a={name='Eagle Tweaks',guid='g1',image='a_1.png',scan={sets={{addons={'mods/x/eagle'}}}}},
+                b={name='Colours',description='Lasers'},c={name='Not deployed'}}},'C:\\E')
+            table.sort(mods,function(p,q)return p.name<q.name end)
+            assert(#mods==2 and mods[2].name=='Eagle Tweaks'and mods[2].addons[1]=='mods/x/eagle'and mods[2].guid=='g1')
+            assert(mods[2].image=='C:\\E\\images\\a_1.png'and mods[1].image==nil,'images')
+            -- Arsenal: the deployed profile's enabled mods, joined to the library
+            local list=installed.from_arsenal({deployedProfile='p',modsLibrary={{uuid='u1',label='One',iconPath='C:\\i.png'},
+                {uuid='u2',label='Two'}},modsList={p={mods={{uuid='u1',enabled=true,deployed=true},{uuid='u2',enabled=false}}}}})
+            assert(#list==1 and list[1].name=='One'and list[1].image=='C:\\i.png','arsenal')
+            -- localisation files: "English = translation", @language, comments; empty translations ignored
+            local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+            local map,name=i18n.parse('\239\187\191@language Deutsch\n# note\nAPPLY = ANWENDEN\n%d fields = %d Felder\r\nEmpty = \n')
+            assert(name=='Deutsch'and map.APPLY=='ANWENDEN'and map['%d fields']=='%d Felder'and map.Empty==nil,'parse')
+            i18n.set(map,'Deutsch')
+            assert(i18n.L('APPLY')=='ANWENDEN'and i18n.L('%d fields'):format(3)=='3 Felder'and i18n.L('Other')=='Other')
+            i18n.set({},'English')
+            assert(i18n.L('APPLY')=='APPLY')
+            return 'ok'
+        """)
+        self.assertEqual(result, 'ok')
+
+    def test_interface_text_list_is_current(self):
+        spec = importlib.util.spec_from_file_location('locale_strings', lua_host.PROJECT / 'tools' / 'locale_strings.py')
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        self.assertEqual(tool.render(tool.collect()), (lua_host.PROJECT / 'src' / 'editor' / 'strings.lua')
+                         .read_text(encoding='utf-8'), 'run py tools/locale_strings.py')
+
     def test_catalogue_rows_pass_the_runtime_validator(self):
         src = (HERE / 'catalog_report.lua').read_text(encoding='utf-8')
         report = lua_host.run('local f=assert(loadstring(%s,"@catalog_report")) return f(nil)' % lua_host._lua_string(src))
@@ -73,7 +116,7 @@ class EditorTests(unittest.TestCase):
             lua_host._lua_string((LUA / 'test_layer_values.lua').as_posix()),
             lua_host._lua_string((LUA / 'sim.lua').as_posix())))
         for line in ('calldown code ok', 'mission uses ok', 'boolean ok', 'status ok', 'projectile swap ok',
-                     'terminal explosion ok', 'refusals ok', 'mod code takeover ok'):
+                     'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'mod code takeover ok'):
             self.assertIn(line, result)
 
     def test_window_frames_stay_inside_overlay_limits(self):

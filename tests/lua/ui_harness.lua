@@ -29,6 +29,26 @@ local input={pressed={},down={},mouse=nil}
 local fake={input={
     pressed=function(name)return input.pressed[name]==true end,
     down=function(name)return input.down[name]==true or input.pressed[name]==true end}}
+-- a custom stratagem a mod registered (hd2.custom_stratagem, HD2Runtime r51 tune/untune)
+H_custom={id='pelican_gas',owner='mods/someone/pelicans',label='Pelican Gas Support',kind='pelican',code='left down',
+    code_values={4,3},cooldown=300,group='any_red',state='ship',registered={cooldown=300},tuned=false}
+fake.custom_stratagem={
+    status=function()return {{id=H_custom.id,owner=H_custom.owner,state='ship',calls=0}}end,
+    describe=function(id)if id==H_custom.id then return H_custom end end,
+    tune=function(id,v)
+        if v.cooldown and(v.cooldown<=0 or v.cooldown>600)then return nil,'cooldown must be seconds above 0 and at most 600'end
+        for k,x in pairs(v)do H_custom[k]=x end
+        H_custom.tuned=true
+        return true
+    end,
+    untune=function()H_custom.cooldown,H_custom.uses,H_custom.tuned=300,nil,false;return true end}
+-- every mod's in-game options (hd2.diagnostics.options, HD2Runtime r51)
+fake.diagnostics={options=function()
+    return {{id='eagle_page',title='Eagle Tweaks',owner='mods/someone/eagle_tweaks',kind='menu',fallback='default',
+        options={{option='speed',label='Rearm speed',kind='slider',value=4,default=2,min=1,max=10,state='ready'},
+            {option='on',label='Enabled',kind='toggle',value=true,state='ready'}},operations={'eagle'}}}
+end}
+H_sounds={}
 -- icons: the generated map when present, with stand-in handles naming their image
 local icons
 do
@@ -36,15 +56,23 @@ do
     if ok and type(gi)=='table'then
         icons={stratagems={},boosters={}}
         for kind,list in pairs({stratagems=gi.stratagems or{},boosters=gi.boosters or{}})do
-            for name,entry in pairs(list)do icons[kind][name]={handle={image=entry.image},accent=entry.accent}end
+            for name,entry in pairs(list)do icons[kind][name]={handle={image=entry.image},accent=entry.accent,dark=entry.dark}end
         end
     end
 end
 local app=require('mods/skyeshade/hd2runtime_editor/editor/ui/app').new({hd2=fake,catalog=catalog,layer=layer,
     ledger=ledger,presets=presets,hotkey='F8',label='HD2Runtime 0.30.0-dev  ·  Editor 0.2.0',
     mouse=function()return input.mouse end,icons=icons,choices=true,set_free_cursor=function()end,
-    ui_icons={mod={image='ui_mod'},orbital={image='ui_orbital'},eagle={image='ui_eagle'},defensive={image='ui_defensive'},
-        support={image='ui_support'},backpack={image='ui_backpack'},vehicle={image='ui_vehicle'},resupply={image='ui_resupply'}}})
+    ui_icons={mod={image='ui_mod'},edited={image='ui_edited'}},id='mods/skyeshade/hd2runtime_editor',
+    strings=require('mods/skyeshade/hd2runtime_editor/editor/strings'),
+    sounds={played={},tick=function()end,play=function(kind)H_sounds[#H_sounds+1]=kind end},
+    -- the mod manager's list: one HD2Runtime mod (by its addon) and one asset mod
+    installed=function(known)
+        local mods={{key='echelon:aaa',name='Eagle Tweaks',description='Faster eagles.',addons={'mods/someone/eagle_tweaks'}},
+            {key='echelon:bbb',name='Orbital Laser Colors',description='Changes the colour of your Orbital Laser.',addons={}}}
+        for _,m in ipairs(mods)do for _,a in ipairs(m.addons)do if known(a)then m.runtime,m.resource=true,a end end end
+        return {done=true,step=function()return true end,result=function()return {source='echelon',mods=mods}end}
+    end})
 
 local W,H=args.width or 1920,args.height or 1080
 local function frame_builder()

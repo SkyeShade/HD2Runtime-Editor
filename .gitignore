@@ -8,3 +8,4 @@ __pycache__/
 images/si_*.png
 images/bi_*.png
 src/editor/generated/
+images/mi_*.png

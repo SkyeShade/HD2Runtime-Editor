@@ -3,6 +3,7 @@
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
+local L=require('mods/skyeshade/hd2runtime_editor/editor/i18n').L
 local C,SZ=theme.colour,theme.size
 local M={}
 
@@ -67,8 +68,8 @@ function M.install(App)
     end
     function App:open_picker(row,filter)
         local ok,items=pcall(self.picker_items,self,row)
-        if not ok then self:toast('Could not list values: '..tostring(items),C.error);return end
-        if#items==0 then self:toast('No values are available for this field',C.dim);return end
+        if not ok then self:toast(L('Could not list values: ')..tostring(items),C.error);return end
+        if#items==0 then self:toast(L('No values are available for this field'),C.dim);return end
         local current=self:row_view(row)
         local index=1
         for i,item in ipairs(items)do if util.same(item.value,current)then index=i end end
@@ -112,11 +113,11 @@ function M.install(App)
         local p=self.picker
         if not p then return end
         local cv=self.canvas
-        local L=theme.panel
-        cv:rect(0,0,L.w,L.h,C.scrim,8)
+        local P=theme.panel
+        cv:rect(0,0,P.w,P.h,C.scrim,8)
         cv:hit(-10000,-10000,20000,20000,{click=function()self.picker=nil end})
         local w,h=680,600
-        local x,y=(L.w-w)/2,(L.h-h)/2
+        local x,y=(P.w-w)/2,(P.h-h)/2
         cv:rect(x,y,w,h,C.panel_alt,9)
         cv:frame(x,y,w,h,C.line_strong,10)
         cv:rect(x,y,w,3,C.gold,10)
@@ -129,7 +130,7 @@ function M.install(App)
         cv:rect(x+20,fy,w-40,32,C.box,10)
         cv:frame(x+20,fy,w-40,32,C.box_focus,11)
         if p.filter==''then
-            cv:text('Type to filter',x+32,fy+16,{size=SZ.small,colour=C.faint,z=12})
+            cv:text(L('Type to filter'),x+32,fy+16,{size=SZ.small,colour=C.faint,z=12})
         else
             local tw=cv:text(p.filter,x+32,fy+16,{size=SZ.label,colour=C.text,z=12,max=w-80})
             if math.floor(self.time*2)%2==0 then cv:rect(x+34+tw,fy+7,2,18,C.gold,12)end
@@ -151,20 +152,20 @@ function M.install(App)
                 max=w-180,z=12})
             if item.sub then cv:text(item.sub,x+28,ry+30,{size=SZ.tiny,colour=C.faint,max=w-180,z=12})end
             if util.same(item.value,p.current)then
-                self.chip_fn(cv,'CURRENT',x+w-28,ry+rh/2,C.gold,C.gold_wash,'right',10)
+                self.chip_fn(cv,L('CURRENT'),x+w-28,ry+rh/2,C.gold,C.gold_wash,'right',10)
             elseif util.same(item.value,p.row.vanilla)then
-                self.chip_fn(cv,'DEFAULT',x+w-28,ry+rh/2,C.faint,C.line,'right',10)
+                self.chip_fn(cv,L('DEFAULT'),x+w-28,ry+rh/2,C.faint,C.line,'right',10)
             end
             cv:hit(x+12,ry,w-24,rh,action)
         end
-        if n==0 then cv:text('No match',x+28,ly+20,{size=SZ.small,colour=C.faint,z=12})end
+        if n==0 then cv:text(L('No match'),x+28,ly+20,{size=SZ.small,colour=C.faint,z=12})end
         if n>rows then
             local th=math.max(24,(rows*rh)*rows/n)
             local t=p.scroll/math.max(1,n-rows)
             cv:rect(x+w-10,ly,3,rows*rh,C.line,11)
             cv:rect(x+w-10,ly+(rows*rh-th)*t,3,th,C.gold,12)
         end
-        cv:text('↑↓ choose   Enter / Tab select   Type to filter   Esc / Del close   '..n..' of '..#p.items,
+        cv:text(L('↑↓ choose   Enter / Tab select   Type to filter   Esc / Del close   ')..n..' of '..#p.items,
             x+24,y+h-26,{size=SZ.tiny,colour=C.faint,max=w-48,z=11})
     end
 
@@ -191,7 +192,7 @@ function M.install(App)
         local c=self.coder
         self.coder=nil
         if not c then return end
-        if#c.code<(c.row.min_length or 1)then self:toast('A code needs at least '..(c.row.min_length or 1)..' direction',C.error);return end
+        if#c.code<(c.row.min_length or 1)then self:toast(L('A code needs at least ')..(c.row.min_length or 1)..' direction',C.error);return end
         self:stage(c.row,c.code)
     end
     function App:handle_code_keys(f)
@@ -208,16 +209,16 @@ function M.install(App)
         local c=self.coder
         if not c then return end
         local cv=self.canvas
-        local L=theme.panel
-        cv:rect(0,0,L.w,L.h,C.scrim,8)
+        local P=theme.panel
+        cv:rect(0,0,P.w,P.h,C.scrim,8)
         cv:hit(-10000,-10000,20000,20000,{click=function()self.coder=nil end})
         local w,h=640,330
-        local x,y=(L.w-w)/2,(L.h-h)/2-30
+        local x,y=(P.w-w)/2,(P.h-h)/2-30
         cv:rect(x,y,w,h,C.panel_alt,9)
         cv:frame(x,y,w,h,C.line_strong,10)
         cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
-        cv:text('CALLDOWN CODE',x+24,y+30,{size=18,font='title',colour=C.text,z=11})
+        cv:text(L('CALLDOWN CODE'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
         cv:text(c.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-120,z=11})
         close_button(self,cv,x,y,w,function()self.coder=nil end)
         -- the code as arrow tiles
@@ -255,19 +256,19 @@ function M.install(App)
         end
         self.code_undo=self.code_undo or{}
         self.code_undo.click=function()c.code[#c.code]=nil end
-        text_button(self,cv,'UNDO',bx+4*(bw+8),by,84,36,self.code_undo)
+        text_button(self,cv,L('UNDO'),bx+4*(bw+8),by,84,36,self.code_undo)
         self.code_reset=self.code_reset or{}
         self.code_reset.click=function()c.code=util.copy(c.row.vanilla)end
-        text_button(self,cv,'DEFAULT',bx+4*(bw+8)+92,by,100,36,self.code_reset)
+        text_button(self,cv,L('DEFAULT'),bx+4*(bw+8)+92,by,100,36,self.code_reset)
         self.code_save_btn=self.code_save_btn or{}
         self.code_save_btn.click=function()self:code_save()end
-        text_button(self,cv,'SAVE',x+w-24-110,by,110,36,self.code_save_btn,'primary')
+        text_button(self,cv,L('SAVE'),x+w-24-110,by,110,36,self.code_save_btn,'primary')
         -- notes
         local ny=by+56
         for i,note in ipairs(self:code_notes(c.code))do
             cv:text(note[1],x+24,ny+(i-1)*20,{size=SZ.small,colour=note[2],max=w-48,z=11})
         end
-        cv:text('Arrow keys add   Right-click an arrow to remove it   Backspace undo   Del clear   Enter save',x+24,y+h-22,
+        cv:text(L('Arrow keys add   Right-click an arrow to remove it   Backspace undo   Del clear   Enter save'),x+24,y+h-22,
             {size=SZ.tiny,colour=C.faint,max=w-48,z=11})
     end
 
@@ -281,9 +282,9 @@ function M.install(App)
         local e=self.moder
         local at=has(e.list,m)
         if at then
-            if#e.list>1 then table.remove(e.list,at)else self:toast('A weapon keeps at least one fire mode',C.dim)end
+            if#e.list>1 then table.remove(e.list,at)else self:toast(L('A weapon keeps at least one fire mode'),C.dim)end
         elseif#e.list<(e.row.max_modes or 4)then e.list[#e.list+1]=m
-        else self:toast('At most '..(e.row.max_modes or 4)..' fire modes',C.dim)end
+        else self:toast(L('At most ')..(e.row.max_modes or 4)..' fire modes',C.dim)end
     end
     function App:modes_save()
         local e=self.moder
@@ -304,15 +305,15 @@ function M.install(App)
         local e=self.moder
         if not e then return end
         local cv=self.canvas
-        local L=theme.panel
-        cv:rect(0,0,L.w,L.h,C.scrim,8)
+        local P=theme.panel
+        cv:rect(0,0,P.w,P.h,C.scrim,8)
         cv:hit(-10000,-10000,20000,20000,{click=function()self.moder=nil end})
         local n=#e.row.modes
         local w,h=560,190+n*44
-        local x,y=(L.w-w)/2,(L.h-h)/2-30
+        local x,y=(P.w-w)/2,(P.h-h)/2-30
         cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
-        cv:text('FIRE MODES',x+24,y+30,{size=18,font='title',colour=C.text,z=11})
+        cv:text(L('FIRE MODES'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
         cv:text(e.row.object.name..'   '..#e.list..' of at most '..(e.row.max_modes or 4),x+24,y+54,
             {size=SZ.small,colour=C.faint,max=w-90,z=11})
         close_button(self,cv,x,y,w,function()self.moder=nil end)
@@ -331,17 +332,103 @@ function M.install(App)
             cv:frame(x+28,ry+11,18,18,at and C.gold or C.line_strong,11)
             if at then cv:text(tostring(at),x+37,ry+20,{size=SZ.tiny,font='title',colour=C.inverse,align='center',z=12})end
             cv:text(util.humanize(m),x+60,ry+20,{size=SZ.label,colour=at and C.text or C.dim,z=12})
-            if has(e.row.vanilla,m)then cv:text('default',x+w-28,ry+20,{size=SZ.tiny,colour=C.faint,align='right',z=12})end
+            if has(e.row.vanilla,m)then cv:text(L('default'),x+w-28,ry+20,{size=SZ.tiny,colour=C.faint,align='right',z=12})end
             cv:hit(x+12,ry,w-24,40,action)
         end
         local by=y+h-56
         self.modes_reset=self.modes_reset or{}
         self.modes_reset.click=function()e.list=util.copy(e.row.vanilla)end
-        text_button(self,cv,'DEFAULT',x+24,by,110,36,self.modes_reset)
+        text_button(self,cv,L('DEFAULT'),x+24,by,110,36,self.modes_reset)
         self.modes_save_btn=self.modes_save_btn or{}
         self.modes_save_btn.click=function()self:modes_save()end
-        text_button(self,cv,'SAVE',x+w-24-110,by,110,36,self.modes_save_btn,'primary')
-        cv:text('↑↓ choose   ←→ toggle   numbers = selector order',x+150,by+18,{size=SZ.tiny,colour=C.faint,max=w-300,z=11})
+        text_button(self,cv,L('SAVE'),x+w-24-110,by,110,36,self.modes_save_btn,'primary')
+        cv:text(L('↑↓ choose   ←→ toggle   numbers = selector order'),x+150,by+18,{size=SZ.tiny,colour=C.faint,max=w-300,z=11})
+    end
+
+    ------------------------------------------------------------------------------------- armory traits --
+    -- The displayed traits of a weapon: up to five labels in the order the armory lists them (presentation only).
+    function App:open_traits(row)
+        local current=self:row_view(row)
+        self.traiter={row=row,list=util.copy(type(current)=='table'and current or{}),cursor=1}
+    end
+    function App:trait_toggle(id)
+        local e=self.traiter
+        local at=has(e.list,id)
+        if at then table.remove(e.list,at)
+        elseif#e.list<(e.row.max_traits or 5)then e.list[#e.list+1]=id
+        else self:toast(L('At most %d traits'):format(e.row.max_traits or 5),C.dim)end
+    end
+    function App:traits_save()
+        local e=self.traiter
+        self.traiter=nil
+        if e then self:stage(e.row,e.list)end
+    end
+    local TRAIT_COLUMNS=2
+    function App:handle_traits_keys(f)
+        local e,k=self.traiter,f.keys
+        local n=#e.row.traits
+        local rows=math.ceil(n/TRAIT_COLUMNS)
+        if k.UP then e.cursor=math.max(1,e.cursor-1)end
+        if k.DOWN then e.cursor=math.min(n,e.cursor+1)end
+        if k.LEFT and e.cursor>rows then e.cursor=e.cursor-rows end
+        if k.RIGHT and e.cursor+rows<=n then e.cursor=e.cursor+rows end
+        if k.SPACE or k.INSERT then self:trait_toggle(e.row.traits[e.cursor].value)end
+        if k.BACKSPACE and#e.list>0 then table.remove(e.list)end
+        if k.ESCAPE then self.traiter=nil;return end
+        if k.ENTER then
+            -- Enter toggles the focused trait; Tab saves
+            self:trait_toggle(e.row.traits[e.cursor].value)
+        end
+        if k.TAB then self:traits_save()end
+    end
+    function App:draw_traits()
+        local e=self.traiter
+        if not e then return end
+        local cv=self.canvas
+        local P=theme.panel
+        cv:rect(0,0,P.w,P.h,C.scrim,8)
+        cv:hit(-10000,-10000,20000,20000,{click=function()self.traiter=nil end})
+        local traits=e.row.traits
+        local rows=math.ceil(#traits/TRAIT_COLUMNS)
+        local w,h=760,214+rows*36
+        local x,y=(P.w-w)/2,math.max(10,(P.h-h)/2-30)
+        cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
+        cv:hit(x,y,w,h,{})
+        cv:text(L('DISPLAYED TRAITS'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
+        cv:text(e.row.object.name..'   '..L('%d of at most %d, in this order: %s'):format(#e.list,e.row.max_traits or 5,
+            catalog_module.text(e.row,e.list)),x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
+        close_button(self,cv,x,y,w,function()self.traiter=nil end)
+        self.trait_rows=self.trait_rows or{}
+        local cw=(w-36)/TRAIT_COLUMNS
+        for i,t in ipairs(traits)do
+            local col,line=math.floor((i-1)/rows),(i-1)%rows
+            local rx,ry=x+12+col*cw,y+76+line*36
+            local at=has(e.list,t.value)
+            local action=self.trait_rows[i]or{}
+            self.trait_rows[i]=action
+            local index,id=i,t.value
+            action.click=function()e.cursor=index;self:trait_toggle(id)end
+            if i==e.cursor then cv:rect(rx,ry,cw-6,32,C.select,10);cv:rect(rx,ry,3,32,C.gold,11)
+            elseif self.hover==action then cv:rect(rx,ry,cw-6,32,C.hover,10)end
+            cv:rect(rx+14,ry+7,18,18,at and C.gold or C.box,11)
+            cv:frame(rx+14,ry+7,18,18,at and C.gold or C.line_strong,11)
+            if at then cv:text(tostring(at),rx+23,ry+16,{size=SZ.tiny,font='title',colour=C.inverse,align='center',z=12})end
+            cv:text(L(t.label),rx+44,ry+16,{size=SZ.label,colour=at and C.text or C.dim,max=cw-110,z=12})
+            if has(e.row.vanilla,t.value)then cv:text(L('default'),rx+cw-18,ry+16,{size=SZ.tiny,colour=C.faint,align='right',z=12})end
+            cv:hit(rx,ry,cw-6,32,action)
+        end
+        local by=y+h-56
+        self.traits_reset=self.traits_reset or{}
+        self.traits_reset.click=function()e.list=util.copy(e.row.vanilla)end
+        text_button(self,cv,L('DEFAULT'),x+24,by,110,36,self.traits_reset)
+        self.traits_clear=self.traits_clear or{}
+        self.traits_clear.click=function()e.list={}end
+        text_button(self,cv,L('NONE'),x+142,by,90,36,self.traits_clear)
+        self.traits_save_btn=self.traits_save_btn or{}
+        self.traits_save_btn.click=function()self:traits_save()end
+        text_button(self,cv,L('SAVE'),x+w-24-110,by,110,36,self.traits_save_btn,'primary')
+        cv:text(L('Enter / click toggle   numbers = order   Backspace remove last   Tab save'),x+246,by+18,
+            {size=SZ.tiny,colour=C.faint,max=w-390,z=11})
     end
 
     --------------------------------------------------------------------------------------- rate-of-fire modes --
@@ -358,7 +445,7 @@ function M.install(App)
         if v==nil then return true end
         v=math.floor(v+0.5)
         if v~=0 and(v<(e.row.min or 1)or v>(e.row.max or 3000))then
-            self:toast('A rate is 0 (unused) or '..(e.row.min or 1)..' to '..(e.row.max or 3000)..' rpm',C.error)
+            self:toast(L('A rate is 0 (unused) or ')..(e.row.min or 1)..' to '..(e.row.max or 3000)..' rpm',C.error)
             return false
         end
         e.slots[e.cursor]=v
@@ -387,14 +474,14 @@ function M.install(App)
         local e=self.rater
         if not e then return end
         local cv=self.canvas
-        local L=theme.panel
-        cv:rect(0,0,L.w,L.h,C.scrim,8)
+        local P=theme.panel
+        cv:rect(0,0,P.w,P.h,C.scrim,8)
         cv:hit(-10000,-10000,20000,20000,{click=function()self.rater=nil end})
         local w,h=560,330
-        local x,y=(L.w-w)/2,(L.h-h)/2-30
+        local x,y=(P.w-w)/2,(P.h-h)/2-30
         cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
-        cv:text('RATE-OF-FIRE MODES',x+24,y+30,{size=18,font='title',colour=C.text,z=11})
+        cv:text(L('RATE-OF-FIRE MODES'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
         cv:text(e.row.object.name..'   0 = unused slot',x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
         close_button(self,cv,x,y,w,function()self.rater=nil end)
         self.rate_rows=self.rate_rows or{}
@@ -408,23 +495,23 @@ function M.install(App)
             if selected then cv:rect(x+12,ry,w-24,44,C.select,10);cv:rect(x+12,ry,3,44,C.gold,11)
             elseif self.hover==action then cv:rect(x+12,ry,w-24,44,C.hover,10)end
             local slot=e.row.slots and e.row.slots[i]or tostring(i)
-            cv:text('Slot '..string.upper(slot),x+28,ry+22,{size=SZ.label,colour=C.dim,z=12})
+            cv:text(L('Slot ')..string.upper(slot),x+28,ry+22,{size=SZ.label,colour=C.dim,z=12})
             local text=(selected and e.buffer)or(e.slots[i]==0 and'unused'or util.format(e.slots[i]))
             cv:rect(x+w-200,ry+8,150,28,C.box,11)
             cv:frame(x+w-200,ry+8,150,28,selected and C.box_focus or C.box_edge,11)
             cv:text(text,x+w-60,ry+22,{size=SZ.label,colour=e.slots[i]==0 and not(selected and e.buffer)and C.faint or C.text,
                 align='right',z=12})
-            cv:text('rpm',x+w-40,ry+22,{size=SZ.tiny,colour=C.faint,z=12})
+            cv:text(L('rpm'),x+w-40,ry+22,{size=SZ.tiny,colour=C.faint,z=12})
             cv:hit(x+12,ry,w-24,44,action)
         end
         local by=y+h-56
         self.rates_reset=self.rates_reset or{}
         self.rates_reset.click=function()e.slots=util.copy(e.row.vanilla);e.buffer=nil end
-        text_button(self,cv,'DEFAULT',x+24,by,110,36,self.rates_reset)
+        text_button(self,cv,L('DEFAULT'),x+24,by,110,36,self.rates_reset)
         self.rates_save_btn=self.rates_save_btn or{}
         self.rates_save_btn.click=function()self:rates_save()end
-        text_button(self,cv,'SAVE',x+w-24-110,by,110,36,self.rates_save_btn,'primary')
-        cv:text('↑↓ slot   digits type   Del unused',x+150,by+18,{size=SZ.tiny,colour=C.faint,max=w-300,z=11})
+        text_button(self,cv,L('SAVE'),x+w-24-110,by,110,36,self.rates_save_btn,'primary')
+        cv:text(L('↑↓ slot   digits type   Del unused'),x+150,by+18,{size=SZ.tiny,colour=C.faint,max=w-300,z=11})
     end
 end
 

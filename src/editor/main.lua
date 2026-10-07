@@ -6,15 +6,22 @@ local ledger_module=require('mods/skyeshade/hd2runtime_editor/editor/ledger')
 local layer_module=require('mods/skyeshade/hd2runtime_editor/editor/layer')
 local presets_module=require('mods/skyeshade/hd2runtime_editor/editor/presets')
 local app_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/app')
--- The game's own icons, when tools/game_icons.py generated them for this build (optional; never committed).
-local game_icons
-do
-    local ok,value=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/generated/game_icons')
-    if ok and type(value)=='table'then game_icons=value end
+local sounds_module=require('mods/skyeshade/hd2runtime_editor/editor/sounds')
+local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+local strings=require('mods/skyeshade/hd2runtime_editor/editor/strings')
+require('mods/skyeshade/hd2runtime_editor/editor/installed')
+require('mods/skyeshade/hd2runtime_editor/editor/json')
+-- Generated for this build (optional; never committed): the game's own stratagem and booster icons
+-- (tools/game_icons.py) and the installed mods' own icons (tools/mod_icons.py).
+local function optional(name)
+    local ok,value=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/generated/'..name)
+    return ok and type(value)=='table'and value or nil
 end
+local game_icons=optional('game_icons')
+local mod_icon_map=optional('mod_icons')
 local M={}
 
-M.VERSION='0.4.0'
+M.VERSION='0.5.0'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -63,6 +70,12 @@ function M.start(hd2,id)
     end
     local presets=presets_module.new(store)
     local hotkey=presets:setting('hotkey',M.HOTKEY)
+    -- the language chosen in Settings (a file in the localisation folder), English otherwise
+    local language=presets:setting('language','English')
+    if language~='English'then
+        local ok,why=i18n.use(language)
+        if not ok then log('language '..tostring(language)..' unavailable: '..tostring(why))end
+    end
     local overlay=hd2.ui.overlay({id='editor',visible=false})
     -- Icons: one image handle per generated icon (needs the overlay's d:image, HD2Runtime r50).
     local icons
@@ -72,7 +85,7 @@ function M.start(hd2,id)
         for kind,list in pairs({stratagems=game_icons.stratagems or{},boosters=game_icons.boosters or{}})do
             for name,entry in pairs(list)do
                 local ok,handle=pcall(hd2.resources.image,entry.image)
-                if ok and handle then icons[kind][name]={handle=handle,accent=entry.accent};count=count+1 end
+                if ok and handle then icons[kind][name]={handle=handle,accent=entry.accent,dark=entry.dark};count=count+1 end
             end
         end
         log(count..' game icons available')
@@ -81,11 +94,27 @@ function M.start(hd2,id)
     local ui_icons
     if type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
         ui_icons={}
-        for _,name in ipairs({'mod','orbital','eagle','defensive','support','backpack','vehicle','resupply'})do
+        for _,name in ipairs({'mod','edited'})do
             local ok,handle=pcall(hd2.resources.image,'ui_'..name)
             if ok and handle then ui_icons[name]=handle end
         end
     end
+    -- The installed mods' own icons: each a few colour layers of its picture (tools/mod_icons.py).
+    local mod_icons
+    if mod_icon_map and type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
+        mod_icons={}
+        local count=0
+        for key,layers in pairs(mod_icon_map.icons or{})do
+            local list={}
+            for _,layer in ipairs(layers)do
+                local ok,handle=pcall(hd2.resources.image,layer.image)
+                if ok and handle then list[#list+1]={handle=handle,colours=layer.colours}end
+            end
+            if#list==#layers then mod_icons[key]=list;count=count+1 end
+        end
+        log(count..' mod icons available')
+    end
+    local sounds=sounds_module.new(hd2,function()return presets:setting('ui_sounds',true)end)
     -- The cursor capture (HD2Runtime r50, experimental): freed while the editor is open, when the setting is on.
     local function set_free_cursor(on)
         if type(overlay.free_cursor)=='function'then pcall(overlay.free_cursor,overlay,on)end
@@ -94,6 +123,7 @@ function M.start(hd2,id)
     local app=app_module.new({hd2=hd2,catalog=catalog,layer=layer,ledger=ledger,presets=presets,hotkey=hotkey,
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
         mouse=function()return overlay:mouse()end,log=log,icons=icons,ui_icons=ui_icons,choices=type(mod.choice)=='function',
+        id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
 

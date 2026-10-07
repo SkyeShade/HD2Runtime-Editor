@@ -10,8 +10,12 @@
 | `editor/ledger.lua` | Which mod applied which value: an observer on `core/shared_records.claim`, plus the operation registry behind `hd2.diagnostics.operations`. |
 | `editor/layer.lua` | The override layer: adopt, hand-over, steer, reset (below). |
 | `editor/presets.lua` | Presets, the saved session and settings in `hd2.store`. |
-| `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel), the app (views, staging, dialogs) and pickers (the value picker and the calldown code editor). |
-| `editor/generated/game_icons.lua` | Optional, written by `tools/game_icons.py`: stratagem and booster name → icon image and accent colour. Vector library icons first, then each remaining item's HUD atlas sprite (HD2Runtime r51 SDK `tools/hd2_hud_icons.py`). |
+| `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel), the app (Browse, staging, dialogs), pickers (the value picker, the code, fire mode, rate and traits editors) and views (Changes, Mods, Custom, Settings). |
+| `editor/installed.lua`, `editor/json.lua` | Every deployed mod from the mod manager's own state (Echelon `state.json`, HD2 Arsenal `hd2a_data.json`), read with `io.open` and a JSON reader that yields, so the 1 MB file is parsed over a few frames. |
+| `editor/i18n.lua`, `editor/strings.lua` | Localisation: `L(text)` looks every interface text up in the chosen language file; `strings.lua` lists the texts for the template. |
+| `editor/sounds.lua` | The game's menu sounds on the buttons (`hd2.sounds.play('ui/generic_select')` and others), at most one per 40 ms. |
+| `editor/generated/game_icons.lua` | Optional, written by `tools/game_icons.py`: stratagem and booster name → the image of its own HUD sprite (HD2Runtime SDK `tools/hd2_hud_icons.py`), its accent and, for boosters, the glyph colour. |
+| `editor/generated/mod_icons.lua` | Optional, written by `tools/mod_icons.py`: a deployed mod's icon as up to three mask layers, each with its own three colours. |
 
 ## Rows
 
@@ -41,6 +45,32 @@ Rows of kind `choice` (booleans, statuses, enums), `code` (calldown codes), `use
 - **Donors:** projectile donors are the reviewed attack outputs. Terminal explosion donors are one player-weapon terminal action per reviewed explosion type, plus none. The picker offers only donors the validator accepts for that weapon.
 - **Ownership:** a move between two references is an owned transition. This was proven live for projectile choices (`LiberatorAttackOutputTest`). r50 also fixed the signature of catalogue explosion donors.
 
+## Filling empty rate slots (r52)
+
+A `fire_rate.modes` list that fills two or more slots on a weapon whose rate selector is not bound
+(`weapon:fire_rate_modes().state == 'addable'`, the Liberator for example) must bind the selector in the same write,
+or the Runtime refuses it (`SELECTOR_REQUIRED`).
+
+- **Staging:** `catalog.probe` validates such a value as the transaction the editor will register: the rates and
+  `fire_rate_modes().binding`.
+- **The write:** `Layer:register` registers a transaction ensure. Its rates are the usual script choice, and its binding
+  is a second choice that follows it (`mod:choice{follow}`, HD2Runtime r52): bound for every value with two or more
+  rates, unbound for the others. One `set` moves both, and the ensure proves them together.
+
+## The armory's presentation
+
+`presentation.armor_penetration` is a choice row and `presentation.traits` a `traits` row (an ordered list of up to five
+trait ids, edited in a two-column picker). Both write the weapon's five label slots, so they have the same location;
+`Layer:set` refuses one while the editor holds the other. Both need `allow_unverified_effect`. They are read when a menu
+builds its item view.
+
+## When a change does not confirm
+
+The layer waits for the ensure to report `waiting` with one more completed run after a steer. If it has not after 4 s,
+the handle is set away and back once, so its listener fires again. After 20 s the field shows an error with the ensure's
+state (`status`, `runs`, `rebinds`, `recoveries`, `error`) instead of applying forever. Every editor ensure's status
+changes (`on_status`) and every steer are written to `HD2Runtime.log`.
+
 ## Mount swaps
 
 A vehicle's mount row (kind `reference`, field `mount.weapon`, target `hd2.vehicle(name):mount(slot)`) offers the
@@ -60,6 +90,17 @@ needs `allow_unverified_reference`.
 `ui/input.lua` reads `hd2.input.wheel()` once per frame when the Runtime has it (r51), and the engine's wheel axis
 otherwise. The Runtime samples the engine axis and a read-only message hook on the game window's thread (see its
 docs/ui-overlay.md "The mouse wheel").
+
+## The other tabs
+
+- **Changes:** the layer's held user values and the pending ones; Del stages the base value (or drops a pending one).
+- **Mods:** the mod manager's deployed mods, merged with the HD2Runtime mods the ledger knows: a manager entry is an
+  HD2Runtime mod when one of the Lua addons Echelon scanned in it registered with the Runtime. In-game options come
+  from `hd2.diagnostics.options()` (HD2Runtime r52), grouped by the declaring mod; the status bar names the options
+  page whose operation set a field.
+- **Custom:** `hd2.custom_stratagem.status()` and `describe(id)`; cooldown and uses are tuned with
+  `hd2.custom_stratagem.tune` (r52), which logs each change and affects this player's next call.
+- **Settings:** stored with the presets (`hd2.store`): restore session, cursor capture, menu sounds, language.
 
 ## Applying a value
 

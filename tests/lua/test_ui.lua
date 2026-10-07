@@ -78,22 +78,33 @@ settle(6)
 step({},nil,'06_applied')
 assert(H.sim.value(rof)==1300,'1300 written: '..tostring(H.sim.value(rof)))
 assert(H.layer:state(rof)=='active','fire rate active')
--- Mods tab: three mods, one refused operation
+-- Changes tab: the two applied editor values, never the mods' own
+step({'TAB'},{down={'SHIFT'}},'30_changes')
+assert(H.app.view=='changes','changes view')
+local changes=H.app:changes()
+assert(#changes==2,'two editor changes: '..#changes)
+for _,c in ipairs(changes)do assert(c.state=='active','applied: '..tostring(c.state))end
+-- Mods tab: the three HD2Runtime mods and the mod manager's asset mod; one refused operation
 step({'TAB'},{down={'SHIFT'}},'07_mods')
 assert(H.app.view=='mods','mods view')
 local mods=H.app:mods_list()
-assert(#mods==3,'three mods listed: '..#mods)
-local refused=0
-for _,m in ipairs(mods)do refused=refused+m.refused end
+assert(#mods==4,'four mods listed: '..#mods)
+local refused,assets=0,0
+for _,m in ipairs(mods)do refused=refused+m.refused;if not m.runtime then assets=assets+1 end end
 assert(refused==1,'one refused operation')
+assert(assets==1 and mods[#mods].name=='Orbital Laser Colors','the asset mod is listed last')
+local tweaks
+for _,m in ipairs(mods)do if m.resource=='mods/someone/eagle_tweaks'then tweaks=m end end
+assert(tweaks and tweaks.name=='Eagle Tweaks'and tweaks.applied>0,'the manager entry carries the mod values')
 -- jump from a mod write to its field
-for i,m in ipairs(mods)do if m.id=='mods/someone/eagle_tweaks'then H.app.mod_index=i end end
+for i,m in ipairs(mods)do if m.resource=='mods/someone/eagle_tweaks'then H.app.mod_index=i end end
 step({'RIGHT'})
 assert(H.app.view=='browse'and H.app:focused_row().key=='st|Eagle 500kg Bomb|'..H.app:focused_row().key:match('|([^|]+)$'),
     'jumped to the eagle cooldown')
 assert(H.app:focused_row().field=='stratagem.cooldown','focused the cooldown row')
--- Presets: save the current values
-step({'TAB'},{down={'SHIFT'}})
+-- Presets: save the current values (Browse -> Changes -> Mods -> Custom -> Presets)
+for _=1,3 do step({'TAB'},{down={'SHIFT'}})end
+assert(H.app.view=='custom','custom view')
 step({'TAB'},{down={'SHIFT'}},'08_presets')
 assert(H.app.view=='presets','presets view')
 step({'INSERT'})
@@ -352,4 +363,55 @@ for i,item in ipairs(H.app.categories)do if item.id=='offensive'then H.app:selec
 H.app.focus='fields'
 for _=1,40 do step({'DOWN'})end
 step({},nil,'14_enemy_fields')
+-- the Mods tab shows a mod's in-game options with their current values
+H.app.mods_cache,H.app.options_cache=nil,nil
+H.app:set_view('mods')
+local list=H.app:mods_list()
+for i,m in ipairs(list)do if m.resource=='mods/someone/eagle_tweaks'then H.app.mod_index=i end end
+step({},nil,'34_mod_options')
+assert(#list[H.app.mod_index].pages==1 and list[H.app.mod_index].pages[1].options[1].value==4,'options listed')
+-- Custom: tune a custom stratagem's cooldown with the keys, then back to its registered values
+H.app:set_view('custom')
+step({},nil,'31_custom')
+assert(#H.app:custom_list()==1,'one custom stratagem')
+step({'RIGHT'})
+assert(H.app.custom_field==1,'on the cooldown')
+step({'RIGHT'})
+assert(H_custom.cooldown==305 and H_custom.tuned,'nudged to 305: '..tostring(H_custom.cooldown))
+step({'ENTER'});step({'1'});step({'2'});step({'0'});step({'ENTER'})
+assert(H_custom.cooldown==120,'typed 120: '..tostring(H_custom.cooldown))
+step({},nil,'31_custom_tuned')
+step({'DELETE'})
+assert(H_custom.cooldown==300 and not H_custom.tuned,'untuned')
+step({'ESCAPE'})
+assert(H.app.view=='custom'and H.app.custom_field==0,'Escape leaves the fields first')
+-- Settings: toggles and a language
+H.app:set_view('settings')
+step({},nil,'32_settings')
+local sounds_on=H.presets:setting('ui_sounds',true)
+H.app.settings_index=3
+step({'ENTER'})
+assert(H.presets:setting('ui_sounds',true)==not sounds_on,'menu sounds toggled')
+step({'ENTER'})
+local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+i18n.set({['BROWSE']='DURCHSUCHEN',['SETTINGS']='EINSTELLUNGEN'},'Deutsch')
+H.app.tab_actions=nil
+step({},nil,'33_language')
+i18n.set({},'English')
+-- the menu sounds played on clicks and keys
+assert(#H_sounds>0,'menu sounds played')
+-- the armory's displayed traits editor
+H.app:set_view('browse')
+local liberator=H.catalog:object('pw|AR-23 Liberator')
+H.catalog:open(liberator)
+local traits
+for _,r in ipairs(liberator.rows)do if r.kind=='traits'then traits=r end end
+H.app:reveal(traits)
+H.app:begin_edit(traits)
+assert(H.app.traiter,'traits editor open')
+step({},nil,'35_traits')
+H.app:trait_toggle('explosive')
+H.app:traits_save()
+assert(H.app.pending[traits.key]and#H.app.pending[traits.key].value==2,'traits staged')
+H.app:discard()
 return 'ui ok ('..frames..' frames)'

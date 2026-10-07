@@ -146,6 +146,15 @@ function M.text(row,value)
     for _,item in ipairs(row.labels or{})do
         if util.same(item.value,value)then return item.label end
     end
+    if row.kind=='traits'and type(value)=='table'then
+        if#value==0 then return'None'end
+        local names={}
+        for i,id in ipairs(value)do
+            names[i]=id
+            for _,t in ipairs(row.traits or{})do if t.value==id then names[i]=t.label end end
+        end
+        return table.concat(names,', ')
+    end
     return util.value_text(value)
 end
 -- The value a request expects (vanilla; references build their own handle).
@@ -158,6 +167,20 @@ end
 -- for (at most three). Returns true and the acknowledgements, or false and why. Without the validator (an unknown
 -- Runtime) every value passes with the row's own acknowledgements; the ensure's bind-time proof still applies.
 local patches
+-- How many rate slots a fire_rate.modes list fills.
+function M.filled(list)
+    local n=0
+    for _,v in ipairs(type(list)=='table'and list or{})do if type(v)=='number'and v>0 then n=n+1 end end
+    return n
+end
+-- The selector binding {field, expect, value} a rates value needs written with it: more than one filled slot on a
+-- weapon whose rate-of-fire selector is not bound yet (fire_rate_modes().state 'addable'); nil otherwise.
+function M.rate_binding(row,value)
+    if row.kind~='rates'or not row.rate_info or M.filled(value)<2 then return nil end
+    local info=row.rate_info()
+    if info and info.state=='addable'and type(info.binding)=='table'and info.binding.field then return info.binding end
+    return nil
+end
 function M.probe(row,value,acks)
     if patches==nil then
         local ok,module=pcall(require,'hd2runtime/domains/patches')
@@ -166,8 +189,17 @@ function M.probe(row,value,acks)
     local use={}
     for k,v in pairs(acks or row.acks or{})do if v then use[k]=true end end
     if not patches then return true,use end
+    local binding=M.rate_binding(row,value)
     for _=1,4 do
         local ok,err=pcall(function()
+            if binding then
+                -- the rates and the selector binding in one transaction, as the editor registers them
+                local request={id='hd2editor-probe',target=row.target(),changes={
+                    {field=row.field,expect=M.expect(row),value=value},
+                    {field=binding.field,expect=binding.expect,value=binding.value}}}
+                for k in pairs(use)do request[k]=true end
+                return require('hd2runtime/domains/transactions').validate(request)
+            end
             local request={id='hd2editor-probe',target=row.target(),field=row.field,expect=M.expect(row),value=value}
             for k in pairs(use)do request[k]=true end
             return patches.validate(request)
@@ -302,7 +334,15 @@ local function rate_row(object,common,f)
     common.min,common.max=f.min or 1,f.max or 3000
     common.slots=f.slotNames or{'x','y','z'}
     common.section='Fire Mode'
-    return make_value_row(object,common)
+    local row=make_value_row(object,common)
+    -- the weapon's own rate-of-fire facts (state, binding): filling an empty slot of a weapon without a rate selector
+    -- binds the game's selector in the same write (M.rate_binding)
+    local target=common.target
+    row.rate_info=function()
+        local ok,info=pcall(function()return target():fire_rate_modes()end)
+        return ok and type(info)=='table'and info or nil
+    end
+    return row
 end
 local function static_options(labels)
     return function()
@@ -310,6 +350,53 @@ local function static_options(labels)
         for i,item in ipairs(labels)do out[i]={value=item.value,label=item.label}end
         return out
     end
+end
+-- The armory's presentation of a weapon (presentation only: menus read it when they build an item view):
+-- the displayed armor penetration (one label) and the displayed traits (an ordered list of up to five), which share
+-- the weapon's five label slots (the layer edits one of them at a time).
+local presentation_names
+local function presentation_labels()
+    if presentation_names==nil then
+        local ok,WP=pcall(require,'hd2runtime/domains/weapon_presentation')
+        presentation_names=ok and type(WP)=='table'and WP or false
+    end
+    return presentation_names or{}
+end
+local function title_case(text)
+    return(tostring(text):lower():gsub('(%a)([%w]*)',function(a,b)return a:upper()..b end))
+end
+local function presentation_row(object,common,f)
+    local WP=presentation_labels()
+    common.section='Armory'
+    if f.type=='armor_penetration_label'then
+        local labels={}
+        for _,v in ipairs(f.allowedValues or{})do
+            local name=(f.labels and f.labels[v])or(WP.penetration and WP.penetration[v])
+            labels[#labels+1]={value=v,label=v=='none'and'None'or title_case(name or util.humanize(v))}
+        end
+        common.kind,common.vanilla,common.labels='choice',f.currentDefault,labels
+        common.options=static_options(labels)
+        return make_value_row(object,common)
+    end
+    if f.type=='trait_set'and type(f.currentDefault)=='table'then
+        local traits={}
+        for id,name in pairs(WP.traits or{})do
+            if not f.traitValues or f.traitValues[id]then traits[#traits+1]={value=id,label=title_case(name)}end
+        end
+        table.sort(traits,function(a,b)return a.label..a.value<b.label..b.value end)
+        -- two localisation entries can read the same (the game has two INCENDIARY labels): number the repeats
+        for i=2,#traits do
+            if traits[i].label==traits[i-1].label:gsub(' %(%d+%)$','')then
+                traits[i].label=traits[i].label..' ('..(tonumber(traits[i-1].label:match('%((%d+)%)$'))or 1)+1 ..')'
+            end
+        end
+        if#traits==0 then return nil end
+        common.kind,common.vanilla='traits',util.copy(f.currentDefault)
+        local row=make_value_row(object,common)
+        row.traits,row.max_traits=traits,f.maxTraits or 5
+        return row
+    end
+    return nil
 end
 local function player_rows(hd2,object,entry)
     local rows={}
@@ -320,6 +407,7 @@ local function player_rows(hd2,object,entry)
             or(f.type=='enum'and type(f.allowedValues)=='table'and f.writeKind~='reorder_native_mode_vector')
             or f.type=='projectile_reference'or f.type=='explosion_reference'
             or f.type=='fire_mode_set'or f.type=='fire_rate_set'
+            or f.type=='trait_set'or f.type=='armor_penetration_label'
         if f.editable and f.preferred and not f.deprecated and not f.derivedReadOnly
             and(numeric(f.type,f.currentDefault)or value_kind)then
             local b=f.backing or{}
@@ -357,6 +445,8 @@ local function player_rows(hd2,object,entry)
                 rows[#rows+1]=mode_row(object,common,f)
             elseif f.type=='fire_rate_set'then
                 rows[#rows+1]=rate_row(object,common,f)
+            elseif f.type=='trait_set'or f.type=='armor_penetration_label'then
+                rows[#rows+1]=presentation_row(object,common,f)
             elseif f.type=='boolean'then
                 common.kind,common.vanilla,common.labels='choice',f.currentDefault==true,bool_labels()
                 common.options=static_options(common.labels)
@@ -429,6 +519,7 @@ local function support_rows(hd2,object,entry)
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
         local value_kind=f.type=='boolean'or f.type=='status_reference'or f.type=='fire_mode_set'or f.type=='fire_rate_set'
+            or f.type=='trait_set'or f.type=='armor_penetration_label'
         if f.editable and not f.derivedReadOnly and not f.deprecated and(f.preferred~=false)
             and(numeric(f.type,f.currentDefault)or value_kind)then
             local t=f.target or{}
@@ -462,6 +553,8 @@ local function support_rows(hd2,object,entry)
                 rows[#rows+1]=mode_row(object,common,f)
             elseif f.type=='fire_rate_set'then
                 rows[#rows+1]=rate_row(object,common,f)
+            elseif f.type=='trait_set'or f.type=='armor_penetration_label'then
+                rows[#rows+1]=presentation_row(object,common,f)
             elseif f.type=='boolean'then
                 common.kind,common.vanilla,common.labels='choice',f.currentDefault==true,bool_labels()
                 common.options=static_options(common.labels)

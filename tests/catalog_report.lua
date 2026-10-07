@@ -56,6 +56,15 @@ for _,group in ipairs(catalog.GROUPS)do
                         elseif row.kind=='rates'then
                             other={unpack(row.vanilla)}
                             for i=1,3 do if other[i]>0 then other[i]=math.min(row.max,other[i]+50);break end end
+                        elseif row.kind=='traits'then
+                            other={unpack(row.vanilla)}
+                            if#other<(row.max_traits or 5)then
+                                for _,t in ipairs(row.traits)do
+                                    local present=false
+                                    for _,v in ipairs(other)do if v==t.value then present=true end end
+                                    if not present then other[#other+1]=t.value;break end
+                                end
+                            else table.remove(other)end
                         elseif row.options and row.kind=='choice'then
                             for _,o in ipairs(row.options(row))do if not util.same(o.value,row.vanilla)then other=o.value;break end end
                         end

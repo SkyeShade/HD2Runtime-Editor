@@ -41,6 +41,16 @@ end
 M.hold=hold
 
 local FAILED={rejected=true,blocked=true,cancelled=true,unavailable=true}
+-- A steer the Runtime has not confirmed after NUDGE seconds is nudged once (the handle set away and back, so its
+-- listener fires again); after GIVE_UP seconds it is shown as an error with the ensure's state instead of applying
+-- forever. Every editor ensure's status changes are written to HD2Runtime.log.
+local NUDGE,GIVE_UP=4,20
+local function watch_state(w)
+    if type(w)~='table'then return 'no operation'end
+    return 'status='..tostring(w.status)..' runs='..tostring(w.runs)..' rebinds='..tostring(w.rebinds)
+        ..' recoveries='..tostring(w.recoveries)..(w.retry_in and(' retry_in='..tostring(w.retry_in))or'')
+        ..(w.error and(' error='..tostring(w.error))or'')
+end
 local Layer={};Layer.__index=Layer
 
 function M.new(opts)
@@ -141,6 +151,14 @@ function Layer:set(row,value)
     if held=='unlimited'and row.kind=='uses'and not row.unlimited then
         return false,'this stratagem cannot be made unlimited'
     end
+    -- two fields on the same bytes (an armory's displayed traits and displayed penetration share five label slots):
+    -- one at a time
+    local existing=self.slots[row.loc]
+    if existing and existing.row and not existing.row.mirror and existing.row.key~=row.key
+        and(existing.user or existing.watch)then
+        return false,'this field shares its game data with "'..tostring(existing.row.label)
+            ..'", which the editor holds: reset that field first'
+    end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
     self:changed()
@@ -226,10 +244,45 @@ function Layer:register(row,handle)
         end
         for key in pairs(acks)do patch[key]=true end
     end
+    -- rates that fill an empty slot of a weapon without a rate selector: one transaction with the selector binding,
+    -- which follows the rates choice (HD2Runtime r51 mod:choice{follow}): bound for every value with two or more rates,
+    -- unbound for the others
+    local binding
+    if row.kind=='rates'then
+        for _,value in ipairs(handle.values or{})do binding=binding or catalog_module.rate_binding(row,value)end
+    end
+    local follower
+    if binding then
+        local values={}
+        for i,value in ipairs(handle.values)do
+            values[i]=catalog_module.filled(value)>=2 and binding.value or binding.expect
+        end
+        self.counter=self.counter+1
+        local okf,f=pcall(function()
+            return self.hd2.mod(self.id):choice({id='b'..self.counter,values=values,follow=handle})
+        end)
+        if not okf then
+            return {status='rejected',error='filling an empty rate slot binds the rate selector with it, which needs '
+                ..'HD2Runtime r51 (linked choices): '..tostring(f)}
+        end
+        follower=f
+    end
     local ok,watch=pcall(function()
         patch.expect=catalog_module.expect(row)
         patch.target=row.target()
-        local request={patch=patch,startup_delay=0,interval=30,recover=true}
+        local body={patch=patch}
+        if follower then
+            local t={id=patch.id,target=patch.target,changes={
+                {field=row.field,expect=patch.expect,value=handle},
+                {field=binding.field,expect=binding.expect,value=follower}}}
+            for key,on in pairs(patch)do if key:match('^allow_')and on then t[key]=true end end
+            body={transaction=t}
+        end
+        local request={patch=body.patch,transaction=body.transaction,startup_delay=0,interval=30,recover=true,
+            on_status=function(status,info)
+                note(self,'ensure '..id..' '..tostring(info and info.previous)..' -> '..tostring(status)
+                    ..(info and info.error and(': '..tostring(info.error))or''))
+            end}
         return self.hd2.events.run_as(self.id,function()return self.hd2.ensure(request)end)
     end)
     if not ok then return {status='rejected',error=tostring(watch)}end
@@ -325,7 +378,10 @@ function Layer:steer(slot)
     slot.mark=slot.watch.runs or 0
     slot.steering=slot.target
     slot.phase='steer'
+    slot.steer_started,slot.nudged=self.clock or 0,false
     local changed=slot.handle:set(slot.target)
+    note(self,'steer '..tostring(slot.row.key)..' -> '..util.value_text(slot.target)..' (handle '
+        ..(changed and'changed'or'unchanged')..'; '..watch_state(slot.watch)..')')
     if not changed then slot.held,slot.phase=slot.target,'hold'end
     self:changed()
 end
@@ -398,6 +454,27 @@ function Layer:tick(dt)
                 slot.held,slot.phase=slot.steering,'hold'
                 slot.dirty=not util.same(slot.target,slot.held)
                 self:changed()
+            else
+                local waited=(self.clock or 0)-(slot.steer_started or 0)
+                if waited>=GIVE_UP then
+                    note(self,'steer '..tostring(slot.row.key)..' not confirmed after '..GIVE_UP..' s: '..watch_state(w))
+                    fail(self,slot,'the Runtime did not confirm this change within '..GIVE_UP..' s ('..watch_state(w)..')')
+                elseif waited>=NUDGE and not slot.nudged then
+                    slot.nudged=true
+                    note(self,'steer '..tostring(slot.row.key)..' still waiting after '..NUDGE..' s ('..watch_state(w)
+                        ..'); nudging the handle')
+                    -- away and back: the listener runs twice and the ensure settles on the target
+                    local values=slot.handle.values
+                    if slot.handle.kind=='choice'and type(values)=='table'then
+                        for _,v in ipairs(values)do
+                            if not util.same(v,slot.steering)then pcall(slot.handle.set,slot.handle,v);break end
+                        end
+                    elseif type(slot.handle.min)=='number'and type(slot.handle.max)=='number'then
+                        pcall(slot.handle.set,slot.handle,slot.steering==slot.handle.min and slot.handle.max
+                            or slot.handle.min)
+                    end
+                    pcall(slot.handle.set,slot.handle,slot.steering)
+                end
             end
         elseif slot.phase=='hold'or slot.phase=='idle'then
             if slot.dirty then
