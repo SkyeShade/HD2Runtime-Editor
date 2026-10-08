@@ -64,7 +64,7 @@ function M.install(App)
         end
         local meta={}
         for k,v in pairs(x.meta)do meta[k]=v end
-        meta.minimum=tostring(self.ctx.minimum or'0.30.0-dev')
+        meta.minimum=tostring(self.ctx.minimum or'0.30.0')
         meta.editor_version=self.ctx.version
         local ok,result=pcall(export.build,catalog_module,entries,meta)
         if not ok then self:toast(L('Export failed: %s'):format(tostring(result)),C.error);return end

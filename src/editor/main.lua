@@ -28,7 +28,7 @@ M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
 
--- The Runtime services the editor stands on (HD2Runtime 0.30.0-dev with the UI and game-mod services).
+-- The Runtime services the editor stands on (HD2Runtime 0.30.0: the UI and game-mod services).
 function M.missing(hd2)
     local missing={}
     if not(type(hd2.ui)=='table'and type(hd2.ui.overlay)=='function')then missing[#missing+1]='hd2.ui.overlay'end
@@ -58,7 +58,7 @@ function M.start(hd2,id)
     local missing=M.missing(hd2)
     if#missing>0 then
         log('HD2R Editor '..M.VERSION..' is inactive: this HD2Runtime ('..tostring(hd2.version_label or hd2.version)
-            ..') lacks '..table.concat(missing,', ')..'. Install HD2Runtime 0.30.0-dev with the UI services or newer.')
+            ..') lacks '..table.concat(missing,', ')..'. Install HD2Runtime 0.30.0 or newer.')
         return {status='unavailable',missing=missing}
     end
     local ledger=ledger_module.install(hd2,id)
@@ -126,7 +126,7 @@ function M.start(hd2,id)
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
         mouse=function()return overlay:mouse()end,log=log,icons=icons,ui_icons=ui_icons,choices=type(mod.choice)=='function',
         id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,version=M.VERSION,
-        minimum=tostring(hd2.version or'0.30.0-dev'),
+        minimum=tostring(hd2.version or'0.30.0'),
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
 

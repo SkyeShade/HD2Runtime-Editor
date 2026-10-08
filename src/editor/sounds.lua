@@ -1,6 +1,6 @@
 -- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
--- The game's own menu sounds on the editor's buttons (hd2.sounds.play, HD2Runtime 0.30.0-dev): the keys the
+-- The game's own menu sounds on the editor's buttons (hd2.sounds.play): the keys the
 -- Runtime's stratagem selector uses (domains/stratagem_selector.lua uiSound). Silent when the Runtime has no sound
 -- API, when the setting is off, or when the game's UI bank is not loaded (play returns NO_EVENT; that event is tried again after 30 s).
 local M={}

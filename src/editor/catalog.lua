@@ -983,7 +983,7 @@ end
 local function append(into,rows)for _,r in ipairs(rows)do into[#into+1]=r end return into end
 
 -- A player weapon's attachments, each slot a collapsed group: its magazines (attachment_authoring weapons[name]) and
--- its muzzles, optics and underbarrels (slots[name][slot], 0.30.0-dev). {{id, entry, group}}, sorted by name in a slot.
+-- its muzzles, optics and underbarrels (slots[name][slot]). {{id, entry, group}}, sorted by name in a slot.
 local ATTACHMENT_GROUPS={{key='magazine',label='Magazines'},{key='muzzle',label='Muzzles'},{key='optics',label='Optics'},
     {key='underbarrel',label='Underbarrels'}}
 local function weapon_attachments(name)
@@ -1281,7 +1281,7 @@ local function enemy_category(filter)
     end
 end
 ------------------------------------------------------------------------------------------------ helldiver --
--- The Helldiver type (hd2.helldiver(), HD2Runtime 0.30.0-dev; docs/helldiver-fields.md): movement speeds, stamina, the
+-- The Helldiver type (hd2.helldiver(); HD2Runtime docs/helldiver-fields.md): movement speeds, stamina, the
 -- explosion share and the six body zones. Type records every Helldiver this machine simulates reads: each write needs
 -- allow_shared and allow_unverified_effect. An enum field takes a name; its labels are listed by native value.
 local HELLDIVER_LABELS={direction_factor='Strafe and backpedal factor',aim='Aiming',sprint_exhausted='Sprint (exhausted)',
@@ -1321,7 +1321,7 @@ local function helldiver_field_row(object,f,target,section,group,note,zone)
 end
 local function helldiver_rows(hd2,object)
     local H=load('helldiver_writes')
-    if not H or type(H.fields)~='function'then error('this HD2Runtime has no Helldiver fields (0.30.0-dev)',0)end
+    if not H or type(H.fields)~='function'then error('this HD2Runtime has no Helldiver fields (HD2Runtime 0.30.0)',0)end
     local rows={}
     local entity=function()return hd2.helldiver()end
     local ship='Not on the ship: its Helldiver carries its own copy. Applies on the next deploy.'
@@ -1348,7 +1348,7 @@ end
 local function passive_rows(hd2,object)
     local P=hd2.passives
     if type(P)~='table'or type(P.list)~='function'or type(hd2.player_passives)~='table'then
-        error('this HD2Runtime has no armor passives (0.30.0-dev)',0)
+        error('this HD2Runtime has no armor passives (HD2Runtime 0.30.0)',0)
     end
     local armor={{value='kit',label="The armor's own"}}
     local second={{value='none',label='None'}}
@@ -1369,7 +1369,7 @@ local function passive_rows(hd2,object)
 end
 function CATEGORY.helldiver(cat)
     if not load('helldiver_writes')and type(cat.real_hd2.passives)~='table'then
-        return nil,'this HD2Runtime has no Helldiver fields (HD2Runtime 0.30.0-dev)'
+        return nil,'this HD2Runtime has no Helldiver fields (HD2Runtime 0.30.0)'
     end
     local list={}
     if load('helldiver_writes')then
@@ -1383,7 +1383,7 @@ function CATEGORY.helldiver(cat)
     return list
 end
 
--- Armor (hd2.armor_stats, HD2Runtime 0.30.0-dev; docs/armor-stats.md): each kit's piece weights, the per-weight class
+-- Armor (hd2.armor_stats; HD2Runtime docs/armor-stats.md): each kit's piece weights, the per-weight class
 -- tables and the armor damage curve. Kits are named by id (several share a name).
 local WEIGHT_LABELS={{value='light',label='Light'},{value='medium',label='Medium'},{value='heavy',label='Heavy'}}
 local SLOT_LABELS={helmet='Helmet',cape='Cape',torso='Torso',hips='Hips',left_leg='Left leg',right_leg='Right leg',
@@ -1416,7 +1416,7 @@ end
 function CATEGORY.armor(cat)
     local D,why=load('armor_stats')
     local W=load('armor_stats_writes')
-    if not D or not W or type(D.kits)~='table'then return nil,why or'this HD2Runtime has no armor stats (0.30.0-dev)'end
+    if not D or not W or type(D.kits)~='table'then return nil,why or'this HD2Runtime has no armor stats (HD2Runtime 0.30.0)'end
     local hd2=cat.hd2
     local list={}
     list[1]={key='ar|classes',name='Armor classes',subtitle='Shared tables',

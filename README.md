@@ -29,7 +29,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - A weapon's attachments sit inside it: its magazines, muzzles, optics and underbarrels, each with its stat modifiers (sway, recoil, climb, spread, ergonomics). An attachment is shared by every weapon that can mount it.
 - **Weapon groups.** Primary and Secondary have a filter under the search box with the armory's groups (Assault
   Rifle, Marksman Rifle, Submachine Gun, Shotgun, Explosive, Energy-Based, Special; Pistol, Melee, Special).
-- **Your Helldiver and their armor** (HD2Runtime r55).
+- **Your Helldiver and their armor.**
   - **Helldiver:** movement speeds, stamina, the explosion damage share and the six body zones (damage multipliers, durable share, health). They apply to every Helldiver; speed and stamina do not reach the ship, whose Helldiver carries its own copy.
   - **Armor perks:** your own armor passive and a second passive on top of it. They are solo only and held for the session, not exported (see [Limitations](#limitations)).
   - **Armor:** every armor's piece weights (light, medium, heavy, per piece), the per-weight armor value, speed and stamina tables, and the armor damage curve. The list filters by weight; each armor shows its passive and its stats.
@@ -52,20 +52,15 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.7.5, development build for HD2Runtime r55.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 to 0.7.5 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab, the Helldiver, Armor and attachment fields) are not live-tested yet.
+> **Status: 0.7.5, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 
 - Helldivers 2
 - Bingus Shared Loader v15+
-- **HD2Runtime 0.30.0-dev r53 or later; r55 for the Helldiver and Armor categories.**
-  - r50 adds script choices (`mod:choice`, for non-numeric fields), overlay images (`d:image`, for icons), cursor capture (`overlay:free_cursor`), the overlay text placement fix, and naming the mod behind each applied value for mods built without the SDK wrapper.
-  - r51 adds, in its SDK, the HUD icon extractor that [Game icons](#game-icons) uses.
-  - r52 adds the mouse wheel's native hook (`hd2.input.wheel`), following choices (filling empty rate slots), every mod's options (`hd2.diagnostics.options`) and custom stratagem tuning.
-  - r55 adds the Helldiver fields (`hd2.helldiver()`), armor stats (`hd2.armor_stats`), armor passives (`hd2.player_passives`) and the muzzle, optics and underbarrel stats. On an older Runtime the Helldiver and Armor categories say they are unavailable.
-  - r53 keeps keys, clicks and the wheel from the game while the editor is open (`hd2.input.block`). On r50 or r51 the rest works: the lists scroll with the scrollbar, filling an empty rate slot is refused with the reason, and the Custom tab and the options are read-only or empty.
-  - On an older 0.30.0-dev with the UI services (`hd2.ui.overlay`, `hd2.store`, `hd2.on_frame`, `hd2.input.pressed`), numbers still edit. Non-numeric fields then explain that they need r50, and icons and cursor capture are simply absent.
-  - Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
+- **HD2Runtime 0.30.0 or later.**
+  - Everything the editor uses is part of HD2Runtime 0.30.0: the UI overlay, script values and choices, the native mouse wheel and input blocking, every mod's options, custom stratagem tuning, and the Helldiver, armor and attachment fields.
+  - If a Runtime lacks one of these, the part that needs it says so, or simply stays absent; the rest keeps working. Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
 
 ## Installation
 
@@ -77,7 +72,7 @@ Press **F8** in game to open or close the editor, or **Esc** to close it (the ga
 
 While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental; turn it off in Settings if it misbehaves.
 
-The tabs are Browse, Changes, Export, Mods, Custom, Presets, Logs and Settings (Shift+Tab cycles them). While it is open, key presses, mouse clicks and the wheel are kept from the game (HD2Runtime r53, experimental; Settings turns it off): Escape, Tab and Delete act only in the editor. Key releases still reach the game, so nothing stays held, and the game gets its input back the moment the editor closes.
+The tabs are Browse, Changes, Export, Mods, Custom, Presets, Logs and Settings (Shift+Tab cycles them). While it is open, key presses, mouse clicks and the wheel are kept from the game (experimental; Settings turns it off): Escape, Tab and Delete act only in the editor. Key releases still reach the game, so nothing stays held, and the game gets its input back the moment the editor closes.
 
 | Key | Action |
 | --- | --- |
@@ -129,7 +124,7 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 - **Fields that move together.**
   - The default fire mode can only be reordered, never held at its own value, so it is left out.
   - A weapon's displayed traits and displayed armor penetration share its five label slots: the editor holds one of them at a time (reset one to edit the other).
-  - Filling an empty rate slot binds the rate selector with it (HD2Runtime r52); the M-1000 Maxigun's rate slots stay as the Runtime allows.
+  - Filling an empty rate slot binds the rate selector with it; the M-1000 Maxigun's rate slots stay as the Runtime allows.
 - **Three decimals.** Values are held with at most three decimals (the Runtime's live-value precision). A float32 default such as `0.30000001192` is the same stored value as `0.3`, so every catalogued default qualifies.
 - **When values apply.** Some values (fire rate, magazines, heat) are copied when the game builds a weapon, so a weapon you are holding may keep its old value until it is re-equipped or the next mission. Projectile, damage and explosion values apply on the next shot.
 - **A mod's in-game options after a takeover.** Once the editor has taken a field over from a mod's `ensure`, that mod's Mod Options sliders no longer move that field for the rest of the session.
@@ -167,7 +162,7 @@ Each target is written from the editor row's own target code (for example `hd2.w
 
 ## Game icons
 
-`py tools/game_icons.py` takes every stratagem's and booster's own HUD icon from your installed game, read-only, through the HD2Runtime SDK (r51+ `tools/hd2_hud_icons.py`), and the next build packs them in.
+`py tools/game_icons.py` takes every stratagem's and booster's own HUD icon from your installed game, read-only, through the HD2Runtime SDK (`tools/hd2_hud_icons.py`), and the next build packs them in.
 
 - **The game's pixels only.** A stratagem's HUD sprite is already the game's icon masks and is used as it is. A booster's sprite (a yellow plate with a dark glyph) is split onto the masks with its own measured colours, so the overlay draws the same picture. Nothing is drawn or traced; the loadout screen's vector library only supplies each stratagem's accent colour.
 - **No icon:** an item the game has no sprite for (SG-88, CQC-72) gets a plain square in its category colour.
@@ -213,7 +208,7 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 
 - **Catalogue contract:** every one of the ~17,200 rows the editor builds passes HD2Runtime's own validator (`domains/patches.validate`) with a changed value. Non-numeric rows check their vanilla value and another value, with the acknowledgements the validator asks for.
 - **Override layer:** the real `hd2.ensure`, script values, bind-time proofs and conflict rule run over a simulated byte store. The scenarios: vanilla edit and reset, taking over a mod's ensure (including its other fields), a one-time mod patch, a value outside the handle range, refusals, and reset-all.
-- **Value fields:** calldown codes, mission uses, booleans, statuses, projectile swaps and terminal explosions over r50 script choices, plus a mod's calldown code taken over and given back.
+- **Value fields:** calldown codes, mission uses, booleans, statuses, projectile swaps and terminal explosions over script choices, plus a mod's calldown code taken over and given back.
 - **UI:** the whole window, driven by scripted keys and clicks, including the picker, the code editor, Escape, the weapon filter, a mount swap, the Changes, Mods (with in-game options), Custom (tuning) and Settings tabs, a language switch, the traits editor and the menu sounds. With generated icons, every stratagem and booster must have one.
 - **Value fields** also cover filling the Liberator's empty rate slots (with its selector binding), the displayed traits and penetration (one at a time), and the steer watchdog.
 - **Helpers:** the JSON reader (sliced), the mod managers' state, the localisation file format, and the interface text list. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
