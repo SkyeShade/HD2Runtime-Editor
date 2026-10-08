@@ -25,6 +25,11 @@ T.font={title='title',body='body'}
 
 -- The panel: left of centre, clear of the native squad bars at the bottom.
 T.panel={x=34,y=64,w=1260,h=930}
+-- The panel's full height in units; a larger interface size gives up height (the lists show fewer rows), never width.
+T.PANEL_H=930
+T.PANEL_MIN_H=660
+-- The interface sizes the Settings offer (a multiple of the 1080p layout).
+T.UI_SCALES={0.9,1,1.1,1.25,1.4,1.5}
 T.header_h=58
 T.footer_h=56
 T.status_h=40

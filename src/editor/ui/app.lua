@@ -718,17 +718,41 @@ function App:handle_mouse(f)
     if m.rclicked and action and action.rclick then action.rclick(ux,uy)end
 end
 
+-- The interface size the Settings chose (one of theme.UI_SCALES; 1 by default).
+function App:ui_scale()
+    local v=self.presets and self.presets:setting('ui_scale',1)or 1
+    for _,s in ipairs(theme.UI_SCALES)do if s==v then return v end end
+    return 1
+end
+-- Steps the interface size one choice up (+1) or down (-1).
+function App:step_ui_scale(direction)
+    local list=theme.UI_SCALES
+    local now,index=self:ui_scale(),1
+    for i,s in ipairs(list)do if s==now then index=i end end
+    local next_index=math.max(1,math.min(#list,index+direction))
+    if next_index==index then return end
+    self.presets:set_setting('ui_scale',list[next_index])
+    self:sound('click')
+end
+
 ------------------------------------------------------------------------------------------------- frame --
 function App:frame(d,dt)
     self.time=self.time+(dt or 0)
     self.frame_dt=dt or 0
     if self.ctx.sounds and self.ctx.sounds.tick then self.ctx.sounds.tick(dt or 0)end
-    -- centred on the screen (1080p units)
+    -- centred on the screen (1080p units), at the chosen interface size: the overlay's scale times the setting, as
+    -- large as still fits (the panel keeps its full width and at least PANEL_MIN_H units of height)
     local layout=theme.panel
-    local scale=d.scale or 1
-    local ox=math.floor(((d.width or 1920)/scale-layout.w)/2+0.5)
-    local oy=math.floor(((d.height or 1080)/scale-layout.h)/2+0.5)
-    self.canvas:begin(d,math.max(0,ox),math.max(0,oy))
+    local base=d.scale or 1
+    local sw,sh=(d.width or 1920)/base,(d.height or 1080)/base
+    local k=math.min(self:ui_scale(),sw/(layout.w+24),sh/(theme.PANEL_MIN_H+24))
+    k=math.max(k,0.5)
+    self.ui_scale_now=k
+    local W,H=sw/k,sh/k
+    layout.h=math.floor(math.min(theme.PANEL_H,H-24))
+    local ox=math.floor((W-layout.w)/2+0.5)
+    local oy=math.floor((H-layout.h)/2+0.5)
+    self.canvas:begin(d,math.max(0,ox),math.max(0,oy),base*k)
     local typing=self.edit~=nil or(self.view=='browse'and self.focus=='fields')
     local letters=(self.search and self.search.active)or self.rename~=nil or self.picker~=nil
     if self.coder or self.moder or self.traiter then typing=false end
@@ -931,12 +955,36 @@ function App:draw_categories(y0,h)
     self.cat_actions=self.cat_actions or{}
     local cat_marks=self:markers().category
     local focused=self.focus=='categories'
-    local y=y0+10
+    -- the column's layout; it scrolls when it is taller than the pane (a larger interface size gives the panel less
+    -- height): the wheel scrolls it, the selected category stays in view, and only whole rows are drawn
+    local pos,yy={},10
     for i,item in ipairs(self.categories)do
-        if item.group then
-            y=y+(i>1 and 10 or 0)
+        if item.group then yy=yy+(i>1 and 10 or 0);pos[i]={y=yy,h=24};yy=yy+24
+        else pos[i]={y=yy,h=31};yy=yy+31 end
+    end
+    local max_scroll=math.max(0,yy+10-h)
+    local scroll=self.cat_scroll or 0
+    local sel=pos[self.cat]
+    if sel and self.cat_seen~=self.cat then
+        self.cat_seen=self.cat
+        if sel.y-scroll<10 then scroll=sel.y-10 elseif sel.y+sel.h-scroll>h-10 then scroll=sel.y+sel.h-h+10 end
+    end
+    scroll=math.max(0,math.min(max_scroll,scroll))
+    self.cat_scroll=scroll
+    if max_scroll>0 then
+        self.cat_scroller=self.cat_scroller or{scroll=function(d)self.cat_scroll=(self.cat_scroll or 0)+d*62 end}
+        cv:hit(0,y0,CAT_W,h,self.cat_scroller)
+        local track=h-8
+        local thumb=math.max(24,track*h/(yy+10))
+        cv:rect(CAT_W-5,y0+4+(track-thumb)*scroll/max_scroll,3,thumb,C.line_strong,3)
+    end
+    for i,item in ipairs(self.categories)do
+        local y=y0+pos[i].y-scroll
+        local shown=y>=y0 and y+pos[i].h<=y0+h
+        if not shown then
+            -- outside the pane: not drawn
+        elseif item.group then
             cv:text(L(item.label),18,y+11,{size=SZ.heading,font='title',colour=C.faint})
-            y=y+24
         else
             local rh=31
             local selected=i==self.cat
@@ -958,7 +1006,6 @@ function App:draw_categories(y0,h)
             cv:text(L(item.label),22,y+rh/2,{size=SZ.label,colour=selected and C.text or C.dim,
                 max=math.min(CAT_W-80,mx-30)})
             cv:hit(8,y,CAT_W-16,rh,action)
-            y=y+rh
         end
     end
 end

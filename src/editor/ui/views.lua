@@ -751,15 +751,18 @@ function M.install(App)
     function App:handle_settings_keys(f)
         local k=f.keys
         local langs=self:languages()
-        self.settings_index=clamp_index(self.settings_index or 1,4+#langs)
-        if k.UP then self.settings_index=clamp_index(self.settings_index-1,4+#langs)end
-        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,4+#langs)end
-        if k.ENTER or k.RIGHT or k.LEFT then
-            local i=self.settings_index
+        self.settings_index=clamp_index(self.settings_index or 1,5+#langs)
+        if k.UP then self.settings_index=clamp_index(self.settings_index-1,5+#langs)end
+        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,5+#langs)end
+        local i=self.settings_index
+        if i==5 then
+            -- the interface size: left smaller, right or Enter larger
+            if k.LEFT then self:step_ui_scale(-1)elseif k.RIGHT or k.ENTER then self:step_ui_scale(1)end
+        elseif k.ENTER or k.RIGHT or k.LEFT then
             if i<=4 then
                 local action=(self.settings_toggles or{})[i]
                 if action then action.click()end
-            else self:use_language(langs[i-4].name)end
+            else self:use_language(langs[i-5].name)end
         end
     end
     function App:use_language(name)
@@ -803,6 +806,20 @@ function M.install(App)
             toggle_row(self,cv,x,y,540,values[i],labels[i],self.settings_toggles[i])
             y=y+34
         end
+        -- the interface size
+        if self.settings_index==5 then cv:rect(x-8,y-14,560,28,C.select,1)end
+        cv:text(L('Interface size (text and everything else)'),x,y,{size=SZ.label,colour=C.dim})
+        self.btn_scale_down=self.btn_scale_down or{click=function()self:step_ui_scale(-1)end,sound=false}
+        self.btn_scale_up=self.btn_scale_up or{click=function()self:step_ui_scale(1)end,sound=false}
+        local now=self:ui_scale()
+        local shown=self.ui_scale_now or now
+        button(self,'-',x+400,y-13,30,26,now>theme.UI_SCALES[1]and'normal'or'disabled',self.btn_scale_down)
+        cv:text(('%d%%'):format(math.floor(now*100+0.5)),x+470,y,{size=SZ.label,colour=C.text,align='center'})
+        button(self,'+',x+510,y-13,30,26,now<theme.UI_SCALES[#theme.UI_SCALES]and'normal'or'disabled',self.btn_scale_up)
+        if math.floor(shown*100+0.5)<math.floor(now*100+0.5)then
+            cv:text(L('(%d%% fits this screen)'):format(math.floor(shown*100+0.5)),x+552,y,{size=SZ.tiny,colour=C.faint})
+        end
+        y=y+34
         cv:text(L('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.'):format(tostring(self.ctx.hotkey or'F8')),
             x,y+4,{size=SZ.tiny,colour=C.faint,max=W-48})
         -- language
@@ -819,7 +836,7 @@ function M.install(App)
                 self.language_actions[lang.name]=action
             end
             local current=i18n.language()==lang.name
-            if self.settings_index==4+i then cv:rect(x-8,y-2,560,28,C.select,1)
+            if self.settings_index==5+i then cv:rect(x-8,y-2,560,28,C.select,1)
             elseif self.hover==action then cv:rect(x-8,y-2,560,28,C.hover,1)end
             cv:rect(x,y+6,14,14,current and C.gold or C.line_strong,3)
             cv:text(lang.name,x+26,y+13,{size=SZ.label,colour=current and C.text or C.dim})

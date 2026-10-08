@@ -10,8 +10,9 @@ local CACHE_LIMIT=4096
 
 function M.new()return setmetatable({widths={},width_count=0,fits={},fit_count=0,hits={}},Canvas)end
 
-function Canvas:begin(d,ox,oy)
-    self.d,self.s,self.ox,self.oy=d,d.scale or 1,ox or 0,oy or 0
+-- s: pixels per unit (default the overlay's own scale; the editor's interface size multiplies it).
+function Canvas:begin(d,ox,oy,s)
+    self.d,self.s,self.ox,self.oy=d,s or d.scale or 1,ox or 0,oy or 0
     self.width,self.height=(d.width or 1920)/self.s,(d.height or 1080)/self.s
     -- the previous frame's regions answer this frame's clicks (input is read before drawing)
     self.prev_hits=self.hits or{}

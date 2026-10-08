@@ -625,6 +625,37 @@ do
     assert(seen[2].handle==BH and seen[2].opts.colours==nil,'booster as the Runtime draws it')
     H.app.ctx.icons,H.app.canvas.image=saved,real_image
 end
+-- the interface size: Settings steps it, every view still fits the screen (the panel gives up height, never width)
+do
+    local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
+    H.app:set_view('settings')
+    H.app.settings_index=5
+    for _=1,6 do step({'RIGHT'})end
+    assert(H.app:ui_scale()==1.5,'stepped up to 150%: '..tostring(H.app:ui_scale()))
+    step({},nil,'50_scale_settings')
+    local k=H.app.ui_scale_now
+    assert(k>1.4 and k<=1.5,'the size that fits 1920 x 1080: '..tostring(k))
+    assert(theme.panel.w==1260 and theme.panel.h<=1080/k-24 and theme.panel.h>=theme.PANEL_MIN_H,
+        'the panel keeps its width, gives up height: '..theme.panel.h)
+    assert(math.abs(H.app.canvas.s-k)<1e-9,'drawn at that scale')
+    -- the category column scrolls instead of running past the panel: the last category comes into view when chosen
+    H.app:set_view('browse')
+    assert((H.app.cat_scroll or 0)>=0)
+    for i,item in ipairs(H.app.categories)do if item.id=='structures'then H.app:select_category(i)end end
+    step({})
+    assert((H.app.cat_scroll or 0)>0,'scrolled to the last category')
+    for _,view in ipairs({'browse','changes','export','mods','custom','presets','logs','settings'})do
+        H.app:set_view(view)
+        step({},nil,view=='browse'and'51_scale_browse'or nil)
+    end
+    H.app:set_view('settings');H.app.settings_index=5
+    for _=1,8 do step({'LEFT'})end
+    assert(H.app:ui_scale()==0.9,'stepped down to 90%')
+    step({})
+    assert(theme.panel.h==theme.PANEL_H,'full height again')
+    H.presets:set_setting('ui_scale',1)
+    step({})
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')
