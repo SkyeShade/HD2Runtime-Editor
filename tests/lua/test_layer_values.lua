@@ -158,6 +158,27 @@ check(state=='active'and util.same(layer:value(sk),40),'the skipped steer applie
 layer:reset(sk);settle(sk)
 out[#out+1]='skipped steer settled again ok'
 
+-- a field with a disable sentinel (gore.whole_body_gib_damage: -1 disables, else above 0): its handle holds exact
+-- values (no range could span the gap: live, a range starting at -1 was refused at -0.999); the gap is refused
+local gib=row_of('en|hunter_base',function(r)return r.field=='gore.whole_body_gib_damage'end)
+check(gib.disabled_value==-1 and gib.vanilla==500,'the gib threshold row knows its disable value')
+local ok_gap,why_gap=layer:set(gib,-0.5)
+check(ok_gap==false and tostring(why_gap):find('disables it',1,true),'a value in the gap is refused: '..tostring(why_gap))
+assert(layer:set(gib,-1))
+local gstate,gwhy=settle(gib)
+check(gstate=='active','disabled (-1) applied: '..tostring(gstate)..' '..tostring(gwhy))
+assert(layer:set(gib,250))
+gstate,gwhy=settle(gib)
+check(gstate=='active'and util.same(layer:value(gib),250),'re-enabled at 250: '..tostring(gstate)..' '..tostring(gwhy))
+layer:reset(gib)
+check(settle(gib)=='idle','reset to its own 500')
+local hive=row_of('en|Hive Guard',function(r)return r.field=='gore.whole_body_gib_damage'end)
+assert(layer:set(hive,300))
+gstate,gwhy=settle(hive)
+check(gstate=='active','enabled from the disable value: '..tostring(gstate)..' '..tostring(gwhy))
+layer:reset(hive);settle(hive)
+out[#out+1]='disable sentinel ok'
+
 -- Helldiver fields (hd2.helldiver(), 0.30.0-dev): a speed, a damage zone's enum and health
 local function cycle_number(r,value,label)
     run(1)

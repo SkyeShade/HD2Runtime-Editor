@@ -103,7 +103,9 @@ end
 
 --------------------------------------------------------------------------------------------------- rows --
 -- One editable numeric field. spec: {id, label, unit, vanilla, min, max, type, storage, field, target, shared,
--- unverified, unverified_reference, descriptor, section, editable, reason}.
+-- unverified, unverified_reference, descriptor, section, editable, reason, disabled_value}. disabled_value: a field
+-- whose reviewed domain is that sentinel OR a value above 0 up to max (the whole-body gib threshold: -1 disables it);
+-- nothing between the two is valid.
 local function make_row(object,spec)
     local integer=spec.type=='integer'or(spec.type~='number'and INTEGER_STORAGE[spec.storage or'']~=nil)
     local min,max=spec.min,spec.max
@@ -119,7 +121,7 @@ local function make_row(object,spec)
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
             allow_unverified_reference=spec.unverified_reference==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group,
-        note=spec.note}
+        note=spec.note,disabled_value=spec.disabled_value}
     row.loc=location(spec.descriptor,'row:'..row.key)
     if row.editable then
         local held=util.representable(row.vanilla,integer,spec.storage)
@@ -962,7 +964,8 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
                 rows[#rows+1]=make_row(object,{id=f.path..':'..tostring(f.zone or f.attack or'')..':'..f.id,
                     label=util.humanize(f.id),vanilla=f.currentDefault,min=s.min,max=s.max,type=s.type,
                     storage=s.storage or(f.backing or{}).storage,field=f.id,target=target,shared=s.shared==true,
-                    unverified=ack=='allow_unverified_effect',descriptor=f,section=section,group=group})
+                    unverified=ack=='allow_unverified_effect',descriptor=f,section=section,group=group,
+                    disabled_value=s.disabledValue or f.disabledValue})
             end
         end
     end

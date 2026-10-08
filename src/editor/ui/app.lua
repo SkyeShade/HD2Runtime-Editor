@@ -354,6 +354,11 @@ function App:stage(row,value)
     end
     if row.min and held<row.min then held=row.min;self:toast(L('Clamped to the minimum ')..util.format(row.min),C.pending)end
     if row.max and held>row.max then held=row.max;self:toast(L('Clamped to the maximum ')..util.format(row.max),C.pending)end
+    if row.disabled_value~=nil and held~=row.disabled_value and held<=0 then
+        -- nothing between the disable value and 0 is valid: zero or below means disabled
+        held=row.disabled_value
+        self:toast(L('%s disables it (a value above 0 enables it)'):format(util.format(row.disabled_value)),C.pending)
+    end
     local current=self.layer:value(row)
     local existing=self.pending[row.key]
     if util.representable(current,row.integer,row.storage)==held then
@@ -436,6 +441,11 @@ function App:nudge(row,direction,shift,ctrl)
         return
     elseif row.kind then return end
     local value=self:row_view(row)
+    if row.disabled_value~=nil and value==row.disabled_value then
+        -- stepping up from disabled enables it at the smallest step
+        if direction>0 then self:stage(row,row.integer and 1 or util.STEP*100)end
+        return
+    end
     local step=nudge_step(row,value,shift,ctrl)
     local v=value+direction*step
     if row.integer then v=math.floor(v+0.5)else v=util.round(v)end

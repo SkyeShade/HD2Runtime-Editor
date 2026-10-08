@@ -18,6 +18,7 @@ return {
     '%d parts · %d fields',
     '%d refused',
     '%d texts, %s',
+    '%s disables it (a value above 0 enables it)',
     '%s: %s set to %s (from the next call)',
     '%s: back to %s',
     '%s: back to its own cooldown and uses',

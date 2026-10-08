@@ -234,6 +234,9 @@ function Layer:set(row,value)
     if type(held)=='number'and(row.min and held<row.min or row.max and held>row.max)then
         return false,'outside the field range '..util.format(row.min)..' to '..util.format(row.max)
     end
+    if row.disabled_value~=nil and held~=row.disabled_value and held<=0 then
+        return false,util.format(row.disabled_value)..' disables it; otherwise use a value above 0'
+    end
     if row.kind=='code'and(#held<(row.min_length or 1)or#held>(row.max_length or 9))then
         return false,'a code has '..(row.min_length or 1)..' to '..(row.max_length or 9)..' directions'
     end
@@ -280,7 +283,9 @@ end
 
 -- A live handle for a field: integer steps, or 0.001; its range holds `values`, the field's range and storage.
 function Layer:handle(row,current,values)
-    if row.kind then
+    -- a field with a disable sentinel (-1, or above 0): no continuous range can span the gap (the bind-time proof
+    -- checks the range's ends and one step), so its handle holds exactly the values this change needs
+    if row.kind or row.disabled_value~=nil then
         -- a script choice over the values this change needs: the one held now first, then the target and the base
         local list={current}
         for _,v in ipairs(values)do
