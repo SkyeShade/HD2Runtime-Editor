@@ -65,6 +65,9 @@ local function location(descriptor,fallback)
     if type(backing)=='table'and backing.kind=='image_table'and backing.rva then
         return 'image/'..tostring(backing.table)..'@'..tostring(backing.rva)
     end
+    -- no record identity (an attachment's field: one attachment mounted by several weapons): the Runtime's own field
+    -- descriptor is one object per field instance, so rows that carry the same one write the same bytes
+    if type(descriptor)=='table'then return(('field:'..tostring(descriptor)):gsub('table: ',''))end
     return fallback
 end
 M.location=location
@@ -1598,6 +1601,40 @@ function Catalog:weapon_rows(key)
 end
 -- Every open row on the same native bytes.
 function Catalog:siblings(row)return self.by_loc[row.loc]or{row}end
+-- Opens up to `budget` more objects (every category, in order) so the native-bytes index covers the whole catalogue;
+-- true once every object is open. The editor calls it a few objects per frame, so the full index (about 20,000 rows)
+-- builds in the background without a hitch.
+function Catalog:index_step(budget)
+    if self.indexed then return true end
+    self.index_queue=self.index_queue or{}
+    if not self.index_categories then
+        self.index_categories={}
+        for _,group in ipairs(M.GROUPS)do
+            for _,item in ipairs(group.items)do self.index_categories[#self.index_categories+1]=item.id end
+        end
+    end
+    local opened=0
+    while opened<(budget or 4)do
+        if#self.index_queue==0 then
+            local category=table.remove(self.index_categories,1)
+            if not category then self.indexed=true;return true end
+            for _,object in ipairs((self:objects(category)))do self.index_queue[#self.index_queue+1]=object end
+        else
+            local object=table.remove(self.index_queue,1)
+            if not object.rows then self:open(object);opened=opened+1 end
+        end
+    end
+    return false
+end
+-- The other rows that write a row's native bytes, on other objects (a value shared by several weapons, enemies or
+-- stratagems: changing one changes them all). {row, ...}; complete once the index is built (index_step).
+function Catalog:shared_with(row)
+    local out={}
+    for _,other in ipairs(self.by_loc[row.loc]or{})do
+        if other~=row and other.object~=row.object then out[#out+1]=other end
+    end
+    return out
+end
 function Catalog:row_at(loc)local list=self.by_loc[loc];return list and list[1]or nil end
 
 return M

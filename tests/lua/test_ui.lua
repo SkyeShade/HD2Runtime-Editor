@@ -686,6 +686,46 @@ do
     H.app:reveal(heat)
     step({},nil,'52_locked_weapon')
 end
+-- shared values: rows on different objects that write the same bytes. The index covers the whole catalogue; a value
+-- staged through one shows on every other, marks every object, and says what else it changes
+do
+    local guard=0
+    while not H.catalog:index_step(200)do guard=guard+1;assert(guard<1000,'the index completes')end
+    assert(H.catalog.indexed)
+    local a_row,b_row
+    for _,c in ipairs({'primary','secondary'})do
+        for _,o in ipairs(H.catalog:objects(c))do
+            for _,r in ipairs(o.rows or{})do
+                if not a_row and r.editable and not r.kind and r.group=='Magazines'then
+                    local others=H.catalog:shared_with(r)
+                    if#others>0 and others[1].editable then a_row,b_row=r,others[1]end
+                end
+            end
+        end
+    end
+    assert(a_row and b_row and a_row.object~=b_row.object and a_row.loc==b_row.loc,'a magazine shared by two weapons')
+    local names=H.app:shared_names(a_row)
+    assert(names and names:find(b_row.object.name,1,true),'the warning names the other weapon: '..tostring(names))
+    local before=H.app.pending_n
+    local v=(a_row.vanilla or 1)+1
+    assert(H.app:stage(a_row,v))
+    assert(H.app.toast_msg and H.app.toast_msg.text:find('also changes',1,true),'a toast warns about the shared value')
+    local shown,source=H.app:row_view(b_row)
+    assert(source=='pending'and shown==v,'the other weapon shows the pending value: '..tostring(source)..' '..tostring(shown))
+    H.app:set_view('browse')
+    H.app:reveal(b_row)
+    step({},nil,'53_shared_value')
+    local m=H.app:markers()
+    assert(m.pending[a_row.object.key]and m.pending[b_row.object.key],'both weapons are marked')
+    assert(m.row_pending[b_row.key],'and the other weapon\'s row')
+    -- staging through the other weapon replaces it: one pending value for the bytes
+    assert(H.app:stage(b_row,v+1))
+    assert(H.app.pending_n==before+1 and H.app.pending[b_row.key]and not H.app.pending[a_row.key],'one value per location')
+    shown=H.app:row_view(a_row)
+    assert(shown==v+1,'the first weapon shows the new value')
+    H.app:unstage(b_row)
+    assert(H.app.pending_n==before)
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

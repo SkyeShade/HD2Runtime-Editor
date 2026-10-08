@@ -248,6 +248,12 @@ end
 -- What a row shows: value, kind ('pending' | 'editor' | 'mod' | 'vanilla'), state, holder, error.
 function App:row_view(row)
     local pending=self.pending[row.key]
+    if not pending then
+        -- the same bytes staged through another object's row (a shared value): shown here too
+        for _,other in ipairs(self.catalog:siblings(row))do
+            if other~=row and self.pending[other.key]then pending=self.pending[other.key];break end
+        end
+    end
     local value,source,holder,slot=self.layer:value(row)
     local state,err=self.layer:state(row)
     if pending then return pending.value,'pending',state,holder,err end
@@ -266,15 +272,26 @@ function App:markers()
         if not c then c={};m.category[category]=c end
         c[kind]=true
     end
+    -- a value shared by several objects marks every one of them (the rows on the same native bytes)
     for _,p in pairs(self.pending)do
+        for _,r in ipairs(self.catalog:siblings(p.row))do
+            if r.object then
+                m.pending[r.object.key]=true
+                in_category(r.object,'pending')
+            end
+            m.row_pending[r.key]=true
+        end
         m.pending[p.row.object.key]=true
         m.row_pending[p.row.key]=true
         in_category(p.row.object,'pending')
     end
     for loc,slot in pairs(self.layer.slots)do
         if slot.user and slot.row and slot.row.object then
-            m.editor[slot.row.object.key]=true
             m.loc_editor[loc]=true
+            for _,r in ipairs(self.catalog:siblings(slot.row))do
+                if r.object then m.editor[r.object.key]=true;in_category(r.object,'editor')end
+            end
+            m.editor[slot.row.object.key]=true
             in_category(slot.row.object,'editor')
         end
     end
@@ -286,6 +303,10 @@ function App:markers()
                 m.mod[object and object.key or claim.object]=true
                 in_category(object,'mod')
             end
+        end
+        -- every object whose rows write those bytes
+        for _,r in ipairs(self.catalog.by_loc[loc]or{})do
+            if r.object then m.mod[r.object.key]=true;in_category(r.object,'mod')end
         end
     end
     m.key=key
@@ -328,8 +349,38 @@ function App:draw_marks(marks,x,cy,size)
 end
 
 ---------------------------------------------------------------------------------------------- staging --
+-- Drops pending values staged on other rows of the same native bytes (one value per location).
+function App:unstage_siblings(row)
+    for _,other in ipairs(self.catalog:siblings(row))do
+        if other~=row and self.pending[other.key]then self.pending[other.key]=nil;self.pending_n=self.pending_n-1 end
+    end
+end
+-- 'AR-23 Liberator, AR-23P Liberator Penetrator (+2)': the other objects a shared row's value also changes.
+function App:shared_names(row,limit)
+    local names,seen={},{}
+    for _,other in ipairs(self.catalog:shared_with(row))do
+        local name=other.object and other.object.name
+        if name and not seen[name]then seen[name]=true;names[#names+1]=name end
+    end
+    if#names==0 then return nil,0 end
+    table.sort(names,util.natural_less)
+    limit=limit or 3
+    local shown={}
+    for i=1,math.min(limit,#names)do shown[i]=names[i]end
+    return table.concat(shown,', ')..(#names>limit and(' (+'..(#names-limit)..')')or''),#names
+end
 function App:stage(row,value)
     if not row.editable then self:toast(row.label..': '..tostring(row.reason or'not editable'),C.error);return false end
+    local staged=self:stage_value(row,value)
+    -- accepted: any value staged on another row of the same bytes gives way to it
+    if staged then self:unstage_siblings(row)end
+    if staged and self.pending[row.key]then
+        local names=self:shared_names(row)
+        if names then self:toast(L('Shared value: this also changes %s'):format(names),C.pending)end
+    end
+    return staged
+end
+function App:stage_value(row,value)
     if row.kind then
         if self.ctx.choices==false then
             self:toast(L('Editing ')..row.label..' needs HD2Runtime r50 (script choices)',C.error);return false
@@ -748,6 +799,11 @@ end
 ------------------------------------------------------------------------------------------------- frame --
 function App:frame(d,dt)
     self.time=self.time+(dt or 0)
+    -- the native-bytes index of the whole catalogue, a few objects a frame (shared values, markers)
+    if not self.catalog.indexed then
+        local before=self.catalog.indexed
+        if self.catalog:index_step(6)and not before then self.marker_key=nil end
+    end
     self.frame_dt=dt or 0
     if self.ctx.sounds and self.ctx.sounds.tick then self.ctx.sounds.tick(dt or 0)end
     -- centred on the screen (1080p units), at the chosen interface size: the overlay's scale times the setting, as
@@ -1288,10 +1344,15 @@ function App:draw_status(y,h)
         else range=(row.min or row.max)and('range '..util.format(row.min or-math.huge)..' to '..util.format(row.max))or'no published range'end
         x=x+cv:text(tostring(row.field),x,cy,{size=SZ.small,colour=C.dim,max=260})+16
         x=x+cv:text(range..(row.integer and', whole numbers'or''),x,cy,{size=SZ.small,colour=C.faint,max=240})+14
-        if row.shared then x=x+chip(cv,L('SHARED'),x,cy,C.pending,C.pending_soft)+6 end
+        local shared_names,shared_n=self:shared_names(row,2)
+        if row.shared or shared_n>0 then x=x+chip(cv,L('SHARED'),x,cy,C.pending,C.pending_soft)+6 end
         if row.unverified then x=x+chip(cv,L('UNVERIFIED EFFECT'),x,cy,C.faint,C.line)+6 end
         local _,base_holder=self.layer:base(row)
-        if row.note and not base_holder then
+        if shared_names and not base_holder then
+            x=x+10+cv:text(L('also changes %s'):format(shared_names),x+10,cy,
+                {size=SZ.small,colour=C.pending,max=math.max(40,maxw-x-10)})
+        end
+        if row.note and not base_holder and not shared_names then
             cv:text(L(row.note),x+10,cy,{size=SZ.small,colour=C.faint,max=math.max(40,maxw-x-10)})
         end
         if base_holder then
