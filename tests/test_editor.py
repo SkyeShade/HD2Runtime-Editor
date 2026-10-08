@@ -169,7 +169,7 @@ class EditorTests(unittest.TestCase):
             lua_host._lua_string((LUA / 'test_layer_values.lua').as_posix()),
             lua_host._lua_string((LUA / 'sim.lua').as_posix())))
         for line in ('calldown code ok', 'mission uses ok', 'boolean ok', 'status ok', 'projectile swap ok',
-                     'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'direct first edit ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'helldiver fields ok', 'armor stats ok', 'armor perks ok', 'mod code takeover ok'):
+                     'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'direct first edit ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'skipped steer settled again ok', 'helldiver fields ok', 'armor stats ok', 'armor perks ok', 'mod code takeover ok'):
             self.assertIn(line, result)
 
     def test_window_frames_stay_inside_overlay_limits(self):

@@ -69,6 +69,77 @@ local function watch_state(w)
     end
     return text
 end
+-- A steer must never be skipped. Live (r52, r53, r55) a bound ensure settled after a steer without applying it: its
+-- settle found the rebuilt signature equal to the one it last applied (`rebinds` unchanged, no write), which no offline
+-- run reproduces. So the editor clears the ensure's record of what it last applied whenever it steers (what the
+-- Runtime's listener could do itself): the settle then always resolves again, and a value already in place is simply
+-- ALREADY_DESIRED. The record is an upvalue of watch.debug (r53), reached through LuaJIT's debug library; without
+-- either, nothing changes. When a steer still stalls, `inspect` logs whether the rebuilt signature equals the applied
+-- one (the handle's value did not reach the ensure) or not (the settle should have applied it).
+local function upvalue(fn,name)
+    if type(fn)~='function'or type(debug)~='table'or type(debug.getupvalue)~='function'then return nil end
+    for i=1,255 do
+        local n,v=debug.getupvalue(fn,i)
+        if n==nil then return nil end
+        if n==name then return i,v end
+    end
+    return nil
+end
+-- A function's upvalue by name, searched through the closures it holds (watch.tick -> tick -> settle -> build).
+local function deep_upvalue(fn,name,depth,seen)
+    seen=seen or{}
+    if type(fn)~='function'or seen[fn]or(depth or 0)>4 then return nil end
+    seen[fn]=true
+    local i,v=upvalue(fn,name)
+    if i then return v,true end
+    for k=1,255 do
+        local n,inner=debug.getupvalue(fn,k)
+        if n==nil then break end
+        if type(inner)=='function'then
+            local found,ok=deep_upvalue(inner,name,(depth or 0)+1,seen)
+            if ok then return found,true end
+        end
+    end
+    return nil
+end
+local function readable(signature)
+    if type(signature)~='string'then return tostring(signature)end
+    local text=signature:gsub('\n',' '):gsub('[%z\1-\31\127-\255]',function(c)return('%02X'):format(c:byte())end)
+    return #text>80 and(text:sub(1,80)..'...')or text
+end
+-- Forget what the ensure last applied (and optionally settle again now). True when done.
+local function forget_applied(w,settle_now)
+    if type(w)~='table'or type(debug)~='table'or type(debug.setupvalue)~='function'then return false end
+    local ia=upvalue(w.debug,'applied_signature')
+    if not ia then return false end
+    debug.setupvalue(w.debug,ia,nil)
+    if settle_now then
+        local id_,ib=upvalue(w.debug,'dirty'),upvalue(w.debug,'debounce')
+        if id_ and ib then debug.setupvalue(w.debug,id_,true);debug.setupvalue(w.debug,ib,0)end
+    end
+    return true
+end
+-- What the stalled ensure would resolve to now against what it last applied.
+local function inspect(w,handle)
+    if type(w)~='table'or type(w.debug)~='function'or type(debug)~='table'then return 'no ensure internals'end
+    local _,applied=upvalue(w.debug,'applied_signature')
+    local parts={'handle '..tostring(handle and handle.id)..' = '..util.value_text(handle and handle:get()),
+        'applied '..readable(applied)}
+    local build=deep_upvalue(w.tick,'build')
+    local signature=deep_upvalue(w.tick,'signature')
+    local kind=deep_upvalue(w.tick,'kind')
+    if type(build)=='function'and type(signature)=='function'then
+        local ok,spec=pcall(build)
+        if ok then
+            local now=signature(kind,spec,true)
+            parts[#parts+1]='rebuilt '..readable(now)
+            parts[#parts+1]=now==applied and'SAME: the value did not reach the ensure'
+                or'DIFFERENT: the settle should have applied it'
+        else parts[#parts+1]='rebuild failed: '..tostring(spec)end
+    end
+    return table.concat(parts,'; ')
+end
+
 local Layer={};Layer.__index=Layer
 
 function M.new(opts)
@@ -310,7 +381,7 @@ end
 
 local function fail(self,slot,why)
     slot.error=util.plain(why or'the operation was refused',300)
-    slot.dirty=false
+    slot.dirty,slot.readopts,slot.nudged=false,nil,nil
     if slot.watch then
         slot.phase='hold'
         slot.target=slot.held
@@ -405,11 +476,13 @@ function Layer:steer(slot)
     slot.mark=slot.watch.runs or 0
     slot.steering=slot.target
     slot.phase='steer'
-    slot.steer_started,slot.stalled=self.clock or 0,false
+    slot.steer_started,slot.stalled,slot.nudged=self.clock or 0,false,nil
     slot.rebinds_at=slot.watch.rebinds
     local changed=slot.handle:set(slot.target)
+    -- the settle that follows must resolve again, never compare against what was applied before (see forget_applied)
+    local forgot=changed and forget_applied(slot.watch)
     note(self,'steer '..tostring(slot.row.key)..' -> '..util.value_text(slot.target)..' (handle '
-        ..(changed and'changed'or'unchanged')..'; '..watch_state(slot.watch)..')')
+        ..(changed and'changed'or'unchanged')..(forgot and', re-resolve forced'or'')..'; '..watch_state(slot.watch)..')')
     if not changed then slot.held,slot.phase=slot.target,'hold'end
     self:changed()
 end
@@ -547,14 +620,23 @@ function Layer:tick(dt)
                 slot.watch=nil
                 fail(self,slot,w.error or w.status)
             elseif w.status=='waiting'and(w.runs or 0)>slot.mark then
-                slot.readopts=nil
+                slot.readopts,slot.nudged=nil,nil
                 slot.held,slot.phase=slot.steering,'hold'
                 slot.dirty=not util.same(slot.target,slot.held)
                 self:changed()
             else
                 local waited=(self.clock or 0)-(slot.steer_started or 0)
                 local settled=w.rebinds~=nil and w.rebinds~=slot.rebinds_at
-                if waited>=STALL and not settled and not slot.stalled then
+                if waited>=STALL and not settled and not slot.stalled and not slot.nudged
+                    and type(w.debug)=='function'and upvalue(w.debug,'applied_signature')then
+                    -- first, settle the same ensure again now with nothing to compare against
+                    local why=inspect(w,slot.handle)
+                    forget_applied(w,true)
+                    slot.nudged=true
+                    slot.steer_started=self.clock or 0
+                    note(self,'steer '..tostring(slot.row.key)..' did not settle after '..STALL..' s; settling it again ('
+                        ..why..')')
+                elseif waited>=STALL and not settled and not slot.stalled then
                     slot.stalled=true
                     slot.readopts=(slot.readopts or 0)+1
                     if slot.readopts>READOPTS then

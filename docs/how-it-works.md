@@ -84,6 +84,24 @@ changes (`on_status`) and every steer are written to `HD2Runtime.log`.
 If the stuck field still holds its original value, the stuck ensure is cancelled instead and the value is written
 directly by a fresh ensure (as above).
 
+## A steer is never skipped (0.7.1)
+
+Live, every steer after the first edit of a field stalled (r52 to r55): the ensure's settle ran but found the rebuilt
+signature equal to `applied_signature`, its record of what it last applied, so it took the no-op path (`rebinds`
+unchanged, nothing written). No offline run reproduces it. The editor therefore clears that record whenever it steers,
+which is what the Runtime's listener could do itself: the settle then always resolves again, and a value already in
+place is just `ALREADY_DESIRED`. The record is the `applied_signature` upvalue of `watch.debug` (r53), reached with
+LuaJIT's `debug` library; without either the editor behaves as before. The steer line in the log says
+`re-resolve forced` when this was done.
+
+If a steer still has not settled after 4 s, the editor first settles the same ensure again (record cleared,
+`dirty` set, no debounce) and logs what it found:
+- the handle's value;
+- the applied and the rebuilt signature;
+- `SAME` (the value did not reach the ensure) or `DIFFERENT` (the settle should have applied it).
+
+Only then does it take the field over with a fresh ensure, as above. A failed field starts fresh on its next edit.
+
 ## Helldiver, armor and attachments (r55)
 
 - **Helldiver** (`hd2.helldiver()`, `:zone(id)`): the rows are built from `domains/helldiver_writes.fields(path, zone)`.

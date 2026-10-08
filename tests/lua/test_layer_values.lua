@@ -117,6 +117,46 @@ layer:reset(wd)
 settle(wd)
 out[#out+1]='steer watchdog ok'
 
+-- a steer the ensure skips (live r52-r55: its settle found the signature it applied last) is settled again: the
+-- editor forgets the applied signature on every steer, and once more with a diagnostic when it still stalls
+local function find_up(fn,name,depth,seen)
+    seen=seen or{}
+    if type(fn)~='function'or seen[fn]or(depth or 0)>4 then return nil end
+    seen[fn]=true
+    for i=1,255 do
+        local n,v=debug.getupvalue(fn,i)
+        if n==nil then break end
+        if n==name then return fn,i,v end
+        if type(v)=='function'then
+            local f,k,x=find_up(v,name,(depth or 0)+1,seen)
+            if f then return f,k,x end
+        end
+    end
+end
+local sk=row_of('pw|AR-2 Coyote',function(r)return r.field=='weapon.horizontal_spread'end)
+run(1)
+assert(layer:set(sk,10));check(settle(sk)=='active','skip: first edit')
+assert(layer:set(sk,500));check(settle(sk)=='active','skip: re-adopted edit')
+local w=layer:slot_of(sk).watch
+check(select(2,find_up(w.debug,'applied_signature'))~=nil,'the ensure internals are reachable')
+-- the live failure, made to happen: right after the next steer, the ensure records the new value as already applied
+local function skip_now()
+    local f,i=find_up(w.debug,'applied_signature')
+    local build,signature,kind=select(3,find_up(w.tick,'build')),select(3,find_up(w.tick,'signature')),select(3,find_up(w.tick,'kind'))
+    debug.setupvalue(f,i,signature(kind,build(),true))
+end
+assert(layer:set(sk,40))
+layer:tick(0.1)
+check(layer:slot_of(sk).phase=='steer','steering')
+skip_now()
+local state=settle(sk)
+local diagnosed=false
+for _,line in ipairs(layer.history)do if line:find('settling it again')and line:find('SAME')then diagnosed=true end end
+check(diagnosed,'the skipped steer is diagnosed')
+check(state=='active'and util.same(layer:value(sk),40),'the skipped steer applied after settling again: '..tostring(state))
+layer:reset(sk);settle(sk)
+out[#out+1]='skipped steer settled again ok'
+
 -- Helldiver fields (hd2.helldiver(), 0.30.0-dev): a speed, a damage zone's enum and health
 local function cycle_number(r,value,label)
     run(1)
