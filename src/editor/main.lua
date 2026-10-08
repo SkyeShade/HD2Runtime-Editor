@@ -65,6 +65,12 @@ function M.start(hd2,id)
     local ledger=ledger_module.install(hd2,id)
     if ledger.error then log(ledger.error)end
     local catalog=catalog_module.new(hd2)
+    -- The Runtime's shared-record index (every catalogue's native locations) builds on its first use, about 60-130 ms
+    -- in one call: built now, while the game loads, instead of on the first frame the window is open.
+    pcall(function()
+        local shared_records=require('hd2runtime/core/shared_records')
+        if type(shared_records.entry)=='function'then shared_records.entry({})end
+    end)
     local layer=layer_module.new({hd2=hd2,id=id,ledger=ledger,catalog=catalog,log=log})
     local store
     do

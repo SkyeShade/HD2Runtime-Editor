@@ -380,7 +380,8 @@ function Layer:register(row,handle)
         end
         local request={patch=body.patch,transaction=body.transaction,startup_delay=0,interval=30,recover=true,
             on_status=function(status,info)
-                note(self,'ensure '..id..' '..tostring(info and info.previous)..' -> '..tostring(status)
+                note(self,'ensure '..id..' ('..tostring(row.object and row.object.name)..') '
+                    ..tostring(info and info.previous)..' -> '..tostring(status)
                     ..(info and info.error and(': '..tostring(info.error))or''))
             end}
         return self.hd2.events.run_as(self.id,function()return self.hd2.ensure(request)end)
@@ -401,7 +402,7 @@ local function fail(self,slot,why)
     else
         slot.phase,slot.user,slot.target='idle',false,nil
     end
-    note(self,'field '..tostring(slot.row.label)..': '..slot.error)
+    note(self,'field '..tostring(slot.row.object and slot.row.object.name)..' · '..tostring(slot.row.label)..': '..slot.error)
     self:changed()
 end
 

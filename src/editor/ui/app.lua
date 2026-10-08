@@ -884,7 +884,7 @@ function App:frame(d,dt)
     -- the native-bytes index of the whole catalogue, a few objects a frame (shared values, markers)
     if not self.catalog.indexed then
         local before=self.catalog.indexed
-        if self.catalog:index_step(6)and not before then self.marker_key=nil end
+        if self.catalog:index_step(6,0.003)and not before then self.marker_key=nil end
     end
     self.frame_dt=dt or 0
     if self.ctx.sounds and self.ctx.sounds.tick then self.ctx.sounds.tick(dt or 0)end

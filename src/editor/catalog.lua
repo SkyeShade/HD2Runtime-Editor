@@ -1622,9 +1622,11 @@ end
 -- Every open row on the same native bytes.
 function Catalog:siblings(row)return self.by_loc[row.loc]or{row}end
 -- Opens up to `budget` more objects (every category, in order) so the native-bytes index covers the whole catalogue;
--- true once every object is open. The editor calls it a few objects per frame, so the full index (about 20,000 rows)
--- builds in the background without a hitch.
-function Catalog:index_step(budget)
+-- true once every object is open. With `seconds`, it also stops once that much CPU time has passed (after at least
+-- one object). The editor calls it every frame with a few milliseconds, so the full index (about 20,000 rows) builds
+-- in the background without a hitch.
+function Catalog:index_step(budget,seconds)
+    local started=seconds and os.clock()
     if self.indexed then return true end
     self.index_queue=self.index_queue or{}
     if not self.index_categories then
@@ -1642,6 +1644,7 @@ function Catalog:index_step(budget)
         else
             local object=table.remove(self.index_queue,1)
             if not object.rows then self:open(object);opened=opened+1 end
+            if started and opened>0 and os.clock()-started>=seconds then return false end
         end
     end
     return false
