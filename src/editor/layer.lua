@@ -17,6 +17,10 @@
 --      mod's ensure stays held at the mod's value for the session, standing in for that ensure.
 -- A value outside a handle's range is reached by adopting again with a wider handle (step 1 with the editor's own
 -- ensure handed over). Every failure stops at the guards and is shown on the field; nothing is retried blindly.
+--
+-- Armor perks (rows with controller 'passives') are not ensures: the Runtime holds one hd2.player_passives.set
+-- override per game (the local player's own record, solo only). Both perk rows are applied together as one set();
+-- a change stops the previous handle and sets again; resetting both stops it (the armor's own passives return).
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local M={}
@@ -142,7 +146,7 @@ function Layer:slot_of(row)return self.slots[row.loc]end
 local function slot_for(self,row)
     local slot=self.slots[row.loc]
     if not slot then
-        slot={loc=row.loc,row=row,phase='idle'}
+        slot={loc=row.loc,row=row,phase='idle',passive=row.controller=='passives'or nil}
         self.slots[row.loc]=slot
     elseif row.key and(not slot.row or slot.row.mirror)then
         slot.row=row
@@ -340,8 +344,17 @@ function Layer:adopt(slot)
         group.slots[#group.slots+1]=s
         return true
     end
-    local base=self:base(row)
-    local ok,why=begin(slot,held,{slot.target,base})
+    local base,holder=self:base(row)
+    -- Direct: the game data still holds the field's original value and nobody else claims it, so the Runtime accepts
+    -- the user's value as the first write (expect = the original value): no adopt-then-steer. A steer that followed
+    -- an adopt was seen to be skipped live (r53: the ensure settled without writing), so a first edit never steers.
+    local target=slot.target~=nil and hold(row,slot.target)or nil
+    local direct=target~=nil and holder==nil and util.same(held,hold(row,row.vanilla))
+        and(slot.direct or(not slot.watch and#self.ledger:holders(slot.loc)==0))
+    slot.direct=nil
+    local ok,why
+    if direct then ok,why=begin(slot,target,{held,base})
+    else ok,why=begin(slot,held,{slot.target,base})end
     if not ok then return fail(self,slot,why)end
     if slot.watch then
         group.cancel[#group.cancel+1]={handle=slot.watch}
@@ -448,9 +461,77 @@ local function step_group(self,group)
     return true
 end
 
+-- Armor perks: one hd2.player_passives.set for both perk rows ('kit' / 'none' leave a slot to the armor).
+local BAD_PERK={refused=true,lost=true,replaced=true}
+local function perk_error(handle)
+    return tostring(handle.code or handle.status)..(handle.reason and(': '..tostring(handle.reason))or'')
+end
+local function step_perks(self)
+    local dirty,any=false,false
+    for _,slot in pairs(self.slots)do
+        if slot.passive then
+            any=true
+            if slot.dirty then dirty=true end
+        end
+    end
+    local perks=self.perks
+    if not dirty then
+        -- follow the held override: a refused, lost or replaced one shows on the edited perk rows
+        if perks and perks.handle then
+            local status=perks.handle.status
+            if status~=perks.status then
+                perks.status=status
+                note(self,'armor perks '..tostring(status)..(BAD_PERK[status]and(': '..perk_error(perks.handle))or''))
+                for _,slot in pairs(self.slots)do
+                    if slot.passive and slot.user then slot.error=BAD_PERK[status]and perk_error(perks.handle)or nil end
+                end
+                self:changed()
+            end
+        end
+        return
+    end
+    if not any then return end
+    local want={}
+    for loc,slot in pairs(self.slots)do
+        if slot.passive then
+            slot.dirty,slot.error=false,nil
+            local key=tostring(slot.row.field):match('([%w_]+)$')
+            local value=slot.user and slot.target or nil
+            if value~=nil and value~='kit'and value~='none'then want[key]=value end
+            if not slot.user then self.slots[loc]=nil end
+        end
+    end
+    if perks and perks.handle then pcall(perks.handle.stop,perks.handle)end
+    self.perks=nil
+    if next(want)==nil then
+        if perks then note(self,'armor perks: back to the armor\'s own')end
+        self:changed()
+        return
+    end
+    local spec={armor=want.armor,second=want.second,allow_unverified_effect=true}
+    local ok,handle=pcall(function()
+        return self.hd2.events.run_as(self.id,function()return self.hd2.player_passives.set(spec)end)
+    end)
+    local why
+    if not ok then why=tostring(handle)
+    elseif type(handle)~='table'then why='the Runtime returned no perk handle'
+    elseif BAD_PERK[handle.status]then why=perk_error(handle)end
+    if why then
+        note(self,'armor perks refused: '..why)
+        if ok and type(handle)=='table'then pcall(handle.stop,handle)end
+        for _,slot in pairs(self.slots)do if slot.passive and slot.user then slot.error=why end end
+    else
+        self.perks={handle=handle,status=handle.status}
+        note(self,'armor perks '..tostring(handle.status)..': armor '..tostring(want.armor or'own')..', second '
+            ..tostring(want.second or'none'))
+    end
+    self:changed()
+end
+
 -- Drives every field one update further. Cheap when nothing changes.
 function Layer:tick(dt)
     self.clock=(self.clock or 0)+(dt or 0)
+    step_perks(self)
     for i=#self.groups,1,-1 do
         if step_group(self,self.groups[i])then table.remove(self.groups,i)end
     end
@@ -458,8 +539,8 @@ function Layer:tick(dt)
     local list={}
     for _,slot in pairs(self.slots)do list[#list+1]=slot end
     for _,slot in ipairs(list)do
-        if self.slots[slot.loc]~=slot then
-            -- removed earlier in this pass
+        if self.slots[slot.loc]~=slot or slot.passive then
+            -- removed earlier in this pass, or an armor perk (step_perks)
         elseif slot.phase=='steer'then
             local w=slot.watch
             if FAILED[w.status]then
@@ -480,6 +561,14 @@ function Layer:tick(dt)
                         note(self,'steer '..tostring(slot.row.key)..' never settled after '..READOPTS..' fresh ensures: '
                             ..watch_state(w))
                         fail(self,slot,'the Runtime did not apply this change ('..watch_state(w)..')')
+                    elseif util.same(slot.held,hold(slot.row,slot.row.vanilla))and not select(2,self:base(slot.row))then
+                        -- the field holds its original value: stop the stuck ensure and write the value directly
+                        note(self,'steer '..tostring(slot.row.key)..' did not settle after '..STALL..' s ('..watch_state(w)
+                            ..'); the field holds its original value: applying directly with a fresh ensure')
+                        pcall(w.cancel)
+                        slot.watch,slot.handle,slot.phase,slot.direct=nil,nil,'idle',true
+                        slot.target=slot.steering
+                        self:adopt(slot)
                     else
                         note(self,'steer '..tostring(slot.row.key)..' did not settle after '..STALL..' s ('..watch_state(w)
                             ..'); taking the field over with a fresh ensure')

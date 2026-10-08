@@ -22,6 +22,7 @@ M.GROUPS={
         {id='support_backpacks',label='Support Backpacks',tone='support'},
         {id='vehicles',label='Vehicles',tone='support'},{id='resupply',label='Resupply',tone='support'}}},
     {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'}}},
+    {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'}}},
     {id='enemies',label='ENEMIES',items={
         {id='terminids',label='Terminids'},{id='automatons',label='Automatons'},{id='illuminate',label='Illuminate'},
         {id='structures',label='Structures'}}},
@@ -56,6 +57,13 @@ local function location(descriptor,fallback)
     if shared_records and type(backing)=='table'then
         local ok,key=pcall(shared_records.key,backing)
         if ok and key and backing.offset~=nil then return key..'@'..tostring(backing.offset)end
+    end
+    -- armor stats (not records): a kit's piece in one slot, or an entry of a game.dll table
+    if type(backing)=='table'and backing.kind=='armor_piece'and backing.kit and backing.slot then
+        return 'armor_kit/'..tostring(backing.kit)..'/'..tostring(backing.slot)
+    end
+    if type(backing)=='table'and backing.kind=='image_table'and backing.rva then
+        return 'image/'..tostring(backing.table)..'@'..tostring(backing.rva)
     end
     return fallback
 end
@@ -110,7 +118,8 @@ local function make_row(object,spec)
         shared=spec.shared==true,unverified=spec.unverified==true,descriptor=spec.descriptor,
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
             allow_unverified_reference=spec.unverified_reference==true or nil},
-        editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group}
+        editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group,
+        note=spec.note}
     row.loc=location(spec.descriptor,'row:'..row.key)
     if row.editable then
         local held=util.representable(row.vanilla,integer,spec.storage)
@@ -137,7 +146,8 @@ local function make_value_row(object,spec)
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.field,options=spec.options,labels=spec.labels,
         min=spec.min,max=spec.max,integer=spec.kind=='uses'or nil,directions=spec.directions,
         min_length=spec.min_length,max_length=spec.max_length,unlimited=spec.unlimited,group=spec.group,
-        modes=spec.modes,max_modes=spec.max_modes,slots=spec.slots}
+        modes=spec.modes,max_modes=spec.max_modes,slots=spec.slots,note=spec.note,controller=spec.controller,
+        export_reason=spec.export_reason}
     row.loc=location(spec.descriptor,'row:'..row.key)
     return row
 end
@@ -184,6 +194,7 @@ function M.rate_binding(row,value)
     return nil
 end
 function M.probe(row,value,acks)
+    if row.controller then return true,{}end
     if patches==nil then
         local ok,module=pcall(require,'hd2runtime/domains/patches')
         patches=ok and type(module)=='table'and type(module.validate)=='function'and module or false
@@ -875,16 +886,25 @@ local function booster_rows(hd2,object,entry)
 end
 
 ------------------------------------------------------------------------------------------- magazine options --
+-- An attachment's fields (shared by every weapon that can mount it): a magazine's capacity and ammo, and the stat
+-- modifiers of muzzles, optics and underbarrels (attachment.modifier.*: multipliers, ergonomics an addition).
+local MODIFIER_LABELS={sway='Sway multiplier',recoil_horizontal='Horizontal recoil multiplier',
+    recoil_vertical='Vertical recoil multiplier',climb_horizontal='Horizontal climb multiplier',
+    climb_vertical='Vertical climb multiplier',spread_horizontal='Horizontal spread multiplier',
+    spread_vertical='Vertical spread multiplier'}
 local function attachment_rows(hd2,object,entry)
     local rows={}
     local id=entry.semanticId
     for _,field_id in ipairs(util.sorted_keys(entry.fields or{}))do
         local f=entry.fields[field_id]
         if type(f.currentDefault)=='number'and f.editable~=false then
-            rows[#rows+1]=make_row(object,{id=field_id,label=util.humanize(field_id),vanilla=f.currentDefault,
+            local modifier=field_id:match('^attachment%.modifier%.(.+)$')
+            local label=f.displayName or MODIFIER_LABELS[modifier or'']
+                or(field_id=='attachment.ergonomics_modifier'and'Ergonomics')or util.humanize(field_id)
+            rows[#rows+1]=make_row(object,{id=field_id,label=label,vanilla=f.currentDefault,min=f.min,max=f.max,
                 type=INTEGER_STORAGE[f.storage or'']and'integer'or'number',storage=f.storage,field=field_id,
                 target=function()return hd2.weapon_attachment(id)end,shared=true,unverified=true,descriptor=f,
-                section='Magazine'})
+                section=util.humanize(entry.slot or'magazine')})
         end
     end
     return rows
@@ -962,19 +982,40 @@ local function part_rows(object,prefix,build,decorate)
 end
 local function append(into,rows)for _,r in ipairs(rows)do into[#into+1]=r end return into end
 
--- Magazine options of a player weapon: attachment id -> entry, for the weapon's own magazines (a collapsed group).
-local function weapon_magazines(name)
+-- A player weapon's attachments, each slot a collapsed group: its magazines (attachment_authoring weapons[name]) and
+-- its muzzles, optics and underbarrels (slots[name][slot], 0.30.0-dev). {{id, entry, group}}, sorted by name in a slot.
+local ATTACHMENT_GROUPS={{key='magazine',label='Magazines'},{key='muzzle',label='Muzzles'},{key='optics',label='Optics'},
+    {key='underbarrel',label='Underbarrels'}}
+local function weapon_attachments(name)
     local A=load('attachment_authoring')
-    if not A or type(A.weapons)~='table'then return {}end
-    local out={}
-    local ids=A.weapons[name]
-    if type(ids)~='table'then return out end
-    for _,item in pairs(ids)do
-        local id=type(item)=='table'and(item.semanticId or item.attachment or item.id)or item
-        local entry=type(id)=='string'and A.attachments and A.attachments[id]
-        if entry then out[#out+1]={id=id,entry=entry}end
+    if not A or type(A.attachments)~='table'then return {}end
+    local by_slot={}
+    local function add(slot,list)
+        if type(list)~='table'then return end
+        -- {default, options = {{attachment, name}}} (current) or a plain list of ids / {semanticId} (older domains)
+        local items=list.options or list
+        for _,item in pairs(items)do
+            local id=type(item)=='table'and(item.attachment or item.semanticId or item.id)or item
+            local entry=type(id)=='string'and A.attachments[id]
+            if entry then
+                by_slot[slot]=by_slot[slot]or{}
+                by_slot[slot][id]=entry
+            end
+        end
+        if type(list.default)=='string'and A.attachments[list.default]then
+            by_slot[slot]=by_slot[slot]or{}
+            by_slot[slot][list.default]=A.attachments[list.default]
+        end
     end
-    table.sort(out,function(a,b)return util.natural_less(a.entry.name or a.id,b.entry.name or b.id)end)
+    add('magazine',A.weapons and A.weapons[name])
+    for slot,list in pairs(A.slots and A.slots[name]or{})do add(slot,list)end
+    local out={}
+    for _,g in ipairs(ATTACHMENT_GROUPS)do
+        local list={}
+        for id,entry in pairs(by_slot[g.key]or{})do list[#list+1]={id=id,entry=entry,group=g.label}end
+        table.sort(list,function(a,b)return util.natural_less(a.entry.name or a.id,b.entry.name or b.id)end)
+        for _,item in ipairs(list)do out[#out+1]=item end
+    end
     return out
 end
 
@@ -1043,11 +1084,11 @@ local function player_category(slot)
                 list[#list+1]={key='pw|'..name,name=name,subtitle=entry.category,
                     build=function(object)
                         local rows=player_rows(cat.hd2,object,entry)
-                        for _,m in ipairs(weapon_magazines(name))do
+                        for _,m in ipairs(weapon_attachments(name))do
                             local label=util.plain((m.entry.name or m.id):gsub('%s+',' '),60)
                             append(rows,part_rows(object,'mag:'..m.id,function(proxy)
                                 return attachment_rows(cat.hd2,proxy,m.entry)
-                            end,function(row)row.group='Magazines';row.section=label end))
+                            end,function(row)row.group=m.group;row.section=label end))
                         end
                         return rows
                     end}
@@ -1239,6 +1280,184 @@ local function enemy_category(filter)
         return sorted_objects(list)
     end
 end
+------------------------------------------------------------------------------------------------ helldiver --
+-- The Helldiver type (hd2.helldiver(), HD2Runtime 0.30.0-dev; docs/helldiver-fields.md): movement speeds, stamina, the
+-- explosion share and the six body zones. Type records every Helldiver this machine simulates reads: each write needs
+-- allow_shared and allow_unverified_effect. An enum field takes a name; its labels are listed by native value.
+local HELLDIVER_LABELS={direction_factor='Strafe and backpedal factor',aim='Aiming',sprint_exhausted='Sprint (exhausted)',
+    crouch_aim='Crouched, aiming',crouch_walk='Crouched, walking',crouch_jog='Crouched, jogging',
+    crouch_sprint='Crouched, sprinting',prone='Prone',swim='Swimming',sprint_duration='Sprint duration',
+    recover_time_standing='Recovery standing',recover_time_crouching='Recovery crouching',
+    recover_time_prone='Recovery prone',recover_delay='Recovery delay',cost_jump='Cost of a jump',
+    cost_dodge='Cost of a dive',cost_climb='Cost of a climb',cost_slide='Cost of a slide',
+    explosive_damage_percentage='Explosion damage share',damage_multiplier='Damage multiplier',
+    damage_multiplier_dps='Damage over time multiplier',durable_resistance='Durable damage share',
+    affects_main_health='Main health share',health='Health'}
+local ZONE_LABELS={head='Head',body='Body',arm_left='Left arm',arm_right='Right arm',leg_left='Left leg',
+    leg_right='Right leg'}
+local function enum_labels(f)
+    local out={}
+    for name,native in pairs(type(f.allowedValues)=='table'and f.allowedValues or{})do
+        if type(name)=='number'then name,native=native,name-1 end
+        out[#out+1]={value=name,label=util.humanize(name),native=native}
+    end
+    table.sort(out,function(a,b)return a.native<b.native end)
+    return out
+end
+local function helldiver_field_row(object,f,target,section,group,note,zone)
+    local name=f.semanticFieldId:match('([^%.]+)$')
+    local common={id=(zone and(zone..':')or'')..f.semanticFieldId,label=HELLDIVER_LABELS[name]or util.humanize(name),
+        field=f.semanticFieldId,target=target,shared=true,unverified=true,descriptor=f,section=section,group=group,
+        unit=f.unit,note=note}
+    if f.type=='enum'then
+        common.kind,common.vanilla='choice',f.currentDefault
+        common.labels=enum_labels(f)
+        common.options=static_options(common.labels)
+        return make_value_row(object,common)
+    end
+    common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,
+        (f.backing or{}).storage
+    return make_row(object,common)
+end
+local function helldiver_rows(hd2,object)
+    local H=load('helldiver_writes')
+    if not H or type(H.fields)~='function'then error('this HD2Runtime has no Helldiver fields (0.30.0-dev)',0)end
+    local rows={}
+    local entity=function()return hd2.helldiver()end
+    local ship='Not on the ship: its Helldiver carries its own copy. Applies on the next deploy.'
+    for _,f in ipairs(H.fields('entity'))do
+        local id=f.semanticFieldId
+        local section=id:find('^helldiver%.speed%.')and'Speed'or id:find('^helldiver%.stamina%.')and'Stamina'
+            or'Damage'
+        rows[#rows+1]=helldiver_field_row(object,f,entity,section,nil,section=='Damage'and'Live, every Helldiver'or ship)
+    end
+    for _,zone in ipairs(H.ZONES or{})do
+        local zid=zone
+        local target=function()return hd2.helldiver():zone(zid)end
+        for _,f in ipairs(H.fields('damage_zone',zid))do
+            local note=f.semanticFieldId=='zone.health'and'Applies to Helldivers spawned after the change'
+                or'Live, every Helldiver'
+            rows[#rows+1]=helldiver_field_row(object,f,target,ZONE_LABELS[zid]or util.humanize(zid),'Damage Zones',note,zid)
+        end
+    end
+    return rows
+end
+
+-- Armor perks: the local player's own armor passive and a second passive (hd2.player_passives, solo only). Not an
+-- ensure: the layer's perk controller holds one hd2.player_passives.set handle for both rows (editor/layer.lua).
+local function passive_rows(hd2,object)
+    local P=hd2.passives
+    if type(P)~='table'or type(P.list)~='function'or type(hd2.player_passives)~='table'then
+        error('this HD2Runtime has no armor passives (0.30.0-dev)',0)
+    end
+    local armor={{value='kit',label="The armor's own"}}
+    local second={{value='none',label='None'}}
+    for _,p in ipairs(P.list())do
+        local name=title_case(p.name or('Passive '..tostring(p.id)))
+        armor[#armor+1]={value=p.id,label=name}
+        local slot_only=type(p.package_info)=='table'and#(p.package_info.armor_slot_only or{})>0
+        if p.id~=0 and not slot_only then second[#second+1]={value=p.id,label=name}end
+    end
+    local why='armor perks are held by the editor in this session (the Runtime keeps one perk override per game, solo only), not exported as a mod'
+    local function row(id,label,labels,vanilla,note)
+        return make_value_row(object,{id=id,kind='choice',label=label,field='player_passives.'..id,vanilla=vanilla,
+            labels=labels,options=static_options(labels),section='Armor perks',unverified=true,controller='passives',
+            note=note,export_reason=why,target=function()return hd2.player_passives end})
+    end
+    return {row('armor','Armor passive',armor,'kit','Your own armor, solo only; follows armor changes'),
+        row('second','Second passive',second,'none','Added to the armor passive (no stacking of the same bonus)')}
+end
+function CATEGORY.helldiver(cat)
+    if not load('helldiver_writes')and type(cat.real_hd2.passives)~='table'then
+        return nil,'this HD2Runtime has no Helldiver fields (HD2Runtime 0.30.0-dev)'
+    end
+    local list={}
+    if load('helldiver_writes')then
+        list[#list+1]={key='hd|Helldiver',name='Helldiver',subtitle='Every Helldiver',
+            build=function(object)return helldiver_rows(cat.hd2,object)end}
+    end
+    if type(cat.real_hd2.passives)=='table'and type(cat.real_hd2.player_passives)=='table'then
+        list[#list+1]={key='hd|Armor perks',name='Armor perks',subtitle='Your Helldiver',
+            build=function(object)return passive_rows(cat.real_hd2,object)end}
+    end
+    return list
+end
+
+-- Armor (hd2.armor_stats, HD2Runtime 0.30.0-dev; docs/armor-stats.md): each kit's piece weights, the per-weight class
+-- tables and the armor damage curve. Kits are named by id (several share a name).
+local WEIGHT_LABELS={{value='light',label='Light'},{value='medium',label='Medium'},{value='heavy',label='Heavy'}}
+local SLOT_LABELS={helmet='Helmet',cape='Cape',torso='Torso',hips='Hips',left_leg='Left leg',right_leg='Right leg',
+    left_arm='Left arm',right_arm='Right arm',left_shoulder='Left shoulder',right_shoulder='Right shoulder'}
+local CLASS_LABELS={rating='Armor value',speed='Speed factor',stamina='Stamina factor'}
+local function armor_note(f)
+    return f.lifecycle and('Applies: '..tostring(f.lifecycle))or nil
+end
+local function kit_rows(hd2,object,kit)
+    local W=load('armor_stats_writes')
+    local rows={}
+    local id=kit.id
+    for _,f in ipairs(W.kit_fields(kit))do
+        rows[#rows+1]=make_value_row(object,{id=f.semanticFieldId,kind='choice',label=SLOT_LABELS[f.slot]or util.humanize(f.slot),
+            field=f.semanticFieldId,vanilla=f.currentDefault,labels=WEIGHT_LABELS,options=static_options(WEIGHT_LABELS),
+            target=function()return hd2.armor_stats.kit(id)end,shared=true,unverified=true,descriptor=f,
+            section='Piece weights',note=armor_note(f)})
+    end
+    return rows
+end
+local function number_rows(object,fields,target,section,label_of)
+    local rows={}
+    for _,f in ipairs(fields)do
+        rows[#rows+1]=make_row(object,{id=f.semanticFieldId,label=label_of(f),vanilla=f.currentDefault,min=f.min,
+            max=f.max,type='number',storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=true,
+            unverified=true,descriptor=f,section=section,note=armor_note(f)})
+    end
+    return rows
+end
+function CATEGORY.armor(cat)
+    local D,why=load('armor_stats')
+    local W=load('armor_stats_writes')
+    if not D or not W or type(D.kits)~='table'then return nil,why or'this HD2Runtime has no armor stats (0.30.0-dev)'end
+    local hd2=cat.hd2
+    local list={}
+    list[1]={key='ar|classes',name='Armor classes',subtitle='Shared tables',
+        build=function(object)
+            local rows={}
+            for index,name in ipairs(D.classes or{})do
+                local class=name
+                append(rows,number_rows(object,W.class_fields(index-1),function()return hd2.armor_stats.class(class)end,
+                    util.humanize(name),function(f)
+                        return CLASS_LABELS[f.semanticFieldId:match('([^%.]+)$')]or util.humanize(f.semanticFieldId)end))
+            end
+            return rows
+        end}
+    list[2]={key='ar|damage curve',name='Armor damage curve',subtitle='Shared tables',
+        build=function(object)
+            return number_rows(object,W.curve_fields(),function()return hd2.armor_stats.damage_curve()end,
+                'Damage taken at each armor value',function(f)return 'At armor value '..tostring(f.armorValue)end)
+        end}
+    local passives=type(D.passives)=='table'and D.passives or{}
+    local seen={}
+    for _,kit in ipairs(D.kits)do seen[kit.name or'']=(seen[kit.name or'']or 0)+1 end
+    local kits={}
+    for _,kit in ipairs(D.kits)do
+        local entry=kit
+        local name=kit.name or('Armor '..tostring(kit.id))
+        if(seen[kit.name or'']or 0)>1 or not kit.name then name=name..' ('..tostring(kit.id)..')'end
+        local passive=passives[kit.passive]
+        local v=type(kit.vanilla)=='table'and kit.vanilla or{}
+        local detail={}
+        if passive and passive.name then detail[#detail+1]=title_case(passive.name)end
+        if v.rating then detail[#detail+1]='armor '..util.format(v.rating)end
+        if v.speed then detail[#detail+1]='speed '..util.format(v.speed)end
+        if v.stamina then detail[#detail+1]='stamina regen '..util.format(v.stamina)end
+        kits[#kits+1]={key='ar|'..tostring(kit.id),name=name,subtitle=util.humanize(kit.class or'armor')..' armor',
+            detail=table.concat(detail,' · '),
+            build=function(object)return kit_rows(hd2,object,entry)end}
+    end
+    for _,o in ipairs(sorted_objects(kits))do list[#list+1]=o end
+    return list
+end
+
 CATEGORY.terminids=enemy_category(function(e)return e.kind=='enemy'and e.faction=='terminids'end)
 CATEGORY.automatons=enemy_category(function(e)return e.kind=='enemy'and e.faction=='automatons'end)
 CATEGORY.illuminate=enemy_category(function(e)return e.kind=='enemy'and e.faction=='illuminate'end)
@@ -1250,7 +1469,7 @@ local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boost
     st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},
-    en={'terminids','automatons','illuminate','structures'}}
+    en={'terminids','automatons','illuminate','structures'},hd={'helldiver'},ar={'armor'}}
 
 ------------------------------------------------------------------------------------------------- catalogue --
 local Catalog={};Catalog.__index=Catalog

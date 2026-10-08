@@ -65,6 +65,18 @@ check(not layer:set(code,{'up','sideways'}),'unknown direction refused')
 check(not layer:set(code,{'up','up','up','up','up','up','up','up','up','up'}),'too long refused')
 check(not layer:set(uses,0),'uses below the minimum refused')
 out[#out+1]='refusals ok'
+-- a first edit of a field that holds its original value writes directly: no adopt-then-steer
+local spread=row_of('pw|AR-11 Arbitrator',function(r)return r.field=='weapon.horizontal_spread'end)
+run(1)
+local mark=#layer.history
+assert(layer:set(spread,10))
+check(settle(spread)=='active','spread active')
+check(S.value(spread)==10,'spread written: '..tostring(S.value(spread)))
+for i=mark+1,#layer.history do check(not layer.history[i]:find('^steer'),'no steer on a first edit: '..layer.history[i])end
+layer:reset(spread)
+check(settle(spread)=='idle','spread released')
+check(S.value(spread)==spread.vanilla,'spread back to its original value')
+out[#out+1]='direct first edit ok'
 -- an empty rate slot filled on a weapon without a rate selector: one transaction binds the selector with the rates
 local rates=row_of('pw|AR-23 Liberator',function(r)return r.kind=='rates'end)
 check(catalog.rate_binding(rates,{450,640,950})~=nil,'the Liberator needs its selector bound for three rates')
@@ -104,6 +116,65 @@ check(state=='active'and util.same(layer:value(wd),wd.vanilla),'the change appli
 layer:reset(wd)
 settle(wd)
 out[#out+1]='steer watchdog ok'
+
+-- Helldiver fields (hd2.helldiver(), 0.30.0-dev): a speed, a damage zone's enum and health
+local function cycle_number(r,value,label)
+    run(1)
+    assert(layer:set(r,value))
+    local state,why=settle(r)
+    check(state=='active',label..' active: '..tostring(state)..' '..tostring(why))
+    check(S.memory[r.loc]~=nil,label..' written')
+    layer:reset(r)
+    check(settle(r)=='idle',label..' released')
+end
+cycle_number(row_of('hd|Helldiver',function(r)return r.field=='helldiver.speed.sprint'end),7,'helldiver sprint')
+cycle(row_of('hd|Helldiver',function(r)return r.field=='zone.damage_multiplier'and r.key:find('|head:')end),'critical',
+    'helldiver head multiplier')
+cycle_number(row_of('hd|Helldiver',function(r)return r.field=='zone.health'and r.key:find('|leg_left:')end),200,
+    'helldiver leg health')
+out[#out+1]='helldiver fields ok'
+-- Armor (hd2.armor_stats): a kit's piece weight, a class factor and the damage curve
+cycle(row_of('ar|1F9BFA78',function(r)return r.field=='armor_kit.piece_weight.torso'end),'heavy','armor kit torso')
+cycle_number(row_of('ar|classes',function(r)return r.field=='armor_class.speed'end),1.2,'armor class speed')
+cycle_number(row_of('ar|damage curve',function(r)return r.field=='armor_damage_curve.at_0'end),1,'armor damage curve')
+out[#out+1]='armor stats ok'
+-- Armor perks: one hd2.player_passives.set for both rows; a refusal shows on the rows; reset stops the override
+local real_perks=hd2.player_passives
+local sets,stops={},0
+hd2.player_passives={set=function(spec)
+    sets[#sets+1]=spec
+    local h={status=spec.second==17 and'refused'or'active',code=spec.second==17 and'ARMOR_SLOT_ONLY'or nil,
+        reason='armor slot only'}
+    function h.stop()stops=stops+1;h.status='stopped'end
+    return h
+end}
+local perk_armor=row_of('hd|Armor perks',function(r)return r.field=='player_passives.armor'end)
+local perk_second=row_of('hd|Armor perks',function(r)return r.field=='player_passives.second'end)
+check(perk_armor.controller=='passives'and catalog.probe(perk_armor,2),'perk rows are controller rows')
+assert(layer:set(perk_armor,2))
+check(layer:state(perk_armor)=='applying','perk pending until the tick')
+run(0.2)
+check(layer:state(perk_armor)=='active'and#sets==1 and sets[1].armor==2 and sets[1].second==nil
+    and sets[1].allow_unverified_effect==true,'armor perk set')
+assert(layer:set(perk_second,7))
+run(0.2)
+check(#sets==2 and stops==1 and sets[2].armor==2 and sets[2].second==7,'both perks in one set, the old one stopped')
+assert(layer:set(perk_second,17))
+run(0.2)
+local state,why=layer:state(perk_second)
+check(state=='error'and tostring(why):find('ARMOR_SLOT_ONLY'),'a refused perk shows its reason: '..tostring(why))
+layer:reset(perk_second)
+run(0.2)
+check(layer:state(perk_armor)=='active'and sets[#sets].second==nil,'second perk reset, the armor perk set again')
+check(layer:overrides()[perk_armor.key]==2,'perks are saved with the session')
+layer:reset(perk_armor)
+run(0.2)
+check(layer:state(perk_armor)=='idle'and layer.perks==nil and stops==#sets,'all perks reset: the override stopped')
+local export=require('mods/skyeshade/hd2runtime_editor/editor/export')
+local text,reason=export.operation(catalog,{row=perk_armor,value=2},'x')
+check(text==nil and tostring(reason):find('not exported'),'perks are not exported: '..tostring(reason))
+hd2.player_passives=real_perks
+out[#out+1]='armor perks ok'
 
 -- a mod's ensure sets a calldown code; the editor takes it over and gives it back
 local precision=row_of('st|Orbital Precision Strike',function(r)return r.kind=='code'end)

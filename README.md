@@ -16,7 +16,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Export your changes as a mod.** The Export tab is a three-step wizard. Pick which changes to include, give the mod a name, version, author, description and an HD2 Arsenal image from your PC, then press Export. It writes a mod ZIP, ready for your mod manager, in ModBuilder's layout (see [Exporting a mod](#exporting-a-mod)). The values are also saved as a preset.
 - **The log, live.** The Logs tab follows `HD2Runtime.log` as it is written, coloured by kind (errors red, warnings orange, applied values green, the editor's own lines gold), with filters and buttons to open the file or its folder.
 - **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state, coloured like the game colours their carrier (offensive red, defensive green, support blue). Their cooldown and uses can be tuned on this machine, from the next call.
-- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,300 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
+- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters), Helldiver (Helldiver, Armor) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 19,800 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
 - **One stratagem, one place.**
   - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
   - A support backpack holds its call-in, the backpack, its drone weapon (Guard Dogs) and its hellpod.
@@ -25,10 +25,14 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     autocannon, for example). Once a mount is swapped, its weapon group shows the weapon it now holds, so the
     projectile and stats you edit are that weapon's. The group says which other vehicle shares those records.
   - A backpack that comes with a support weapon is never shown on its own.
-  - Magazine options sit inside each weapon that uses them.
+  - A weapon's attachments sit inside it: its magazines, muzzles, optics and underbarrels, each with its stat modifiers (sway, recoil, climb, spread, ergonomics). An attachment is shared by every weapon that can mount it.
 - **Weapon groups.** Primary and Secondary have a filter under the search box with the armory's groups (Assault
   Rifle, Marksman Rifle, Submachine Gun, Shotgun, Explosive, Energy-Based, Special; Pistol, Melee, Special).
-- **Tidy long lists.** Damage zones (vehicles, deployables, enemies), enemy attacks, magazines and vehicle weapons are groups that start closed. Each part inside them opens on its own.
+- **Your Helldiver and their armor** (HD2Runtime r55).
+  - **Helldiver:** movement speeds, stamina, the explosion damage share and the six body zones (damage multipliers, durable share, health). They apply to every Helldiver; speed and stamina do not reach the ship, whose Helldiver carries its own copy.
+  - **Armor perks:** your own armor passive and a second passive on top of it. They are solo only and held for the session, not exported (see [Limitations](#limitations)).
+  - **Armor:** every armor's piece weights (light, medium, heavy, per piece), the per-weight armor value, speed and stamina tables, and the armor damage curve. The list filters by weight; each armor shows its passive and its stats.
+- **Tidy long lists.** Damage zones (vehicles, deployables, enemies, Helldivers), enemy attacks, attachments and vehicle weapons are groups that start closed. Each part inside them opens on its own.
 - **More than numbers.**
   - **Calldown codes:** an arrow-key code editor. Right-click an arrow to remove it; DEFAULT restores the game's code.
   - **Fire modes and rate-of-fire modes**, as in ModBuilder. Filling an empty rate slot on a weapon without a rate selector (the Liberator, for example) binds the game's own selector in the same write.
@@ -47,16 +51,17 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.6.0, development build for HD2Runtime r53.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 and 0.6.0 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab) are not live-tested yet.
+> **Status: 0.7.0, development build for HD2Runtime r55.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 to 0.7.0 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab, the Helldiver, Armor and attachment fields) are not live-tested yet.
 
 ## Requirements
 
 - Helldivers 2
 - Bingus Shared Loader v15+
-- **HD2Runtime 0.30.0-dev r53 or later.**
+- **HD2Runtime 0.30.0-dev r53 or later; r55 for the Helldiver and Armor categories.**
   - r50 adds script choices (`mod:choice`, for non-numeric fields), overlay images (`d:image`, for icons), cursor capture (`overlay:free_cursor`), the overlay text placement fix, and naming the mod behind each applied value for mods built without the SDK wrapper.
   - r51 adds, in its SDK, the HUD icon extractor that [Game icons](#game-icons) uses.
   - r52 adds the mouse wheel's native hook (`hd2.input.wheel`), following choices (filling empty rate slots), every mod's options (`hd2.diagnostics.options`) and custom stratagem tuning.
+  - r55 adds the Helldiver fields (`hd2.helldiver()`), armor stats (`hd2.armor_stats`), armor passives (`hd2.player_passives`) and the muzzle, optics and underbarrel stats. On an older Runtime the Helldiver and Armor categories say they are unavailable.
   - r53 keeps keys, clicks and the wheel from the game while the editor is open (`hd2.input.block`). On r50 or r51 the rest works: the lists scroll with the scrollbar, filling an empty rate slot is refused with the reason, and the Custom tab and the options are read-only or empty.
   - On an older 0.30.0-dev with the UI services (`hd2.ui.overlay`, `hd2.store`, `hd2.on_frame`, `hd2.input.pressed`), numbers still edit. Non-numeric fields then explain that they need r50, and icons and cursor capture are simply absent.
   - Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
@@ -130,6 +135,8 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 - **Swapped mounts share records.** A mounted weapon's stats are one set of records, so a swapped mount edits the same weapon on its own vehicle too (the group says which). A mount without its own catalogued weapon shows that its stats are not editable.
 - **Mods that are not HD2Runtime mods.** The editor lists them from your mod manager's own records; it cannot see or change what they do.
 - **Custom stratagems.** Only their cooldown and uses can change after registration, and only on this machine.
+- **Armor perks.** They change your own Helldiver only, in solo games, and only one mod at a time may change them. They last for the session (and come back with the session restore). They are not part of an exported mod.
+- **Armor weights.** A piece's armor value changes on the next hit. Its speed and stamina change the next time the game applies the armor (a respawn or an armor change).
 - **Multiplayer.** Writes follow HD2Runtime's rules. They change this machine's game data; what the host decides still wins.
 
 ## Exporting a mod

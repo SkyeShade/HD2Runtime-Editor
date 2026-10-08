@@ -279,6 +279,7 @@ end
 -- One operation's Lua text for a change {row, value}, or nil and why.
 function M.operation(catalog_module,entry,id)
     local row,value=entry.row,entry.value
+    if row.controller then return nil,row.export_reason or'this change is not an ensure and cannot be exported'end
     local ok,text=pcall(function()
         local target=M.trace(row.target)
         local expect=row.expect and M.trace(row.expect)or literal(row.vanilla)

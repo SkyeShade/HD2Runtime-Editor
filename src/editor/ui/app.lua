@@ -1006,7 +1006,8 @@ function App:draw_fields(y0,h)
         local _,source=self:row_view(row)
         if source=='pending'or source=='editor'then edited=edited+1 end
     end
-    local sub=(object.subtitle and(object.subtitle..'   ')or'')..#object.rows..' fields'
+    local sub=(object.subtitle and(object.subtitle..'   ')or'')..(object.detail and object.detail~=''and(object.detail..'   ')or'')
+        ..#object.rows..' fields'
         ..(edited>0 and('   '..edited..' edited')or'')
     cv:text(sub,hx,y0+47,{size=SZ.small,colour=C.faint,max=w-40-(hx-x0)})
     if object.error then cv:text(L('Could not read: ')..object.error,x0+20,y0+70,{size=SZ.small,colour=C.error,max=w-40})end
@@ -1163,6 +1164,9 @@ function App:draw_status(y,h)
         if row.shared then x=x+chip(cv,L('SHARED'),x,cy,C.pending,C.pending_soft)+6 end
         if row.unverified then x=x+chip(cv,L('UNVERIFIED EFFECT'),x,cy,C.faint,C.line)+6 end
         local _,base_holder=self.layer:base(row)
+        if row.note and not base_holder then
+            cv:text(L(row.note),x+10,cy,{size=SZ.small,colour=C.faint,max=math.max(40,maxw-x-10)})
+        end
         if base_holder then
             x=x+10
             local page=self:option_page_of(base_holder.op)

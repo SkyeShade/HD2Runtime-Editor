@@ -64,6 +64,14 @@ trait ids, edited in a two-column picker). Both write the weapon's five label sl
 `Layer:set` refuses one while the editor holds the other. Both need `allow_unverified_effect`. They are read when a menu
 builds its item view.
 
+## A first edit writes directly
+
+A field that still holds its original value, which no mod holds and no editor ensure watches, is not adopted and then
+steered. The editor registers one ensure whose script value starts at the user's value; its expect is the original
+value, so its first resolution writes the change. A steer that followed an adopt was seen live to settle without
+writing (r53: `applied_signature` equal to the new signature, `rebinds` 1), so a first edit never steers. Adopt and
+steer remain for fields a mod holds and for later edits of a field the editor already holds.
+
 ## When a change does not confirm
 
 The layer waits for the ensure to report `waiting` with one more completed run after a steer. If the ensure has not even
@@ -72,6 +80,28 @@ adopted again at the value it holds and steered from there, at most twice. A ste
 after 20 s shows an error with the ensure's state (`status`, `runs`, `rebinds`, `recoveries`, `error`, and on r53 its
 `debug()` settle state) instead of applying forever. Every editor ensure's status
 changes (`on_status`) and every steer are written to `HD2Runtime.log`.
+
+If the stuck field still holds its original value, the stuck ensure is cancelled instead and the value is written
+directly by a fresh ensure (as above).
+
+## Helldiver, armor and attachments (r55)
+
+- **Helldiver** (`hd2.helldiver()`, `:zone(id)`): the rows are built from `domains/helldiver_writes.fields(path, zone)`.
+  The enum fields (`zone.damage_multiplier`, `zone.damage_multiplier_dps`) are choices of the enum's names, listed by
+  native value. Every row carries `allow_shared` and `allow_unverified_effect`.
+- **Armor** (`hd2.armor_stats`):
+  - one object per kit from `domains/armor_stats.kits`, keyed by id (several kits share a name; those show their id);
+    its piece weights are choices (`light`, `medium`, `heavy`) from `armor_stats_writes.kit_fields(kit)`;
+  - the class tables (`class_fields(0..2)`, target `hd2.armor_stats.class(name)`) and the damage curve
+    (`curve_fields()`, target `hd2.armor_stats.damage_curve()`).
+  These are not component records: their location key is `armor_kit/<id>/<slot>` or `image/<table>@<rva>`.
+- **Armor perks** (`hd2.player_passives.set`): not an ensure. The two perk rows (`controller = 'passives'`) are applied
+  together by the layer's perk controller. A change stops the previous handle and calls `set` again; resetting both
+  stops it. The handle's status is followed, so a refused, lost or replaced override shows on the rows. The exporter
+  skips them with that reason.
+- **Attachments:** a weapon's magazines (`attachment_authoring.weapons[name]`) and its muzzles, optics and
+  underbarrels (`slots[name][slot]`), each slot a closed group. The `attachment.modifier.*` fields are multipliers and
+  `attachment.ergonomics_modifier` an addition; target `hd2.weapon_attachment(id)`.
 
 ## Exporting (editor/export.lua)
 
