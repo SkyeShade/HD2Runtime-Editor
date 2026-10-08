@@ -328,6 +328,29 @@ local conc=open_object('pw|AR-23C Liberator Concussive')
 local mags=0
 for _,r in ipairs(conc.rows)do if r.group=='Magazines'then mags=mags+1 end end
 assert(mags>0,'the Concussive carries its magazine options')
+-- a two-mode weapon carries its underbarrel weapon (a separate entity): the One-Two's launcher rounds and resupply
+do
+    local one_two=open_object('pw|AR/GL-21 One-Two')
+    local ub={}
+    for _,r in ipairs(one_two.rows)do if r.group=='Underbarrel Weapon'then ub[r.field]=r end end
+    for _,id in ipairs({'rounds.spare_rounds','rounds.rounds_from_supply','rounds.starting_rounds','weapon.fire_rate'})do
+        assert(ub[id]and ub[id].editable,'the One-Two underbarrel has '..id)
+    end
+    local spare=ub['rounds.spare_rounds']
+    assert(spare.target().weapon=='AR/GL-21 One-Two / underbarrel','written on the underbarrel weapon')
+    local host_spare
+    for _,r in ipairs(one_two.rows)do if r.field=='rounds.spare_rounds'and r.group==nil then host_spare=r end end
+    assert(not host_spare or host_spare.key~=spare.key and host_spare.loc~=spare.loc,'apart from the rifle\'s own rounds')
+    assert(H.app:stage(spare,spare.vanilla+4));H.app:apply();settle(6)
+    assert(H.layer:state(spare)=='active'and H.sim.value(spare)==spare.vanilla+4,'the launcher spare rounds applied')
+    assert(H.app:stage(spare,spare.vanilla));H.app:apply();settle(6)
+    assert(H.layer:state(spare)~='active','and reset')
+    local arb,stoker=open_object('pw|AR-11 Arbitrator'),open_object('pw|SMG/FLAM-34 Stoker')
+    local n_arb,n_stoker=0,0
+    for _,r in ipairs(arb.rows)do if r.group=='Underbarrel Weapon'then n_arb=n_arb+1 end end
+    for _,r in ipairs(stoker.rows)do if r.group=='Underbarrel Weapon'then n_stoker=n_stoker+1 end end
+    assert(n_arb>=7 and n_stoker>=2,'the Arbitrator and Stoker underbarrels: '..n_arb..' '..n_stoker)
+end
 -- fire modes and rate-of-fire modes
 local p19=open_object('pw|P-19 Redeemer')
 local modes,rates

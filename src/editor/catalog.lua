@@ -1100,6 +1100,16 @@ local function player_category(slot)
                     detail=entry.ordinaryWritesBlocked and'stats read only (HD2Runtime blocks this weapon for now)'or nil,
                     build=function(object)
                         local rows=player_rows(cat.hd2,object,entry)
+                        -- its underbarrel weapon (One-Two launcher, Arbitrator shotgun, Stoker flamer): a separate weapon
+                        -- entity with its own rounds, fire rate and spread, written through hd2.weapon('<host> / underbarrel')
+                        for _,sub in ipairs(entry.subweapons or{})do
+                            local sub_entry=W.weapons[sub.name]
+                            if sub_entry then
+                                append(rows,part_rows(object,'ub:'..sub.name,function(proxy)
+                                    return player_rows(cat.hd2,proxy,sub_entry)
+                                end,function(row)row.group='Underbarrel Weapon'end))
+                            end
+                        end
                         for _,m in ipairs(weapon_attachments(name))do
                             local label=util.plain((m.entry.name or m.id):gsub('%s+',' '),60)
                             append(rows,part_rows(object,'mag:'..m.id,function(proxy)
