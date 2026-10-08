@@ -179,6 +179,17 @@ function M.install(App)
 
     ---------------------------------------------------------------------------------------------- MODS --
     -- Every mod: the mod manager's list (when readable), the HD2Runtime mods the Runtime knows, their options.
+    -- A mod's title: its name, and its version when the name does not already end with it (mod managers usually name
+    -- a mod "AMR Fixed 1.0.0", "Name v1.0.0" or "Name (1.0.0)").
+    function App.mod_title(mod)
+        local name,version=tostring(mod.name or''),mod.version and tostring(mod.version)or nil
+        if not version or version==''then return name end
+        local plain=version:gsub('^[vV]','')
+        local tail=name:lower():gsub('[%s%)%]]+$','')
+        local v=plain:lower():gsub('%p','%%%0')
+        if tail:find('[%s%(%[_%-]v?'..v..'$')or tail==plain:lower()then return name end
+        return name..'  '..version
+    end
     function App:installed_mods()
         if not self.installed_reader then
             local known={}
@@ -333,7 +344,7 @@ function M.install(App)
         cv:rect(x0,y0,w,h,C.panel,1)
         if not mod then return end
         self:draw_mod_icon(mod,x0+20,y0+14,46)
-        cv:text(mod.name..(mod.version and('  '..mod.version)or''),x0+78,y0+28,{size=20,font='title',colour=C.text,max=w-100})
+        cv:text(App.mod_title(mod),x0+78,y0+28,{size=20,font='title',colour=C.text,max=w-100})
         local sub
         if mod.self then sub=L('HD2R Editor itself')
         elseif mod.runtime then

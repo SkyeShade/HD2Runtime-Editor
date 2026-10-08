@@ -606,4 +606,12 @@ settle(6)
 assert(H.layer:state(rof)~='active'and H.sim.value(rof)==1200,'RESET returned the field to the mod value: '
     ..tostring(H.sim.value(rof)))
 for _,c in ipairs(H.app:changes())do assert(c.row~=rof,'the change is gone from the list')end
+-- a mod's title shows its version once: not again when the name already ends with it
+local title=H.app.mod_title
+assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')
+assert(title({name='Roulette v2.1',version='2.1'})=='Roulette v2.1','name ending in v + version')
+assert(title({name='Buff (0.6.0)',version='0.6.0'})=='Buff (0.6.0)','name ending in (version)')
+assert(title({name='Concussive1100',version='0.6.0'})=='Concussive1100  0.6.0','version appended when missing')
+assert(title({name='Mod 11.0',version='1.0'})=='Mod 11.0  1.0','11.0 is not 1.0')
+assert(title({name='No version'})=='No version','no version')
 return 'ui ok ('..frames..' frames)'
