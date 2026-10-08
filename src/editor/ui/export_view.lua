@@ -301,6 +301,12 @@ function M.install(App)
             cv:hit(24,y,W-264,fh,action)
             y=y+fh+12
         end
+        local risky=0
+        for _,e in ipairs(list)do if x.selected[e.row.key]and e.row.risk=='gameguard'then risky=risky+1 end end
+        if risky>0 then
+            cv:text(L('%d of these changes write game.dll\'s own data (armor classes, damage curve): GameGuard was reported to close the game after them.')
+                :format(risky),200,y+66,{size=SZ.small,colour=C.error,max=W-440})
+        end
         local version_ok=tostring(x.meta.version):match('^%d+%.%d+%.%d+$')~=nil
         if not version_ok then cv:text(L('The version must look like 1.0.0'),200,y+4,{size=SZ.small,colour=C.error})end
         cv:text(L('Resource id: %s'):format('mods/'..export.slug(x.meta.author)..'/'..export.slug(x.meta.name)),200,y+26,

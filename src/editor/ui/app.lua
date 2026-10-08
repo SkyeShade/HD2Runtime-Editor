@@ -378,6 +378,11 @@ function App:stage(row,value)
     if staged and self.pending[row.key]then
         local names=self:shared_names(row)
         if names then self:toast(L('Shared value: this also changes %s'):format(names),C.pending)end
+        -- once a session: the edits GameGuard was reported to react to
+        if row.risk=='gameguard'and not self.gameguard_warned then
+            self.gameguard_warned=true
+            self:toast(L('Careful: ')..L(catalog_module.GAMEGUARD_RISK),C.error)
+        end
     end
     return staged
 end
@@ -1428,8 +1433,13 @@ function App:draw_status(y,h)
         x=x+cv:text(range..(row.integer and', whole numbers'or''),x,cy,{size=SZ.small,colour=C.faint,max=240})+14
         local shared_names,shared_n=self:shared_names(row,2)
         if row.shared or shared_n>0 then x=x+chip(cv,L('SHARED'),x,cy,C.pending,C.pending_soft)+6 end
+        if row.risk=='gameguard'then x=x+chip(cv,L('GAMEGUARD RISK'),x,cy,C.error,C.error_soft)+6 end
         if row.unverified then x=x+chip(cv,L('UNVERIFIED EFFECT'),x,cy,C.faint,C.line)+6 end
         local _,base_holder=self.layer:base(row)
+        if row.risk=='gameguard'and not base_holder then
+            cv:text(L(catalog_module.GAMEGUARD_RISK),x+10,cy,{size=SZ.small,colour=C.error,max=math.max(40,maxw-x-10)})
+            return
+        end
         if shared_names and not base_holder then
             x=x+10+cv:text(L('also changes %s'):format(shared_names),x+10,cy,
                 {size=SZ.small,colour=C.pending,max=math.max(40,maxw-x-10)})

@@ -718,27 +718,41 @@ do
     step({'DELETE'})
     assert(H.app:hotkey()=='F8','Del returns to F8')
 end
--- a weapon HD2Runtime blocks (duplicate identity: LAS-5 Scythe) shows its stats as locked rows with the reason
+-- a weapon HD2Runtime blocks (a duplicate identity) shows its stats as locked rows with the reason; one it no longer
+-- blocks is editable (HD2Runtime 0.30.2 resolves the seven 0.30.1 duplicates)
 do
-    local scythe=H.catalog:object('pw|LAS-5 Scythe')
-    H.catalog:open(scythe)
-    local locked,heat,editable_attachment=0,nil,false
-    for _,r in ipairs(scythe.rows)do
-        if not r.editable then locked=locked+1 end
-        if r.field=='heat.capacity'then heat=r end
-        if r.editable and r.group then editable_attachment=true end
+    local W=require('hd2runtime/domains/player_weapon_authoring')
+    local blocked
+    for name,w in pairs(W.weapons)do
+        if w.ordinaryWritesBlocked and not w.subweaponOf and(w.slot=='primary'or w.slot=='secondary')
+            and(not blocked or name<blocked)then blocked=name end
     end
-    assert(heat and not heat.editable and heat.vanilla==100 and heat.reason:find('two game records',1,true),
-        'heat capacity shown, locked, with the reason')
-    assert(locked>=20,'its stats are shown locked: '..locked)
-    assert(editable_attachment,'its attachments stay editable')
-    assert(scythe.detail and scythe.detail:find('read only',1,true),'the header says so')
-    local before=H.app.pending_n
-    assert(H.app:stage(heat,150)==false and H.app.pending_n==before,'a locked row cannot be staged')
-    for i,item in ipairs(H.app.categories)do if item.id=='primary'then H.app:select_category(i)end end
-    H.app:set_view('browse')
-    H.app:reveal(heat)
-    step({},nil,'52_locked_weapon')
+    if blocked then
+        local weapon=H.catalog:object('pw|'..blocked)
+        H.catalog:open(weapon)
+        local locked,row=0,nil
+        for _,r in ipairs(weapon.rows)do
+            if not r.editable and r.reason and r.reason:find('two game records',1,true)then
+                locked=locked+1
+                row=row or r
+            end
+        end
+        assert(row and locked>=5,blocked..': its stats are shown locked with the reason: '..locked)
+        assert(weapon.detail and weapon.detail:find('read only',1,true),'the header says so')
+        local before=H.app.pending_n
+        assert(H.app:stage(row,(type(row.vanilla)=='number'and row.vanilla or 0)+1)==false and H.app.pending_n==before,
+            'a locked row cannot be staged')
+        for i,item in ipairs(H.app.categories)do if item.id==W.weapons[blocked].slot then H.app:select_category(i)end end
+        H.app:set_view('browse')
+        H.app:reveal(row)
+        step({},nil,'52_locked_weapon')
+    else
+        local scythe=H.catalog:object('pw|LAS-5 Scythe')
+        H.catalog:open(scythe)
+        local editable=0
+        for _,r in ipairs(scythe.rows)do if r.editable and not r.group then editable=editable+1 end end
+        assert(editable>0 and not scythe.detail,'the Scythe is editable once HD2Runtime resolves it: '..editable)
+    end
 end
 -- shared values: rows on different objects that write the same bytes. The index covers the whole catalogue; a value
 -- staged through one shows on every other, marks every object, and says what else it changes
@@ -856,6 +870,35 @@ do
     modbuilder.base=nil
     H.app.mb_list=nil
     os.execute('rmdir /s /q "'..base..'" 2>nul')
+end
+-- armor class tables and the damage curve write game.dll's own data: GAMEGUARD RISK on those rows, a warning on the
+-- first stage, none on a kit's piece weights
+do
+    local classes=H.catalog:object('ar|classes')
+    if classes then
+        H.catalog:open(classes)
+        local row
+        for _,r in ipairs(classes.rows)do if r.editable and not row then row=r end end
+        assert(row and row.risk=='gameguard','a class value carries the risk')
+        assert(classes.detail and classes.detail:find('GameGuard',1,true),'the object says so in the list')
+        H.app.gameguard_warned=nil
+        assert(H.app:stage(row,row.vanilla+0.5))
+        assert(H.app.toast_msg.text:find('GameGuard',1,true),'staging warns: '..H.app.toast_msg.text)
+        H.app:set_view('browse')
+        H.app:reveal(row)
+        local d=step({},nil,'58_gameguard_risk')
+        local chip,text
+        for _,it in ipairs(d.items)do
+            if it.k=='t'and it.s=='GAMEGUARD RISK'then chip=true end
+            if it.k=='t'and it.s:find('GameGuard was reported',1,true)then text=true end
+        end
+        assert(chip and text,'the status bar shows the risk and why')
+        H.app:unstage(row)
+        local kit
+        for _,o in ipairs(H.catalog:objects('armor'))do if o.key~='ar|classes'and o.key~='ar|damage curve'then kit=o;break end end
+        H.catalog:open(kit)
+        for _,r in ipairs(kit.rows)do assert(r.risk==nil,'kit piece weights are ordinary data')end
+    end
 end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title

@@ -128,6 +128,7 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 ## Limitations
 
 - **Seven weapons are read only for now.** HD2Runtime cannot yet tell apart the two game records behind the LAS-5 Scythe, LAS-7 Dagger, CQC-42 Machete, CQC-73 Entrenchment Tool, GP-31 Grenade Pistol, P-72 Crisper and SMG-37 Defender, so it blocks writes to them. The editor still shows their stats, marked LOCKED; their attachments stay editable.
+- **Armor classes and the damage curve may trigger GameGuard.** Those values live in the game's own program data (game.dll), and a player reported GameGuard closing the game after changing them. The editor marks those rows GAMEGUARD RISK and warns when you stage one. A kit's piece weights are ordinary game data and are not affected.
 - **Not every value type.** Weapon functions, function projectiles, sounds and stratagem presentation stay with ModBuilder.
 - **Fields that move together.**
   - The default fire mode can only be reordered, never held at its own value, so it is left out.
