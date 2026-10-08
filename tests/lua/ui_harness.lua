@@ -27,6 +27,7 @@ local presets=presets_module.new(store)
 -- Scripted input: keys pressed this frame, keys held, mouse.
 local input={pressed={},down={},mouse=nil}
 local fake={input={
+    wheel=function()return input.wheel or 0 end,
     pressed=function(name)return input.pressed[name]==true end,
     down=function(name)return input.down[name]==true or input.pressed[name]==true end}}
 -- a custom stratagem a mod registered (hd2.custom_stratagem, HD2Runtime r51 tune/untune)
@@ -119,6 +120,7 @@ function H_.frame(keys,opts)
     input.down={}
     for _,k in ipairs(opts.down or{})do input.down[k]=true end
     input.mouse=opts.mouse
+    input.wheel=opts.wheel
     local dt=opts.dt or 1/60
     S.tick(dt,dt)
     layer:tick(dt)

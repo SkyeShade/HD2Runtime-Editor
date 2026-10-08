@@ -10,14 +10,14 @@ Every icon is the game's own pixels: nothing is drawn, traced or converted from 
    (sdk/tools/hd2_hud_icons.py). Nothing is written to the game folder.
 2. A stratagem sprite is already the game's icon masks (R the category colour layer, G the white layer); it is
    written as it is, 256 x 256.
-3. A booster sprite is a colour picture (a yellow plate with a dark glyph). Its pixels are split onto the masks: the
-   plate's coverage on R, the glyph's on B, anything light and unsaturated on G, with the plate and glyph colours
-   measured from the sprite itself, so the overlay draws the same picture (HD2Runtime d:image colours R, G and B).
+3. A booster sprite is a colour picture (a yellow plate with the glyph cut out of it). Only the plate goes on the R
+   mask, in the plate colour measured from the sprite itself; the glyph and everything else stay empty, so they are
+   transparent as on the loadout screen.
 4. The accent colour of a stratagem (what the overlay paints R with) is the colour the game's own loadout icon
    library gives that stratagem's icon; a stratagem that library leaves out takes its family's colour from the same
    library.
 5. Writes images/si_<id>.png and images/bi_<id>.png, and src/editor/generated/game_icons.lua: name -> {image,
-   accent, dark}. An item without a sprite (SG-88 and CQC-72 have no call-in stratagem) gets no icon; the editor
+   accent}. An item without a sprite (SG-88 and CQC-72 have no call-in stratagem) gets no icon; the editor
    then draws a plain colour square.
 
 The images are derived from Arrowhead's artwork. They are git-ignored and are packed only into builds you make
@@ -150,13 +150,7 @@ def booster_mask(image):
             if a == 0:
                 continue
             share = min(1.0, (max(r, g, b) - min(r, g, b)) / plate_sat)
-            red = round(a * share)
-            rest = a - red
-            lum = (r * 299 + g * 587 + b * 114) // 1000
-            if lum < 128:
-                out[x, y] = (red, 0, rest)
-            else:
-                out[x, y] = (red, rest, 0)
+            out[x, y] = (round(a * share), 0, 0)
     return mask, plate_rgb, glyph_rgb
 
 
@@ -237,7 +231,7 @@ def main():
         iid = image_id('booster', b['name'])
         mask, plate, glyph = booster_mask(Image.frombytes('RGBA', (w, h), rgba))
         images[iid] = mask
-        mapping['booster'][b['name']] = {'image': iid, 'accent': plate, 'dark': glyph}
+        mapping['booster'][b['name']] = {'image': iid, 'accent': plate}
 
     clean(quiet=True)
     IMAGES.mkdir(exist_ok=True)

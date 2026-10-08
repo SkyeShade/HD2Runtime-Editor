@@ -66,9 +66,11 @@ builds its item view.
 
 ## When a change does not confirm
 
-The layer waits for the ensure to report `waiting` with one more completed run after a steer. If it has not after 4 s,
-the handle is set away and back once, so its listener fires again. After 20 s the field shows an error with the ensure's
-state (`status`, `runs`, `rebinds`, `recoveries`, `error`) instead of applying forever. Every editor ensure's status
+The layer waits for the ensure to report `waiting` with one more completed run after a steer. If the ensure has not even
+started to apply after 4 s (its `rebinds` did not move: seen live on r52), a fresh ensure takes the field over: it is
+adopted again at the value it holds and steered from there, at most twice. A steer that started but has not confirmed
+after 20 s shows an error with the ensure's state (`status`, `runs`, `rebinds`, `recoveries`, `error`, and on r53 its
+`debug()` settle state) instead of applying forever. Every editor ensure's status
 changes (`on_status`) and every steer are written to `HD2Runtime.log`.
 
 ## Mount swaps
@@ -100,7 +102,15 @@ docs/ui-overlay.md "The mouse wheel").
   page whose operation set a field.
 - **Custom:** `hd2.custom_stratagem.status()` and `describe(id)`; cooldown and uses are tuned with
   `hd2.custom_stratagem.tune` (r52), which logs each change and affects this player's next call.
-- **Settings:** stored with the presets (`hd2.store`): restore session, cursor capture, menu sounds, language.
+- **Settings:** stored with the presets (`hd2.store`): restore session, cursor capture, menu sounds, keeping input from
+  the game, language.
+
+## Keeping input from the game (r53)
+
+While the window is shown, `main.lua` renews `hd2.input.block({keyboard = true, mouse = true})` every frame and
+releases it on hide. The Runtime's native message hook turns key presses, characters, button presses and the wheel into
+`WM_NULL` before the game's window sees them; the editor itself reads keys with `GetAsyncKeyState` and the cursor with
+`GetCursorPos`, which are not affected.
 
 ## Applying a value
 

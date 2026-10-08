@@ -139,9 +139,16 @@ function M.install(App)
         local ly,rh=fy+44,40
         local rows=math.floor((y+h-56-ly)/rh)
         local n=#p.shown
-        if p.cursor<p.scroll+1 then p.scroll=p.cursor-1 end
-        if p.cursor>p.scroll+rows then p.scroll=p.cursor-rows end
+        -- the cursor pulls the view along only when it moves (the wheel scrolls freely in between)
+        if p.seen_cursor~=p.cursor then
+            p.seen_cursor=p.cursor
+            if p.cursor<p.scroll+1 then p.scroll=p.cursor-1 end
+            if p.cursor>p.scroll+rows then p.scroll=p.cursor-rows end
+        end
         p.scroll=math.max(0,math.min(p.scroll,math.max(0,n-rows)))
+        p.wheel=p.wheel or{passthrough=true}
+        p.wheel.scroll=function(delta)p.scroll=math.max(0,math.min(p.scroll+delta*3,math.max(0,n-rows)))end
+        cv:hit(x+12,ly,w-24,rows*rh,p.wheel)
         for s=p.scroll+1,math.min(n,p.scroll+rows)do
             local item=p.items[p.shown[s]]
             local ry=ly+(s-p.scroll-1)*rh

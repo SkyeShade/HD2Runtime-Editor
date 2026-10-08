@@ -21,7 +21,7 @@ local game_icons=optional('game_icons')
 local mod_icon_map=optional('mod_icons')
 local M={}
 
-M.VERSION='0.5.0'
+M.VERSION='0.5.1'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -138,8 +138,15 @@ function M.start(hd2,id)
                 56*d.scale,76*d.scale,{size=18*d.scale})
         end
     end)
+    -- Keep the game from acting on keys, clicks and the wheel while the editor is open (HD2Runtime r52
+    -- hd2.input.block, a lease renewed every frame; the editor reads input with GetAsyncKeyState, which it never blocks).
+    local can_block=type(hd2.input)=='table'and type(hd2.input.block)=='function'
+    local function block(on)
+        if can_block then pcall(hd2.input.block,on and{keyboard=true,mouse=true}or false)end
+    end
     local function toggle()
         if overlay:status().visible then
+            block(false)
             overlay:hide()
             app.input:reset()
             app.edit=nil
@@ -160,6 +167,7 @@ function M.start(hd2,id)
     mod:on_frame(function(dt)
         clock=clock+(dt or 0)
         layer:tick(dt or 0)
+        if can_block and presets:setting('block_game_input',true)and overlay:status().visible then block(true)end
         if not restored and clock>=RESTORE_MIN then
             local ready=others_settled(hd2,id)
             local build=type(hd2.build)=='function'and select(2,pcall(hd2.build))or'matched'

@@ -6,12 +6,12 @@
 
 HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows every mod you have deployed and what each HD2Runtime mod changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
-- **See what your mods do.** The Mods tab lists every mod your mod manager (Echelon or HD2 Arsenal) deployed, with its icon (see [Mod icons](#mod-icons)).
+- **See what your mods do.** The Mods tab lists every mod your mod manager (Echelon or HD2 Arsenal) deployed, with its icon (see [Mod icons](#mod-icons)): HD2Runtime mods first, then the other mods, each under its own heading.
   - HD2Runtime mods show the values they applied this session, any operation the Runtime refused (with the reason), and their in-game options with the current settings and the operations they drive. Select a value to jump to that field.
   - Other mods replace game files directly, so what they change cannot be read; their name, description and any Lua addons are shown.
   - A field a mod sets names the mod and, when its in-game options drive it, the options page.
 - **Your changes in one place.** The Changes tab lists every value the editor applied or has pending (never your mods' own). Enter jumps to the field; Del or a right-click reverts it.
-- **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state. Their cooldown and uses can be tuned on this machine, from the next call.
+- **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state, coloured like the game colours their carrier (offensive red, defensive green, support blue). Their cooldown and uses can be tuned on this machine, from the next call.
 - **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,300 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
 - **One stratagem, one place.**
   - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
@@ -43,16 +43,17 @@ HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows ev
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.5.0, development build for HD2Runtime r52.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. The 0.5.0 changes (the wheel's native hook, the new tabs, filling rate slots, the armory fields, localisation, sounds, mod icons) are not live-tested yet.
+> **Status: 0.5.1, development build for HD2Runtime r53.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 changes (keeping input from the game, the popup wheel, the steer takeover) are not live-tested yet.
 
 ## Requirements
 
 - Helldivers 2
 - Bingus Shared Loader v15+
-- **HD2Runtime 0.30.0-dev r52 or later.**
+- **HD2Runtime 0.30.0-dev r53 or later.**
   - r50 adds script choices (`mod:choice`, for non-numeric fields), overlay images (`d:image`, for icons), cursor capture (`overlay:free_cursor`), the overlay text placement fix, and naming the mod behind each applied value for mods built without the SDK wrapper.
   - r51 adds, in its SDK, the HUD icon extractor that [Game icons](#game-icons) uses.
-  - r52 adds the mouse wheel's native hook (`hd2.input.wheel`), following choices (filling empty rate slots), every mod's options (`hd2.diagnostics.options`) and custom stratagem tuning. On r50 or r51 the rest works: the lists scroll with the scrollbar, filling an empty rate slot is refused with the reason, and the Custom tab and the options are read-only or empty.
+  - r52 adds the mouse wheel's native hook (`hd2.input.wheel`), following choices (filling empty rate slots), every mod's options (`hd2.diagnostics.options`) and custom stratagem tuning.
+  - r53 keeps keys, clicks and the wheel from the game while the editor is open (`hd2.input.block`). On r50 or r51 the rest works: the lists scroll with the scrollbar, filling an empty rate slot is refused with the reason, and the Custom tab and the options are read-only or empty.
   - On an older 0.30.0-dev with the UI services (`hd2.ui.overlay`, `hd2.store`, `hd2.on_frame`, `hd2.input.pressed`), numbers still edit. Non-numeric fields then explain that they need r50, and icons and cursor capture are simply absent.
   - Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
 
@@ -66,7 +67,7 @@ Press **F8** in game to open or close the editor, or **Esc** to close it (the ga
 
 While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental; turn it off in Settings if it misbehaves.
 
-The tabs are Browse, Changes, Mods, Custom, Presets and Settings (Shift+Tab cycles them). Keys and clicks still also reach the game, because HD2Runtime cannot block input, so the ship is the most comfortable place to edit.
+The tabs are Browse, Changes, Mods, Custom, Presets and Settings (Shift+Tab cycles them). While it is open, key presses, mouse clicks and the wheel are kept from the game (HD2Runtime r53, experimental; Settings turns it off): Escape, Tab and Delete act only in the editor. Key releases still reach the game, so nothing stays held, and the game gets its input back the moment the editor closes.
 
 | Key | Action |
 | --- | --- |

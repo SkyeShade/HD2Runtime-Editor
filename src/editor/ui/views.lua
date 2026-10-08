@@ -202,8 +202,9 @@ function M.install(App)
         end
         for id in pairs(runtime)do if not used[id]and id~='unknown'then out[#out+1]=runtime_entry(id)end end
         for id in pairs(by_owner)do if not used[id]and id~='unknown'then out[#out+1]=runtime_entry(id)end end
+        -- HD2Runtime mods first (this editor last among them), then every other mod; by name within each
         table.sort(out,function(a,b)
-            local ar,br=(a.runtime and not a.self)and 0 or 1,(b.runtime and not b.self)and 0 or 1
+            local ar,br=a.runtime and(a.self and 1 or 0)or 2,b.runtime and(b.self and 1 or 0)or 2
             if ar~=br then return ar<br end
             return tostring(a.name):lower()<tostring(b.name):lower()
         end)
@@ -252,11 +253,30 @@ function M.install(App)
             or L('%d HD2Runtime mods (no mod manager state found)'):format(nrt))
         cv:text(note,LIST_W-18,y0+20,{size=SZ.tiny,colour=C.faint,align='right',max=LIST_W-170})
         self.mod_actions=self.mod_actions or{}
-        self:list({x=0,y=y0+36,w=LIST_W-1,h=h-40,count=#mods,row_h=56,selected=self.mod_index,scroll_key='mod_scroll',
-            focused=true,actions=self.mod_actions,click=function(i)self.mod_index=i;self.write_scroll=0 end,
-            draw=function(i,x,y,w,rh)
+        -- the list with a header above each group: HD2Runtime mods, then the others
+        local rows,selected={},1
+        for i,mod in ipairs(mods)do
+            local group=mod.runtime and'runtime'or'other'
+            if group~=(rows.last_group)then
+                rows[#rows+1]={header=group=='runtime'and L('HD2RUNTIME MODS')or L('OTHER MODS')}
+                rows.last_group=group
+            end
+            rows[#rows+1]={index=i}
+            if i==self.mod_index then selected=#rows end
+        end
+        self:list({x=0,y=y0+36,w=LIST_W-1,h=h-40,count=#rows,row_h=56,selected=selected,scroll_key='mod_scroll',
+            focused=true,actions=self.mod_actions,
+            click=function(r)if rows[r].index then self.mod_index=rows[r].index;self.write_scroll=0 end end,
+            draw=function(r,x,y,w,rh)
+                local row=rows[r]
+                if row.header then
+                    cv:text(row.header,x+18,y+rh-16,{size=SZ.heading,font='title',colour=C.gold})
+                    cv:rect(x+18,y+rh-4,w-36,1,C.line,2)
+                    return
+                end
+                local i=row.index
                 local mod=mods[i]
-                selected_row(self,cv,x,y,w,rh,i==self.mod_index,self.mod_actions[i])
+                selected_row(self,cv,x,y,w,rh,i==self.mod_index,self.mod_actions[r])
                 self:draw_mod_icon(mod,x+16,y+8,rh-16)
                 local tx=x+16+rh
                 cv:text(mod.name,tx,y+19,{size=SZ.label,colour=i==self.mod_index and C.text or C.dim,max=w-(tx-x)-110})
@@ -369,6 +389,26 @@ function M.install(App)
         self.custom_cache,self.custom_time=out,self.time
         return out
     end
+    -- A custom stratagem's category, as the game colours it: its carrier's (once allocated), else its carrier group's.
+    local FAMILY_TONE={orbital='offensive',eagle='offensive',sentry='defensive',emplacement='defensive',mine='defensive',
+        support='support',backpack='support',vehicle='support'}
+    local GROUP_TONE={any_red='offensive',orbital='offensive',eagle='offensive',sentry='defensive',
+        emplacement='defensive',support='support',support_pod='support',expendable='support',weapon='support'}
+    local KIND_TONE={orbital='offensive',eagle='offensive',pelican='offensive',sentry='defensive',support='support',
+        expendable='support',pod='support',weapon='support'}
+    function App:custom_tone(e)
+        local family=e.carrier and e.carrier.family
+        return FAMILY_TONE[family]or GROUP_TONE[e.group]or KIND_TONE[e.kind]or'support'
+    end
+    -- its icon like the game's stratagem icons: the category colour and white; a plain square when it cannot be drawn
+    function App:draw_custom_icon(e,x,y,size)
+        local tone=theme.tone[self:custom_tone(e)]
+        local drew=false
+        if type(e.icon)=='table'and type(self.canvas.d.image)=='function'then
+            drew=pcall(self.canvas.image,self.canvas,e.icon,x,y,size,size,{colours={r=tone,g={255,255,238,255}},z=4})
+        end
+        if not drew then self.canvas:rect(x+size*0.2,y+size*0.2,size*0.6,size*0.6,tone,4)end
+    end
     local CUSTOM_FIELDS={{key='cooldown',label='Cooldown',unit='s',step=5},{key='uses',label='Uses per mission',step=1}}
     function App:custom_tune(entry,field,value)
         local api=custom_api(self)
@@ -452,11 +492,8 @@ function M.install(App)
             draw=function(i,x,y,w,rh)
                 local e=list[i]
                 selected_row(self,cv,x,y,w,rh,i==self.custom_index,self.custom_actions[i])
-                local drew=false
-                if type(e.icon)=='table'and type(cv.d.image)=='function'then
-                    drew=pcall(cv.image,cv,e.icon,x+16,y+8,rh-16,rh-16,{z=4})
-                end
-                if not drew then cv:rect(x+16+(rh-16)*0.2,y+8+(rh-16)*0.2,(rh-16)*0.6,(rh-16)*0.6,C.gold,4)end
+                cv:rect(x+8,y+4,3,rh-8,theme.tone[self:custom_tone(e)],3)
+                self:draw_custom_icon(e,x+16,y+8,rh-16)
                 local tx=x+16+rh
                 cv:text(e.label or e.id,tx,y+19,{size=SZ.label,colour=i==self.custom_index and C.text or C.dim,max=w-(tx-x)-90})
                 cv:text(self.pretty_mod(e.owner or'?')..'   '..tostring(e.kind or''),tx,y+38,{size=SZ.tiny,colour=C.faint,max=w-(tx-x)-90})
@@ -467,8 +504,12 @@ function M.install(App)
         local w=W-x0
         cv:rect(x0,y0,w,h,C.panel,1)
         if not e then return end
-        cv:text(e.label or e.id,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
-        cv:text(tostring(e.id)..'   '..L('by %s'):format(tostring(e.owner)),x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
+        self:draw_custom_icon(e,x0+20,y0+12,48)
+        cv:text(e.label or e.id,x0+80,y0+24,{size=20,font='title',colour=C.text,max=w-100})
+        cv:text(tostring(e.id)..'   '..L('by %s'):format(tostring(e.owner))..'   '..(function(t)
+            if t=='offensive'then return L('Offensive')elseif t=='defensive'then return L('Defensive')end
+            return L('Support')
+        end)(self:custom_tone(e)),x0+80,y0+47,{size=SZ.small,colour=C.faint,max=w-100})
         -- editable rows
         local y=y0+80
         cv:rect(x0,y,w,22,C.header,2)
@@ -539,15 +580,15 @@ function M.install(App)
     function App:handle_settings_keys(f)
         local k=f.keys
         local langs=self:languages()
-        self.settings_index=clamp_index(self.settings_index or 1,3+#langs)
-        if k.UP then self.settings_index=clamp_index(self.settings_index-1,3+#langs)end
-        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,3+#langs)end
+        self.settings_index=clamp_index(self.settings_index or 1,4+#langs)
+        if k.UP then self.settings_index=clamp_index(self.settings_index-1,4+#langs)end
+        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,4+#langs)end
         if k.ENTER or k.RIGHT or k.LEFT then
             local i=self.settings_index
-            if i<=3 then
+            if i<=4 then
                 local action=(self.settings_toggles or{})[i]
                 if action then action.click()end
-            else self:use_language(langs[i-3].name)end
+            else self:use_language(langs[i-4].name)end
         end
     end
     function App:use_language(name)
@@ -573,12 +614,20 @@ function M.install(App)
                 self.presets:set_setting('free_cursor',on)
                 if self.ctx.set_free_cursor then self.ctx.set_free_cursor(on)end
             end},
-            {click=function()self.presets:set_setting('ui_sounds',not self.presets:setting('ui_sounds',true))end}}
+            {click=function()self.presets:set_setting('ui_sounds',not self.presets:setting('ui_sounds',true))end},
+            {click=function()
+                local on=not self.presets:setting('block_game_input',true)
+                self.presets:set_setting('block_game_input',on)
+                if not on and type(self.hd2.input)=='table'and type(self.hd2.input.block)=='function'then
+                    pcall(self.hd2.input.block,false)
+                end
+            end}}
         local labels={L('Restore my last applied values when the game starts'),
-            L('Free the mouse from the camera while open (experimental)'),L('Menu sounds on buttons')}
+            L('Free the mouse from the camera while open (experimental)'),L('Menu sounds on buttons'),
+            L('Keep keys, clicks and the wheel from the game while open (experimental)')}
         local values={self.presets:setting('restore_session',true),self.presets:setting('free_cursor',true),
-            self.presets:setting('ui_sounds',true)}
-        for i=1,3 do
+            self.presets:setting('ui_sounds',true),self.presets:setting('block_game_input',true)}
+        for i=1,#labels do
             if self.settings_index==i then cv:rect(x-8,y-14,560,28,C.select,1)end
             toggle_row(self,cv,x,y,540,values[i],labels[i],self.settings_toggles[i])
             y=y+34
@@ -599,7 +648,7 @@ function M.install(App)
                 self.language_actions[lang.name]=action
             end
             local current=i18n.language()==lang.name
-            if self.settings_index==3+i then cv:rect(x-8,y-2,560,28,C.select,1)
+            if self.settings_index==4+i then cv:rect(x-8,y-2,560,28,C.select,1)
             elseif self.hover==action then cv:rect(x-8,y-2,560,28,C.hover,1)end
             cv:rect(x,y+6,14,14,current and C.gold or C.line_strong,3)
             cv:text(lang.name,x+26,y+13,{size=SZ.label,colour=current and C.text or C.dim})

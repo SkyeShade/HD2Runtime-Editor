@@ -84,25 +84,23 @@ layer:reset(traits)
 check(settle(traits)=='idle','traits released')
 cycle(shown,'heavy','displayed penetration')
 out[#out+1]='armory traits ok'
--- the steer watchdog: an ensure that never confirms a steer is nudged once, then shown as an error (never applying
--- forever); the ensure's state is in the message and the history
+-- the steer watchdog: an ensure that never settles on a steer is replaced by a fresh one (adopted at the held
+-- value), which applies the change; the decision is in the history
 local wd=row_of('st|Eagle Smoke Strike',function(r)return r.kind=='code'end)
 run(1)
 assert(layer:set(wd,{'up','down','up','down'}))
 check(settle(wd)=='active','watchdog field active')
 local slot=layer:slot_of(wd)
-local real=slot.watch
-slot.watch={status='waiting',runs=real.runs,rebinds=0,recoveries=0,cancel=function()end}
+slot.watch={status='waiting',runs=slot.watch.runs,rebinds=0,recoveries=0,cancel=function()end,
+    debug=function()return {dirty=true,debounce=0.5,ticks=0}end}
 assert(layer:set(wd,wd.vanilla))
-run(5)
-check(layer:state(wd)=='applying','still applying after 5 s')
-local nudged=false
-for _,line in ipairs(layer.history)do if line:find('nudging the handle')then nudged=true end end
-check(nudged,'nudged once')
-run(20)
-local state,why=layer:state(wd)
-check(state=='error'and tostring(why):find('did not confirm'),'gave up with the state: '..tostring(state)..' '..tostring(why))
-slot.watch=real
+run(3)
+check(layer:state(wd)=='applying','still applying after 3 s')
+local taken=false
+local state=settle(wd)
+for _,line in ipairs(layer.history)do if line:find('fresh ensure')and line:find('ticks=0')then taken=true end end
+check(taken,'taken over by a fresh ensure, with the internals of the stuck ensure logged')
+check(state=='active'and util.same(layer:value(wd),wd.vanilla),'the change applied: '..tostring(state))
 layer:reset(wd)
 settle(wd)
 out[#out+1]='steer watchdog ok'

@@ -414,4 +414,32 @@ H.app:trait_toggle('explosive')
 H.app:traits_save()
 assert(H.app.pending[traits.key]and#H.app.pending[traits.key].value==2,'traits staged')
 H.app:discard()
+-- the wheel scrolls a popup's list (a mount's weapon picker: 60 weapons)
+local patriot=H.catalog:object('ve|EXO-45 Patriot Exosuit')
+H.catalog:open(patriot)
+local mount
+for _,r in ipairs(patriot.rows)do if r.mount_slot then mount=r;break end end
+H.app:reveal(mount)
+H.app:begin_edit(mount)
+assert(H.app.picker and#H.app.picker.shown>14,'mount picker open')
+step({})
+local before=H.app.picker.scroll
+-- the cursor over the list (screen pixels: the panel is centred at 1080p, the list starts below the filter)
+step({},{mouse={x=720,y=420,left=false},wheel=-1})
+step({},{mouse={x=720,y=420,left=false},wheel=-1})
+assert(H.app.picker.scroll==before+6,'wheel scrolled the picker: '..before..' -> '..H.app.picker.scroll)
+step({},{mouse={x=720,y=420,left=false},wheel=1})
+assert(H.app.picker.scroll==before+3,'and back up')
+H.app.picker=nil
+-- the Mods tab: a header above the HD2Runtime mods and one above the other mods
+H.app:set_view('mods')
+step({},nil,'36_mod_sections')
+local headers={}
+for _,item in ipairs(H.last.items)do
+    if item.k=='t'and(item.s=='HD2RUNTIME MODS'or item.s=='OTHER MODS')then headers[#headers+1]=item.s end
+end
+assert(#headers==2 and headers[1]=='HD2RUNTIME MODS','section headers: '..table.concat(headers,', '))
+-- a custom stratagem takes its carrier group's colour (any_red: offensive)
+assert(H.app:custom_tone(H_custom)=='offensive','offensive tone')
+assert(H.app:custom_tone({group='sentry'})=='defensive'and H.app:custom_tone({carrier={family='backpack'}})=='support')
 return 'ui ok ('..frames..' frames)'
