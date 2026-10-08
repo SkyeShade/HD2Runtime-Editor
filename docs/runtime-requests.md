@@ -105,6 +105,33 @@ The editor offers these, and players will try them:
 - the 0.30.2 sentry and emplacement swaps (`6466da4`) and player-weapon explosion statuses (`74494b7`);
 - the 15 `other_system` statuses (`c591d1b`, experimental).
 
+### R10. GameGuard kill after armor class writes (high priority)
+
+Report: "When I modified light, medium and heavy armour to have +50 armour rating and for heavy armour to have 75
+stamina regen the game got killed by gameguard." Log: `HD2Runtime (9).log` (0.30.1).
+
+What the log shows:
+- The edits came from a ModBuilder-built mod, not the editor (no HD2R Editor lines; operation ids `entity-...`).
+  They applied at startup: `armor_class.rating` light 0 -> 1, medium 1 -> 2, heavy 2 -> 3, and heavy
+  `armor_class.stamina` 1.5 -> 1.25 (stamina regen 50 -> 75). 41 operations applied, none rejected.
+- **The wheel hook was never installed:** no `wheel: native message hook installed` line, and no mod window opened.
+  The hook only installs on a mod window's first wheel or block query. So the hook is not the cause here.
+- The log ends right after the lobby post, with no error: the process was killed from outside.
+
+The lead: these are the only writes in the log **into game.dll's image**. `docs/armor-stats.md` "Class tables:
+reviewed executable data": the class tables (armor `0x21CB160`, speed `0x2160678`, stamina `0x21C6F78`) and the
+damage curve are in game.dll's read-only initialized-data section, mapped PAGE_EXECUTE_READWRITE, written under the
+2026-10-08 exception. Every other write in the log is to resource records. An anti-cheat that hashes the module image
+would see exactly these bytes change. Not proven: worth a test with the same mod minus the four `armor_class` writes,
+and with only them.
+
+If confirmed:
+- The class tables and the curve should not be written in place. Kit piece weights (light / medium / heavy only) and
+  the local player's armor bonus and stamina factor (`hd2.armor_stats.player()`) reach similar results without
+  touching the image; a class beyond heavy, as here, would need another non-image lever.
+- The editor offers the class tables and the curve today (Helldiver → Armor). Until then it could warn on those rows
+  or hide them.
+
 ### R9. Smaller
 
 - `core/shared_records` builds its whole index on first use: 60 to 130 ms in one call (a 131.8 ms frame in the
