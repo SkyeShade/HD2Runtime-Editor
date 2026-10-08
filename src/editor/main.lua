@@ -23,7 +23,7 @@ local game_icons=optional('game_icons')
 local mod_icon_map=optional('mod_icons')
 local M={}
 
-M.VERSION='0.8.1'
+M.VERSION='0.8.2'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}

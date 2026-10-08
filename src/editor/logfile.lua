@@ -23,6 +23,14 @@ local RULES={
     {'perf',{'PERFORMANCE','PEER CHANNEL','ONGOING PROBE'}},
 }
 function M.classify(line)
+    -- the Runtime's settle summary ("N registered operations settled in S s: A applied, R rejected, O other"): green
+    -- when nothing was rejected, a warning when something was (each rejection has its own red line above it)
+    if line:find('registered operations settled',1,true)then
+        local rejected=tonumber(line:match('(%d+) rejected'))
+        return(rejected and rejected>0)and'warning'or'ok'
+    end
+    -- a zero count is not a problem: "0 rejected", "0 failed", "errors=0" never make a line red
+    line=(' '..line):gsub('%a+=0%f[^%w]',''):gsub('%s0 %a+',' ')
     for _,rule in ipairs(RULES)do
         for _,word in ipairs(rule[2])do
             if line:find(word,1,true)then return rule[1]end
