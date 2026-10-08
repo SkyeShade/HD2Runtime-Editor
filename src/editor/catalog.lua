@@ -411,17 +411,25 @@ local function presentation_row(object,common,f)
     end
     return nil
 end
+-- A weapon HD2Runtime blocks (entry.ordinaryWritesBlocked: a DUPLICATE identity, two game records under one name, e.g.
+-- the LAS-5 Scythe and LAS-7 Dagger; docs/player-weapon-authoring.md) publishes its stats read-only. They are shown as
+-- locked rows (their values, this reason) instead of being left out.
+local BLOCKED_REASON='read only for now: HD2Runtime cannot yet tell this weapon\'s two game records apart, so it blocks '
+    ..'writes to it'
 local function player_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
+        -- a field locked only by the weapon's blocked identity (not one that is read-only in itself)
+        local locked=f.editable==false and entry.ordinaryWritesBlocked==true and f.reason~=nil
+            and f.reason==entry.blockReason
         -- (a reorder-only enum such as the default fire mode refuses its own value, so nothing can hold it: left out)
         local value_kind=f.type=='boolean'or f.type=='status_reference'
             or(f.type=='enum'and type(f.allowedValues)=='table'and f.writeKind~='reorder_native_mode_vector')
             or f.type=='projectile_reference'or f.type=='explosion_reference'
             or f.type=='fire_mode_set'or f.type=='fire_rate_set'
             or f.type=='trait_set'or f.type=='armor_penetration_label'
-        if f.editable and f.preferred and not f.deprecated and not f.derivedReadOnly
+        if(f.editable or locked)and f.preferred and not f.deprecated and not f.derivedReadOnly
             and(numeric(f.type,f.currentDefault)or value_kind)then
             local b=f.backing or{}
             local id=f.semanticFieldId
@@ -451,6 +459,7 @@ local function player_rows(hd2,object,entry)
             end
             local common={id=id,label=f.displayName,unit=f.unit,field=field,target=target,shared=shared_ack(f),
                 unverified=unverified(f),descriptor=f,section=section}
+            if locked then common.editable,common.reason=false,BLOCKED_REASON end
             if numeric(f.type,f.currentDefault)then
                 common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,b.storage
                 rows[#rows+1]=make_row(object,common)
@@ -1082,6 +1091,7 @@ local function player_category(slot)
         for name,entry in pairs(W.weapons or{})do
             if entry.slot==slot then
                 list[#list+1]={key='pw|'..name,name=name,subtitle=entry.category,
+                    detail=entry.ordinaryWritesBlocked and'stats read only (HD2Runtime blocks this weapon for now)'or nil,
                     build=function(object)
                         local rows=player_rows(cat.hd2,object,entry)
                         for _,m in ipairs(weapon_attachments(name))do

@@ -664,6 +664,28 @@ do
     H.presets:set_setting('ui_scale',1)
     step({})
 end
+-- a weapon HD2Runtime blocks (duplicate identity: LAS-5 Scythe) shows its stats as locked rows with the reason
+do
+    local scythe=H.catalog:object('pw|LAS-5 Scythe')
+    H.catalog:open(scythe)
+    local locked,heat,editable_attachment=0,nil,false
+    for _,r in ipairs(scythe.rows)do
+        if not r.editable then locked=locked+1 end
+        if r.field=='heat.capacity'then heat=r end
+        if r.editable and r.group then editable_attachment=true end
+    end
+    assert(heat and not heat.editable and heat.vanilla==100 and heat.reason:find('two game records',1,true),
+        'heat capacity shown, locked, with the reason')
+    assert(locked>=20,'its stats are shown locked: '..locked)
+    assert(editable_attachment,'its attachments stay editable')
+    assert(scythe.detail and scythe.detail:find('read only',1,true),'the header says so')
+    local before=H.app.pending_n
+    assert(H.app:stage(heat,150)==false and H.app.pending_n==before,'a locked row cannot be staged')
+    for i,item in ipairs(H.app.categories)do if item.id=='primary'then H.app:select_category(i)end end
+    H.app:set_view('browse')
+    H.app:reveal(heat)
+    step({},nil,'52_locked_weapon')
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

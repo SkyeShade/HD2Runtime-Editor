@@ -53,7 +53,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.8.2, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 0.8.3, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 
@@ -121,6 +121,7 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 
 ## Limitations
 
+- **Seven weapons are read only for now.** HD2Runtime cannot yet tell apart the two game records behind the LAS-5 Scythe, LAS-7 Dagger, CQC-42 Machete, CQC-73 Entrenchment Tool, GP-31 Grenade Pistol, P-72 Crisper and SMG-37 Defender, so it blocks writes to them. The editor still shows their stats, marked LOCKED; their attachments stay editable.
 - **Not every value type.** Weapon functions, function projectiles, sounds and stratagem presentation stay with ModBuilder.
 - **Fields that move together.**
   - The default fire mode can only be reordered, never held at its own value, so it is left out.
