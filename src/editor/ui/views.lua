@@ -10,6 +10,8 @@ local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local installed=require('mods/skyeshade/hd2runtime_editor/editor/installed')
+local logfile=require('mods/skyeshade/hd2runtime_editor/editor/logfile')
+local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
 local C,SZ=theme.colour,theme.size
 local L=i18n.L
 local M={}
@@ -45,6 +47,7 @@ local function selected_row(self,cv,x,y,w,rh,selected,action)
 end
 
 function M.install(App)
+    App.wrap=wrap
     local chip=App.chip_fn
     local button=App.button_fn
 
@@ -105,6 +108,8 @@ function M.install(App)
             20,y0+47,{size=SZ.small,colour=C.faint,max=W-300})
         self.btn_revert_all=self.btn_revert_all or{click=function()self:ask('reset')end}
         button(self,L('REVERT ALL'),W-216,y0+16,196,34,(#list>0)and'danger'or'disabled',self.btn_revert_all)
+        self.btn_export_mod=self.btn_export_mod or{click=function()self:set_view('export')end}
+        button(self,L('EXPORT AS MOD'),W-424,y0+16,196,34,(#list>0)and'primary'or'disabled',self.btn_export_mod)
         local hy=y0+66
         cv:rect(0,hy,W,22,C.header,2)
         cv:text(L('OBJECT'),20,hy+11,{size=SZ.tiny,font='title',colour=C.faint})
@@ -571,6 +576,129 @@ function M.install(App)
             cv:text(d[1],x0+22,y,{size=SZ.small,colour=C.faint})
             cv:text(d[2],x0+220,y,{size=SZ.small,colour=C.dim,max=w-240})
             y=y+24
+        end
+    end
+
+    ---------------------------------------------------------------------------------------------- LOGS --
+    -- HD2Runtime.log, live and coloured: errors red, warnings orange, applied values green, the editor's own lines gold,
+    -- performance and probes faint. Follows the end of the file until you scroll up.
+    local LOG_COLOURS={error=C.error,warning=C.pending,ok=C.ok,editor=C.gold,perf=C.faint,info=C.dim}
+    local LOG_FILTERS={{id='all',label='All'},{id='error',label='Errors'},{id='warning',label='Warnings'},
+        {id='editor',label='Editor'}}
+    function App:log_reader()
+        if not self.logs then self.logs=(self.ctx.logfile or logfile.new)()end
+        return self.logs
+    end
+    function App:log_lines()
+        local logs=self:log_reader()
+        logs.poll(self.frame_dt or 0)
+        local filter=self.log_filter or'all'
+        local key=logs.version..':'..filter..':'..#logs.lines
+        if self.log_key~=key then
+            local shown={}
+            for i,kind in ipairs(logs.kinds)do
+                if filter=='all'or kind==filter then shown[#shown+1]=i end
+            end
+            self.log_key,self.log_shown=key,shown
+            if self.log_follow~=false then self.log_index=#shown end
+        end
+        return self.log_shown,logs
+    end
+    function App:handle_logs_keys(f)
+        local k=f.keys
+        local shown=self:log_lines()
+        local n=#shown
+        self.log_index=clamp_index(self.log_index or n,n)
+        local function moved(i)self.log_index=clamp_index(i,n);self.log_follow=self.log_index>=n end
+        if k.UP then moved(self.log_index-1)end
+        if k.DOWN then moved(self.log_index+1)end
+        if k.PAGEUP then moved(self.log_index-20)end
+        if k.PAGEDOWN then moved(self.log_index+20)end
+        if k.HOME then moved(1)end
+        if k.END then moved(n)end
+        if k.LEFT or k.RIGHT then
+            local at=1
+            for i,flt in ipairs(LOG_FILTERS)do if flt.id==(self.log_filter or'all')then at=i end end
+            at=(at-1+(k.LEFT and-1 or 1))%#LOG_FILTERS+1
+            self.log_filter,self.log_follow=LOG_FILTERS[at].id,true
+        end
+    end
+    function App:open_log(folder)
+        local path=self:log_reader().path
+        if not path then self:toast(L('The log file was not found'),C.error);return end
+        local ok,why
+        if folder then ok,why=win.reveal(path)else ok,why=win.open(path)end
+        if ok then self:toast(folder and L('Opened the log folder')or L('Opened the log file'),C.ok)
+        else self:toast(L('Could not open it: %s'):format(tostring(why)),C.error)end
+    end
+    function App:draw_logs(y0,h)
+        local cv=self.canvas
+        local W=theme.panel.w
+        -- the wheel scrolled the lines: stop following until End (or the toggle)
+        if self.wheel_scrolled=='log_scroll'then self.log_follow,self.wheel_scrolled=false,nil end
+        local shown,logs=self:log_lines()
+        local n=#shown
+        self.log_index=clamp_index(self.log_index or n,n)
+        cv:rect(0,y0,W,h,C.panel,1)
+        cv:text(L('LOGS'),20,y0+24,{size=20,font='title',colour=C.text})
+        cv:text(logs.error or(logs.path or''),20,y0+47,{size=SZ.small,colour=logs.error and C.error or C.faint,max=W-480})
+        -- buttons
+        self.btn_log_file=self.btn_log_file or{click=function()self:open_log(false)end}
+        self.btn_log_folder=self.btn_log_folder or{click=function()self:open_log(true)end}
+        button(self,L('OPEN LOG FILE'),W-216,y0+16,196,34,'normal',self.btn_log_file)
+        button(self,L('SHOW IN FOLDER'),W-424,y0+16,196,34,'normal',self.btn_log_folder)
+        -- filters and follow
+        local fx,fy=20,y0+68
+        self.log_filter_actions=self.log_filter_actions or{}
+        for _,flt in ipairs(LOG_FILTERS)do
+            local action=self.log_filter_actions[flt.id]
+            if not action then
+                local id=flt.id
+                action={click=function()self.log_filter,self.log_follow=id,true end}
+                self.log_filter_actions[flt.id]=action
+            end
+            local label=L(flt.label)
+            local w=cv:measure(label,SZ.tiny,'title')+22
+            local on=(self.log_filter or'all')==flt.id
+            local tone=LOG_COLOURS[flt.id]or C.gold
+            cv:rect(fx,fy,w,22,on and tone or(self.hover==action and C.hover or C.box),3)
+            if not on then cv:frame(fx,fy,w,22,C.line_strong,4)end
+            cv:text(label,fx+w/2,fy+11,{size=SZ.tiny,font='title',colour=on and C.inverse or C.dim,align='center',z=5})
+            cv:hit(fx,fy,w,22,action)
+            fx=fx+w+6
+        end
+        self.log_follow_action=self.log_follow_action or{click=function()
+            self.log_follow=not(self.log_follow~=false)
+            if self.log_follow then self.log_index=#self.log_shown end
+        end}
+        local follow=self.log_follow~=false
+        cv:rect(fx+12,fy+2,34,18,follow and C.gold or C.line_strong,3)
+        cv:rect(follow and fx+30 or fx+14,fy+4,14,14,follow and C.inverse or C.dim,4)
+        cv:text(L('Follow the end'),fx+56,fy+11,{size=SZ.small,colour=C.dim})
+        cv:hit(fx+12,fy,160,22,self.log_follow_action)
+        cv:text(L('%d lines'):format(n),W-20,fy+11,{size=SZ.tiny,colour=C.faint,align='right'})
+        -- the lines
+        local ly=fy+32
+        local detail_h=70
+        local lh=20
+        self.log_actions=self.log_actions or{}
+        self:list({x=0,y=ly,w=W,h=y0+h-ly-detail_h,count=n,row_h=lh,selected=self.log_index,scroll_key='log_scroll',
+            focused=true,actions=self.log_actions,
+            click=function(i)self.log_index=i;self.log_follow=i>=n end,
+            draw=function(i,x,y,lw,rh)
+                local index=shown[i]
+                local kind=logs.kinds[index]
+                local colour=LOG_COLOURS[kind]or C.dim
+                if i==self.log_index then cv:rect(x+8,y,lw-16,rh,C.select,2)end
+                cv:rect(x+12,y+3,3,rh-6,colour,3)
+                cv:text(logs.lines[index],x+22,y+rh/2,{size=SZ.small,font='mono',colour=colour,max=lw-44})
+            end})
+        -- the selected line in full
+        local dy=y0+h-detail_h+4
+        cv:rect(0,dy-4,W,1,C.line,2)
+        local line=shown[self.log_index]and logs.lines[shown[self.log_index]]or''
+        for i,part in ipairs(wrap(cv,line,W-48,SZ.small,3))do
+            cv:text(part,20,dy+10+(i-1)*19,{size=SZ.small,colour=C.text,max=W-40})
         end
     end
 

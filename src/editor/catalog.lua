@@ -1255,8 +1255,19 @@ local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boost
 ------------------------------------------------------------------------------------------------- catalogue --
 local Catalog={};Catalog.__index=Catalog
 
+-- The hd2 the rows' target functions use: the real one, except while the exporter traces a row (editor/export.lua
+-- sets export.tracing), when every hd2 call returns a recorder of the Lua code that builds the target.
+local export_module
+local function traced(hd2)
+    export_module=export_module or require('mods/skyeshade/hd2runtime_editor/editor/export')
+    return setmetatable({},{__index=function(_,key)
+        local tracing=export_module.tracing
+        if tracing and type(hd2[key])=='function'then return tracing(key)end
+        return hd2[key]
+    end})
+end
 function M.new(hd2)
-    return setmetatable({hd2=hd2,lists={},errors={},by_key={},rows={},by_loc={},aliases={}},Catalog)
+    return setmetatable({hd2=traced(hd2),real_hd2=hd2,lists={},errors={},by_key={},rows={},by_loc={},aliases={}},Catalog)
 end
 -- The category's objects (built once), or {} and the reason it is unavailable.
 function Catalog:objects(category)

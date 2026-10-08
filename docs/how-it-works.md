@@ -73,6 +73,28 @@ after 20 s shows an error with the ensure's state (`status`, `runs`, `rebinds`, 
 `debug()` settle state) instead of applying forever. Every editor ensure's status
 changes (`on_status`) and every steer are written to `HD2Runtime.log`.
 
+## Exporting (editor/export.lua)
+
+- **Target code:** the catalogue's `hd2` is a proxy. While the exporter traces a row (`export.tracing`), every `hd2` call returns a recorder whose method calls build Lua text. A row's own `target` and `expect` functions therefore yield the exact code that builds them, for every row type, with no per-type code generator.
+- **Values:** plain values are written as literals. Reference handles are written from their stored form (`catalog.encode`): `hd2.attack_output(id)`, `hd2.pickup(id)`, a terminal explosion chain, or `:no_explosion()`.
+- **Containers, in Lua:**
+  - MurmurHash64A (LuaJIT 64-bit cdata);
+  - the patch archive (`hd2_archive.make_archive`'s layout, compared byte for byte in the tests);
+  - a stored ZIP with CRC-32;
+  - SHA-256, for ModBuilder's GUID;
+  - a small JSON writer;
+  - the SDK's addon wrapper.
+- **Files:** written with `io.open` in binary mode; folders are created through `CreateDirectoryW` (`editor/win.lua`).
+- **Tests:** they build a mod with a number, a calldown code, a projectile swap and a rate list with its selector binding. They then run the generated operations against the real Runtime ensure (all four apply) and check the ZIP and archive with Python's `zipfile` and the SDK's own `hd2_archive`.
+
+## The Logs tab (editor/logfile.lua)
+
+The log is read with `io.open`:
+- the last 256 KB on first look, then only the appended bytes, at most twice a second;
+- a file that shrank (a new session) is read again from its end.
+
+Each line is classified by keywords (error, warning, ok, editor, perf, info) for its colour and the filters. **OPEN LOG FILE** and **SHOW IN FOLDER** use `ShellExecuteW`.
+
 ## Mount swaps
 
 A vehicle's mount row (kind `reference`, field `mount.weapon`, target `hd2.vehicle(name):mount(slot)`) offers the

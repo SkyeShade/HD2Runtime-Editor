@@ -13,6 +13,8 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - Other mods replace game files directly, so what they change cannot be read; their name, description and any Lua addons are shown.
   - A field a mod sets names the mod and, when its in-game options drive it, the options page.
 - **Your changes in one place.** The Changes tab lists every value the editor applied or has pending (never your mods' own). Enter jumps to the field; Del or a right-click reverts it.
+- **Export your changes as a mod.** The Export tab is a three-step wizard. Pick which changes to include, give the mod a name, version, author, description and an HD2 Arsenal image from your PC, then press Export. It writes a mod ZIP, ready for your mod manager, in ModBuilder's layout (see [Exporting a mod](#exporting-a-mod)). The values are also saved as a preset.
+- **The log, live.** The Logs tab follows `HD2Runtime.log` as it is written, coloured by kind (errors red, warnings orange, applied values green, the editor's own lines gold), with filters and buttons to open the file or its folder.
 - **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state, coloured like the game colours their carrier (offensive red, defensive green, support blue). Their cooldown and uses can be tuned on this machine, from the next call.
 - **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 17,300 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
 - **One stratagem, one place.**
@@ -45,7 +47,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.5.2, development build for HD2Runtime r53.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 changes (keeping input from the game, the popup wheel, the steer takeover) are not live-tested yet.
+> **Status: 0.6.0, development build for HD2Runtime r53.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 and 0.6.0 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab) are not live-tested yet.
 
 ## Requirements
 
@@ -69,7 +71,7 @@ Press **F8** in game to open or close the editor, or **Esc** to close it (the ga
 
 While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental; turn it off in Settings if it misbehaves.
 
-The tabs are Browse, Changes, Mods, Custom, Presets and Settings (Shift+Tab cycles them). While it is open, key presses, mouse clicks and the wheel are kept from the game (HD2Runtime r53, experimental; Settings turns it off): Escape, Tab and Delete act only in the editor. Key releases still reach the game, so nothing stays held, and the game gets its input back the moment the editor closes.
+The tabs are Browse, Changes, Export, Mods, Custom, Presets, Logs and Settings (Shift+Tab cycles them). While it is open, key presses, mouse clicks and the wheel are kept from the game (HD2Runtime r53, experimental; Settings turns it off): Escape, Tab and Delete act only in the editor. Key releases still reach the game, so nothing stays held, and the game gets its input back the moment the editor closes.
 
 | Key | Action |
 | --- | --- |
@@ -129,6 +131,31 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 - **Mods that are not HD2Runtime mods.** The editor lists them from your mod manager's own records; it cannot see or change what they do.
 - **Custom stratagems.** Only their cooldown and uses can change after registration, and only on this machine.
 - **Multiplayer.** Writes follow HD2Runtime's rules. They change this machine's game data; what the host decides still wins.
+
+## Exporting a mod
+
+The Export tab (or **EXPORT AS MOD** in Changes) builds an HD2Runtime mod from your changes, inside the game:
+
+1. **Changes:** every applied and pending editor value, all ticked; untick what the mod should not include.
+2. **Details:**
+   - the name, version (`1.0.0`), author and description the mod manager shows;
+   - an Arsenal image: click the field to browse your Pictures, Desktop, Downloads and Documents in game.
+   The resource id is `mods/<author>/<name>`.
+3. **Done:** the folder it wrote, with **OPEN EXPORT FOLDER** and **SHOW THE ZIP**. A preset named after the mod holds the exported values, so you can load them again later.
+
+What it writes, in `Documents\HD2R Editor\Exports\<Name>-<version>\`:
+- **`<Name>-<version>.zip`:** the mod, laid out as HD2Runtime ModBuilder lays out its exports.
+  - `manifest.json`: name, version, description, the image as `IconPath`, and the dependency note.
+  - `hd2runtime.json`, `build-report.json`, `README.md`, `src/addon.lua`, the image.
+  - `mod/9ba626afa44a3aa3.patch_0`: the boot-package archive holding the addon, wrapped like the HD2Runtime SDK wraps one; byte for byte what the SDK's archive writer produces.
+- **`project\`:** `hd2runtime.json`, `src/addon.lua` and the image, a project the HD2Runtime SDK can build again.
+
+The addon has one guarded `hd2.ensure` per change:
+- `expect` is the field's original value;
+- the acknowledgements are the ones the Runtime's validator asks for;
+- a rate list that fills an empty slot is a transaction with the rate selector binding.
+
+Each target is written from the editor row's own target code (for example `hd2.weapon("AR-23 Liberator"):attack("primary"):projectile()`). The mod manager GUID is derived from the resource id the way ModBuilder derives it. Install the ZIP next to HD2Runtime like any HD2Runtime mod.
 
 ## Game icons
 

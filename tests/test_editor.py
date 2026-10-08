@@ -81,6 +81,59 @@ class EditorTests(unittest.TestCase):
         """)
         self.assertEqual(result, 'ok')
 
+    def test_mod_export_matches_the_sdk_and_applies(self):
+        import hashlib
+        import tempfile
+        import zipfile
+        sys.path.insert(0, str(lua_host.RUNTIME / 'sdk' / 'tools'))
+        import hd2_archive
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / 'icon.png'
+            image.write_bytes(b'\x89PNG\r\n\x1a\nfake image bytes')
+            folder = Path(tmp) / 'out'
+            result = lua_file('test_export.lua', {'sim': (LUA / 'sim.lua').as_posix(), 'image': str(image),
+                                                  'folder': str(folder)})
+            lines = dict(line.split(' ', 1) for line in result.splitlines() if ' ' in line and not line.startswith('['))
+            self.assertEqual(lines['murmur'].split()[-1] if False else lines['murmur'], lines['murmur'])
+            got = {line.split(' ')[1]: line.split(' ')[2] for line in result.splitlines() if line.startswith('murmur ')}
+            self.assertEqual(int(got['packages/boot'], 16), hd2_archive.resource_hash('packages/boot'))
+            self.assertEqual(int(got['lua'], 16), hd2_archive.LUA_TYPE)
+            self.assertEqual(int(got['resource'], 16), hd2_archive.resource_hash('mods/skye/test5'))
+            self.assertEqual(lines['crc'], 'cbf43926')
+            self.assertEqual(lines['sha'], hashlib.sha256(b'abc').hexdigest())
+            self.assertEqual(lines['guid'], 'e27e2c3e-fd0d-575d-b341-e2460d2c8adb')   # ModBuilder's own derivation
+            expected = hd2_archive.make_archive({hd2_archive.resource_hash(n): hd2_archive.lua_resource(b)
+                                                 for n, b in {'mods/skye/test5': b'print(1)\n',
+                                                              'mods/skye/test5/x': b'return 2\n'}.items()})
+            self.assertEqual(lines['archive'], expected.hex(), 'the archive matches hd2_archive.make_archive')
+            path = Path(lines['zip'])
+            self.assertEqual(path.name, 'Test-Export-1.2.3.zip')
+            with zipfile.ZipFile(path) as z:
+                self.assertIsNone(z.testzip())
+                names = z.namelist()
+                self.assertEqual(names, sorted(names))
+                for name in ('README.md', 'build-report.json', 'hd2runtime.json', 'manifest.json', 'src/addon.lua',
+                             'mod/9ba626afa44a3aa3.patch_0', 'mod/9ba626afa44a3aa3.patch_0.stream',
+                             'mod/9ba626afa44a3aa3.patch_0.gpu_resources', 'thumbnail.png'):
+                    self.assertIn(name, names)
+                manifest = json.loads(z.read('manifest.json'))
+                self.assertEqual(manifest['Name'], 'Test Export 1.2.3')
+                self.assertEqual(manifest['Guid'], lines['guid2'])
+                self.assertEqual(manifest['IconPath'], 'thumbnail.png')
+                self.assertEqual(manifest['Options'][0]['Include'], ['mod'])
+                self.assertTrue(manifest['Description'].startswith('Made in a test.\n\n// Requires Bingus'))
+                spec = json.loads(z.read('hd2runtime.json'))
+                self.assertEqual(spec['resource'], 'mods/skye_tester/test_export')
+                archive = z.read('mod/9ba626afa44a3aa3.patch_0')
+                body = archive[0xC0 + 8:0xC0 + 8 + int.from_bytes(archive[0xC0:0xC4], 'little')]
+                self.assertEqual(int.from_bytes(archive[0x68:0x70], 'little'),
+                                 hd2_archive.resource_hash('mods/skye_tester/test_export'))
+                self.assertTrue(body.startswith(b'-- HD2-Addon: mods/skye_tester/test_export\n'))
+            self.assertTrue((folder / 'project' / 'src' / 'addon.lua').is_file())
+            self.assertTrue((folder / 'project' / 'thumbnail.png').is_file())
+            self.assertIn('applied ok', result)
+            self.assertIn('wrapped ok', result)
+
     def test_interface_text_list_is_current(self):
         spec = importlib.util.spec_from_file_location('locale_strings', lua_host.PROJECT / 'tools' / 'locale_strings.py')
         tool = importlib.util.module_from_spec(spec)

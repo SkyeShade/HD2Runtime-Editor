@@ -23,7 +23,7 @@ local game_icons=optional('game_icons')
 local mod_icon_map=optional('mod_icons')
 local M={}
 
-M.VERSION='0.5.2'
+M.VERSION='0.6.0'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -125,7 +125,8 @@ function M.start(hd2,id)
     local app=app_module.new({hd2=hd2,catalog=catalog,layer=layer,ledger=ledger,presets=presets,hotkey=hotkey,
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
         mouse=function()return overlay:mouse()end,log=log,icons=icons,ui_icons=ui_icons,choices=type(mod.choice)=='function',
-        id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,
+        id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,version=M.VERSION,
+        minimum=tostring(hd2.version or'0.30.0-dev'),
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
 

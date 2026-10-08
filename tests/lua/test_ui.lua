@@ -85,6 +85,46 @@ local changes=H.app:changes()
 assert(#changes==2,'two editor changes: '..#changes)
 for _,c in ipairs(changes)do assert(c.state=='active','applied: '..tostring(c.state))end
 -- Mods tab: the three HD2Runtime mods and the mod manager's asset mod; one refused operation
+-- Export: the wizard, step 1 lists the two changes, all picked
+step({'TAB'},{down={'SHIFT'}},'38_export_pick')
+assert(H.app.view=='export','export view')
+local exp_list,x=H.app:export_changes()
+assert(#exp_list==2 and x.selected[exp_list[1].row.key]and x.selected[exp_list[2].row.key],'both changes picked')
+step({'RIGHT'})
+assert(x.step=='details','details step')
+-- type a name (letters and digits through the keys), set the version and description
+x.field=1
+x.meta.name=''
+for _,key in ipairs({'L','I','B','SPACE','B','U','F','F'})do step({key})end
+assert(x.meta.name=='lib buff','typed the name: '..x.meta.name)
+x.meta.name,x.meta.version,x.meta.description='Lib Buff','1.0.0','Faster Liberator.'
+-- the image browser lists a folder; picking a file sets the image
+local folder=(os.getenv('TEMP')or'.')
+local img=folder..'\\hd2r_test_icon.png'
+local fi=assert(io.open(img,'wb'));fi:write('\137PNG\r\n\26\n test');fi:close()
+H.app:export_browse(folder)
+step({},nil,'39_export_browser')
+assert(x.browser and#x.browser.entries>0,'browser lists the folder')
+local picked
+for _,e in ipairs(x.browser.entries)do if e.name=='hd2r_test_icon.png'then picked=e end end
+assert(picked,'the test image is listed')
+H.app:export_browser_pick(picked)
+assert(x.meta.image==img and not x.browser,'image picked')
+step({},nil,'40_export_details')
+-- export into a temporary folder
+local export_module=require('mods/skyeshade/hd2runtime_editor/editor/export')
+local real_folder=export_module.folder
+export_module.folder=function()return folder..'\\hd2r_test_exports'end
+H.app:export_run()
+export_module.folder=real_folder
+assert(x.step=='done','export done: '..tostring(H.app.toast_msg and H.app.toast_msg.text))
+step({},nil,'41_export_done')
+assert(x.done.count==2 and x.done.zip:find('Lib%-Buff%-1%.0%.0%.zip$'),'zip: '..tostring(x.done.zip))
+local zf=assert(io.open(x.done.zip,'rb'));local zdata=zf:read('*a');zf:close()
+assert(zdata:sub(1,4)=='PK\3\4','a zip')
+assert(H.presets:find('Lib Buff 1.0.0'),'a preset with the exported values')
+os.remove(img)
+-- Mods tab: the three HD2Runtime mods and the mod manager's asset mod; one refused operation
 step({'TAB'},{down={'SHIFT'}},'07_mods')
 assert(H.app.view=='mods','mods view')
 local mods=H.app:mods_list()
@@ -103,14 +143,14 @@ assert(H.app.view=='browse'and H.app:focused_row().key=='st|Eagle 500kg Bomb|'..
     'jumped to the eagle cooldown')
 assert(H.app:focused_row().field=='stratagem.cooldown','focused the cooldown row')
 -- Presets: save the current values (Browse -> Changes -> Mods -> Custom -> Presets)
-for _=1,3 do step({'TAB'},{down={'SHIFT'}})end
+for _=1,4 do step({'TAB'},{down={'SHIFT'}})end
 assert(H.app.view=='custom','custom view')
 step({'TAB'},{down={'SHIFT'}},'08_presets')
 assert(H.app.view=='presets','presets view')
 step({'INSERT'})
 assert(H.app.rename and H.app.rename.create,'naming a new preset')
 step({'TAB'})
-assert(#H.presets:list()==1,'preset saved')
+assert(#H.presets:list()==2,'preset saved (with the export preset)')
 step({'DOWN'},nil,'09_preset')
 local preset=H.presets:list()[1]
 assert(preset.count==2,'preset has two fields: '..preset.count)
@@ -442,4 +482,27 @@ assert(#headers==2 and headers[1]=='HD2RUNTIME MODS','section headers: '..table.
 -- a custom stratagem takes its carrier group's colour (any_red: offensive)
 assert(H.app:custom_tone(H_custom)=='offensive','offensive tone')
 assert(H.app:custom_tone({group='sentry'})=='defensive'and H.app:custom_tone({carrier={family='backpack'}})=='support')
+-- Logs: a log file followed live, coloured by kind, filtered
+local logfile=require('mods/skyeshade/hd2runtime_editor/editor/logfile')
+local tmp=(os.getenv('TEMP')or'.')..'\\hd2r_editor_test.log'
+local f=assert(io.open(tmp,'wb'))
+f:write('[HD2Runtime] HD2Runtime 0.30.0-dev initialized (API 1)\n',
+    '[HD2Runtime] patch bad rejected: expect differs from reviewed current value\n',
+    '[HD2Runtime] ensure overdrive verified status=APPLIED cycle=1 next=60\n',
+    '[HD2Runtime] [mods/skyeshade/hd2runtime_editor] [editor] HD2R Editor ready; press F8 to open\n')
+f:close()
+H.app.logs=logfile.new(tmp)
+H.app:set_view('logs')
+step({},nil,'37_logs')
+local shown,logs=H.app:log_lines()
+assert(#shown==4 and logs.kinds[2]=='error'and logs.kinds[3]=='ok'and logs.kinds[4]=='editor','classified: '..table.concat(logs.kinds,','))
+f=assert(io.open(tmp,'ab'));f:write('[HD2Runtime] startup: READY in 3.00 s\n');f:close()
+for _=1,40 do step({})end
+shown=H.app:log_lines()
+assert(#shown==5 and H.app.log_index==5,'followed the new line: '..#shown..' '..tostring(H.app.log_index))
+step({'RIGHT'})
+shown=H.app:log_lines()
+assert(H.app.log_filter=='error'and#shown==1,'errors only')
+H.app.log_filter='all'
+os.remove(tmp)
 return 'ui ok ('..frames..' frames)'

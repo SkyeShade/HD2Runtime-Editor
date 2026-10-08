@@ -10,14 +10,15 @@ local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local pickers=require('mods/skyeshade/hd2runtime_editor/editor/ui/pickers')
 local views=require('mods/skyeshade/hd2runtime_editor/editor/ui/views')
+local export_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/export_view')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local L=i18n.L
 local C,SZ=theme.colour,theme.size
 local M={}
 local App={};App.__index=App
 
-local VIEWS={{id='browse',label='BROWSE'},{id='changes',label='CHANGES'},{id='mods',label='MODS'},
-    {id='custom',label='CUSTOM'},{id='presets',label='PRESETS'},{id='settings',label='SETTINGS'}}
+local VIEWS={{id='browse',label='BROWSE'},{id='changes',label='CHANGES'},{id='export',label='EXPORT'},{id='mods',label='MODS'},
+    {id='custom',label='CUSTOM'},{id='presets',label='PRESETS'},{id='logs',label='LOGS'},{id='settings',label='SETTINGS'}}
 local CAT_W,OBJ_W=224,334
 local PRESETS_W=470
 
@@ -580,6 +581,10 @@ function App:handle_keys(f)
             self.custom_edit,self.custom_field=nil,0
             return
         end
+        if self.view=='export'and self.exporter and self.exporter.browser then
+            self.exporter.browser=nil
+            return
+        end
         self:sound('back')
         if self.ctx.close then self.ctx.close()end
         return
@@ -605,6 +610,8 @@ function App:handle_keys(f)
     elseif self.view=='mods'then self:handle_mods_keys(f)
     elseif self.view=='custom'then self:handle_custom_keys(f)
     elseif self.view=='settings'then self:handle_settings_keys(f)
+    elseif self.view=='logs'then self:handle_logs_keys(f)
+    elseif self.view=='export'then self:handle_export_keys(f)
     elseif self.view=='presets'then self:handle_presets_keys(f)end
 end
 function App:key_down_once(name)return self.input:query('pressed',name)end
@@ -654,6 +661,7 @@ end
 ------------------------------------------------------------------------------------------------- frame --
 function App:frame(d,dt)
     self.time=self.time+(dt or 0)
+    self.frame_dt=dt or 0
     if self.ctx.sounds and self.ctx.sounds.tick then self.ctx.sounds.tick(dt or 0)end
     -- centred on the screen (1080p units)
     local layout=theme.panel
@@ -666,6 +674,7 @@ function App:frame(d,dt)
     if self.coder or self.moder or self.traiter then typing=false end
     if self.rater then typing=true end
     if self.view=='custom'and(self.custom_field or 0)>0 then typing=true end
+    if self:export_typing()then typing,letters=true,true end
     local f=self.input:poll(dt or 0,{typing=typing,letters=letters,mouse=self.ctx.mouse})
     self.frame_input=f
     self:handle_keys(f)
@@ -1170,6 +1179,12 @@ function App:draw_status(y,h)
     elseif self.view=='custom'then
         cv:text(L('Custom stratagems other mods registered. Cooldown and uses can be tuned on this machine.'),
             18,cy,{size=SZ.small,colour=C.faint,max=maxw})
+    elseif self.view=='export'then
+        cv:text(L('Turns your changes into a mod for your mod manager, in Documents\\HD2R Editor\\Exports.'),
+            18,cy,{size=SZ.small,colour=C.faint,max=maxw})
+    elseif self.view=='logs'then
+        cv:text(L('HD2Runtime.log, live. ←→ filter, ↑↓ select (scrolling up stops following; End follows again).'),
+            18,cy,{size=SZ.small,colour=C.faint,max=maxw})
     elseif self.view=='settings'then
         cv:text(L('Settings are saved with the editor\'s data and apply at once.'),
             18,cy,{size=SZ.small,colour=C.faint,max=maxw})
@@ -1546,6 +1561,8 @@ function App:draw()
     elseif self.view=='mods'then self:draw_mods(body_y,body_h)
     elseif self.view=='custom'then self:draw_custom(body_y,body_h)
     elseif self.view=='settings'then self:draw_settings(body_y,body_h)
+    elseif self.view=='logs'then self:draw_logs(body_y,body_h)
+    elseif self.view=='export'then self:draw_export(body_y,body_h)
     else self:draw_presets(body_y,body_h)end
     self:draw_status(body_y+body_h,theme.status_h)
     self:draw_footer(P.h-theme.footer_h,theme.footer_h)
@@ -1559,5 +1576,6 @@ function App:draw()
 end
 
 views.install(App)
+export_view.install(App)
 
 return M
