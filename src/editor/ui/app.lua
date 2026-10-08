@@ -12,6 +12,7 @@ local pickers=require('mods/skyeshade/hd2runtime_editor/editor/ui/pickers')
 local views=require('mods/skyeshade/hd2runtime_editor/editor/ui/views')
 local export_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/export_view')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 local L=i18n.L
 local C,SZ=theme.colour,theme.size
 local M={}
@@ -1670,26 +1671,88 @@ function App:new_preset()
     if next(self:current_values())==nil then self:toast(L('Nothing to save: edit a field first'),C.dim);return end
     self.rename={create=true,text=self.presets:unique_name('Preset')}
 end
+------------------------------------------------------------------------------------- ModBuilder projects --
+-- ModBuilder's library (editor/modbuilder.lua), read when the Presets tab first lists it and on REFRESH.
+function App:mb_projects()
+    if not self.mb_list then
+        local list,why=modbuilder.projects()
+        self.mb_list,self.mb_error=list or{},why
+    end
+    return self.mb_list
+end
+-- A project's edits, read once per saved version: {items, error}.
+function App:mb_open_project(p)
+    local key=p.id..'@'..p.modified
+    if self.mb_key~=key then
+        local project,why=modbuilder.read(p.id)
+        local open={items={},error=project==nil and tostring(why)or nil}
+        if project then
+            local ok,items=pcall(modbuilder.items,self.catalog,project)
+            if ok then open.items=items else open.error=tostring(items)end
+        end
+        self.mb_open,self.mb_key,self.mb_scroll=open,key,0
+    end
+    return self.mb_open
+end
+function App:mb_select(open,on)
+    for _,it in ipairs(open.items)do if it.row and not it.why then it.selected=on end end
+end
+-- Stages the chosen edits like any other change (Apply writes them).
+function App:mb_stage(open,name)
+    local n,failed=0,0
+    for _,it in ipairs(open.items)do
+        if it.selected and it.row and not it.why then
+            if self:stage_value(it.row,it.value)then n=n+1 else failed=failed+1 end
+        end
+    end
+    if n==0 and failed==0 then self:toast(L('Nothing chosen to stage'),C.dim);return end
+    self:toast(L('Staged %d values from %s. Press Apply.'):format(n,name)..(failed>0 and(' '..L('%d refused'):format(failed))or''),
+        failed>0 and C.pending or C.ok)
+    self:sound('click')
+end
+-- The Presets list: 1 the new preset, the presets, the ModBuilder header, ModBuilder's projects.
+function App:preset_entry(i)
+    local list=self.presets:list()
+    if i==1 then return {kind='new'}end
+    if i<=#list+1 then return {kind='preset',preset=list[i-1]}end
+    if i==#list+2 then return {kind='mb_header'}end
+    local p=self:mb_projects()[i-#list-2]
+    return p and{kind='mb',project=p}or{kind='mb_header'}
+end
+function App:preset_count()return #self.presets:list()+2+#self:mb_projects()end
+local MB_ACTIONS={'STAGE CHOSEN','CHOOSE ALL','CHOOSE NONE'}
+function App:mb_action_run(index,p)
+    local open=self:mb_open_project(p)
+    local a=MB_ACTIONS[index]
+    if a=='STAGE CHOSEN'then self:mb_stage(open,p.name)
+    elseif a=='CHOOSE ALL'then self:mb_select(open,true)
+    else self:mb_select(open,false)end
+end
 function App:handle_presets_keys(f)
     local k=f.keys
     local list=self.presets:list()
-    local n=#list+1
+    local n=self:preset_count()
     if k.UP then self.preset_index=clamp_index(self.preset_index-1,n)end
     if k.DOWN then self.preset_index=clamp_index(self.preset_index+1,n)end
-    if k.LEFT then self.preset_action=clamp_index(self.preset_action-1,#PRESET_ACTIONS)end
-    if k.RIGHT then self.preset_action=clamp_index(self.preset_action+1,#PRESET_ACTIONS)end
+    local entry=self:preset_entry(self.preset_index)
+    local actions=entry.kind=='mb'and MB_ACTIONS or PRESET_ACTIONS
+    if k.LEFT then self.preset_action=clamp_index(self.preset_action-1,#actions)end
+    if k.RIGHT then self.preset_action=clamp_index(self.preset_action+1,#actions)end
+    self.preset_action=clamp_index(self.preset_action,#actions)
     if k.INSERT then self:new_preset()end
     if k.ENTER then
-        if self.preset_index==1 then self:new_preset()
-        else self:preset_action_run(self.preset_action,list[self.preset_index-1])end
+        if entry.kind=='new'then self:new_preset()
+        elseif entry.kind=='preset'then self:preset_action_run(self.preset_action,entry.preset)
+        elseif entry.kind=='mb'then self:mb_action_run(self.preset_action,entry.project)
+        else self.mb_list=nil end
     end
-    if k.DELETE and self.preset_index>1 then self:ask('delete_preset',list[self.preset_index-1].name)end
+    if k.DELETE and entry.kind=='preset'then self:ask('delete_preset',entry.preset.name)end
 end
 function App:draw_presets(y0,h)
     local cv=self.canvas
     local P=theme.panel
     local list=self.presets:list()
-    local n=#list+1
+    local n=self:preset_count()
     self.preset_index=clamp_index(self.preset_index,n)
     cv:rect(0,y0,PRESETS_W,h,C.panel_alt,1)
     cv:rect(PRESETS_W-1,y0,1,h,C.line,2)
@@ -1720,7 +1783,18 @@ function App:draw_presets(y0,h)
                 end
                 return
             end
-            local p=list[i-1]
+            local entry=self:preset_entry(i)
+            if entry.kind=='mb_header'then
+                cv:text(L('MODBUILDER PROJECTS'),x+22,y+rh/2,{size=SZ.tab,font='title',colour=C.faint,max=w-120})
+                cv:text(tostring(#self:mb_projects()),x+w-22,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
+                return
+            elseif entry.kind=='mb'then
+                local mp=entry.project
+                cv:text(mp.name,x+22,y+17,{size=SZ.label,colour=selected and C.text or C.dim,max=w-60})
+                cv:text(tostring(mp.resource or'')..'   '..mp.modified:sub(1,10),x+22,y+35,{size=SZ.tiny,colour=C.faint,max=w-44})
+                return
+            end
+            local p=entry.preset
             local renaming=self.rename and not self.rename.create and self.rename.old==p.name
             if renaming then
                 local tw=cv:text(self.rename.text,x+22,y+17,{size=SZ.label,colour=C.text,max=w-60})
@@ -1773,7 +1847,10 @@ function App:draw_presets(y0,h)
         self:draw_value_list(values,x0,y0+124,w,y0+h-y0-128)
         return
     end
-    local p=list[self.preset_index-1]
+    local entry=self:preset_entry(self.preset_index)
+    if entry.kind=='mb_header'then return self:draw_mb_header(x0,y0,w,h)end
+    if entry.kind=='mb'then return self:draw_mb_project(entry.project,x0,y0,w,h)end
+    local p=entry.preset
     cv:text(p.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
     cv:text(p.count..' fields',x0+20,y0+47,{size=SZ.small,colour=C.faint})
     self.preset_btns=self.preset_btns or{}
@@ -1782,7 +1859,11 @@ function App:draw_presets(y0,h)
         local action=self.preset_btns[i]
         if not action then
             local index=i
-            action={click=function()self.preset_action=index;self:preset_action_run(index,self.presets:list()[self.preset_index-1])end}
+            action={click=function()
+                self.preset_action=index
+                local e=self:preset_entry(self.preset_index)
+                if e.kind=='preset'then self:preset_action_run(index,e.preset)end
+            end}
             self.preset_btns[i]=action
         end
         local bw=cv:measure(L(label),SZ.tab,'title')+40
@@ -1794,6 +1875,88 @@ function App:draw_presets(y0,h)
     local values={}
     for _,item in ipairs(p.fields or{})do values[item.k]=item.v end
     self:draw_value_list(values,x0,y0+124,w,y0+h-y0-128)
+end
+function App:draw_mb_header(x0,y0,w,h)
+    local cv=self.canvas
+    cv:text(L('MODBUILDER PROJECTS'),x0+20,y0+24,{size=20,font='title',colour=C.text})
+    local lines={L('Your HD2Runtime ModBuilder projects, read from its library on this PC:'),
+        tostring(modbuilder.root()or L('(no %LOCALAPPDATA%)')),'',
+        L('Pick one to see its edits as editor fields, choose which to stage, then Apply.'),
+        L('Edits the editor cannot take are listed with the reason (scripts and custom content stay in ModBuilder).'),'',
+        L('To send your changes to ModBuilder: Export tab, then SAVE TO MODBUILDER.')}
+    for i,line in ipairs(lines)do
+        cv:text(line,x0+20,y0+56+(i-1)*22,{size=SZ.small,colour=i==2 and C.dim or C.faint,max=w-40})
+    end
+    if self.mb_error then cv:text(tostring(self.mb_error),x0+20,y0+230,{size=SZ.small,colour=C.error,max=w-40})end
+    self.btn_mb_refresh=self.btn_mb_refresh or{click=function()self.mb_list,self.mb_key=nil,nil end}
+    button(self,L('REFRESH'),x0+20,y0+260,160,34,'normal',self.btn_mb_refresh)
+end
+function App:draw_mb_project(p,x0,y0,w,h)
+    local cv=self.canvas
+    local open=self:mb_open_project(p)
+    local ok_n,chosen=0,0
+    for _,it in ipairs(open.items)do
+        if it.row and not it.why then ok_n=ok_n+1 end
+        if it.selected and it.row and not it.why then chosen=chosen+1 end
+    end
+    cv:text(p.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
+    cv:text(L('%s   ModBuilder project, SDK %s   %d of %d edits can be staged'):format(tostring(p.resource or''),
+        tostring(p.sdk or'?'),ok_n,#open.items),x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
+    self.mb_btns=self.mb_btns or{}
+    local bx=x0+20
+    for i,label in ipairs(MB_ACTIONS)do
+        local action=self.mb_btns[i]
+        if not action then
+            local index=i
+            action={click=function()
+                self.preset_action=index
+                local e=self:preset_entry(self.preset_index)
+                if e.kind=='mb'then self:mb_action_run(index,e.project)end
+            end}
+            self.mb_btns[i]=action
+        end
+        local text=i==1 and(L(label)..'  ('..chosen..')')or L(label)
+        local bw=cv:measure(text,SZ.tab,'title')+40
+        button(self,text,bx,y0+72,bw,34,i==1 and(chosen>0 and'primary'or'disabled')or'normal',action)
+        if i==self.preset_action then cv:rect(bx,y0+108,bw,2,C.gold,5)end
+        bx=bx+bw+10
+    end
+    local y=y0+124
+    if open.error then
+        cv:text(L('Could not read this project: %s'):format(open.error),x0+20,y+12,{size=SZ.small,colour=C.error,max=w-40})
+        return
+    end
+    cv:rect(x0,y,w,22,C.header,2)
+    cv:text(L('EDIT'),x0+46,y+11,{size=SZ.tiny,font='title',colour=C.faint})
+    cv:text(L('VALUE'),x0+w-18,y+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
+    self.mb_item_actions=self.mb_item_actions or{}
+    self:list({x=x0,y=y+24,w=w,h=y0+h-y-28,count=#open.items,row_h=28,scroll_key='mb_scroll',focused=false,
+        actions=self.mb_item_actions,
+        click=function(i)
+            local it=self.mb_open.items[i]
+            if it and it.row and not it.why then it.selected=not it.selected end
+        end,
+        draw=function(i,x,ry,lw,rh)
+            local it=open.items[i]
+            local cy=ry+rh/2
+            local usable=it.row and not it.why
+            if usable then
+                cv:rect(x+18,cy-7,14,14,it.selected and C.gold or C.line_strong,3)
+                if not it.selected then cv:rect(x+20,cy-5,10,10,C.panel,4)end
+            end
+            local tx=x+46
+            if it.row then
+                local nw=cv:text(it.row.object.name,tx,cy,{size=SZ.small,colour=C.faint,max=(lw-260)*0.45})
+                cv:text(L(it.row.label),tx+12+nw,cy,{size=SZ.small,colour=usable and C.dim or C.faint,max=lw-330-nw})
+            else
+                cv:text(it.label,tx,cy,{size=SZ.small,colour=C.faint,max=lw-330})
+            end
+            if usable then
+                cv:text(self:text(it.row,it.value),x+lw-18,cy,{size=SZ.label,colour=C.gold,align='right',max=260})
+            else
+                cv:text(tostring(it.why),x+lw-18,cy,{size=SZ.tiny,colour=C.error,align='right',max=300})
+            end
+        end})
 end
 -- Field values by key: resolved names where the catalogue has the field.
 function App:draw_value_list(values,x0,y,w,h)

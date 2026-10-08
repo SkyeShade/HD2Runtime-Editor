@@ -12,6 +12,7 @@ local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local export=require('mods/skyeshade/hd2runtime_editor/editor/export')
 local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
+local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 local C,SZ=theme.colour,theme.size
 local L=i18n.L
 local M={}
@@ -80,6 +81,28 @@ function M.install(App)
         x.done={folder=folder,zip=zip,resource=result.resource,count=#entries-#result.skipped,
             skipped=result.skipped,preset=saved and preset or nil}
         x.step='done'
+        self:sound('apply')
+    end
+    -- The same changes as a ModBuilder project in its library (editor/modbuilder.lua): ModBuilder opens and builds it,
+    -- and the Presets tab imports it again.
+    function App:export_modbuilder()
+        local list,x=self:export_changes()
+        local entries={}
+        for _,e in ipairs(list)do
+            if x.selected[e.row.key]then entries[#entries+1]={row=e.row,value=e.value}end
+        end
+        local meta={}
+        for k,v in pairs(x.meta)do meta[k]=v end
+        meta.minimum=tostring(self.ctx.minimum or'0.30.0')
+        meta.sdk=meta.minimum
+        meta.editor_version=self.ctx.version
+        local ok,result=pcall(modbuilder.save,catalog_module,entries,meta,win.mkdir)
+        if not ok then self:toast(L('Not saved to ModBuilder: %s'):format(tostring(result)),C.error);return end
+        self.presets:set_setting('export_author',meta.author)
+        self.mb_list,self.mb_key=nil,nil
+        self:toast(L('%s ModBuilder project "%s" (%d changes). Reopen ModBuilder\'s project list to see it.'):format(
+            result.updated and L('Updated the')or L('Saved the'),result.name,result.count),C.ok)
+        if self.ctx.log then self.ctx.log('saved the ModBuilder project '..result.path)end
         self:sound('apply')
     end
     -- the image browser: a folder's sub-folders and images
@@ -286,6 +309,9 @@ function M.install(App)
             200,y+46,{size=SZ.small,colour=C.faint,max=W-440})
         self.export_back=self.export_back or{click=function()self.exporter.step='pick'end}
         self.export_go=self.export_go or{click=function()self:export_run()end}
+        self.export_mb=self.export_mb or{click=function()self:export_modbuilder()end}
+        button(self,L('SAVE TO MODBUILDER'),W-722,top+h-50,260,36,version_ok and x.meta.name~=''and'normal'or'disabled',
+            self.export_mb)
         button(self,L('BACK'),W-452,top+h-50,120,36,'normal',self.export_back)
         button(self,L('EXPORT'),W-320,top+h-50,300,36,version_ok and x.meta.name~=''and'primary'or'disabled',self.export_go)
         if x.browser then self:draw_export_browser(x)end

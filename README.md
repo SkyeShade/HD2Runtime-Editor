@@ -27,6 +27,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     projectile and stats you edit are that weapon's. The group says which other vehicle shares those records.
   - A backpack that comes with a support weapon is never shown on its own.
   - A weapon's attachments sit inside it: its magazines, muzzles, optics and underbarrels, each with its stat modifiers (sway, recoil, climb, spread, ergonomics). An attachment is shared by every weapon that can mount it.
+  - A two-mode weapon holds its underbarrel weapon (the One-Two's grenade launcher, the Arbitrator's shotgun, the Stoker's flamer): its own rounds, resupply, magazine, fire rate and spread.
 - **Weapon groups.** Primary and Secondary have a filter under the search box with the armory's groups (Assault
   Rifle, Marksman Rifle, Submachine Gun, Shotgun, Explosive, Energy-Based, Special; Pistol, Melee, Special).
 - **Your Helldiver and their armor.**
@@ -52,6 +53,10 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
 - **Optimised apply.** Edits are staged as pending changes and applied together. Only fields whose value changed are written, and each change is a single guarded write.
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
+- **Back and forth with ModBuilder.**
+  - **Import:** the Presets tab lists your [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder) projects, read from its library on your PC. A project shows its edits as editor fields; choose which to stage, then Apply. Edits the editor cannot take (scripts, custom content, a field this Runtime does not have) are listed with the reason.
+  - **Export:** the Export tab's SAVE TO MODBUILDER puts your changes into ModBuilder's library as a project. ModBuilder opens and builds it, with your changes as the project's custom Lua, and the editor imports it again.
+  - It never overwrites a project ModBuilder made. Reopen ModBuilder's project list to see a new one.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
 > **Status: 0.8.3, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).

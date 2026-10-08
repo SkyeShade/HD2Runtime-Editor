@@ -780,6 +780,83 @@ do
     H.app:unstage(b_row)
     assert(H.app.pending_n==before)
 end
+-- ModBuilder: its projects (a library in a temp folder) list under Presets; a project's edits match editor fields by
+-- weapon + field, an older project's support key by weapon / role / field, and its custom Lua's hd2.ensure patches by
+-- target code; unknown fields are listed with why; STAGE CHOSEN stages the chosen ones. The Export tab saves the
+-- changes back as a ModBuilder project (custom Lua) that imports again.
+do
+    local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
+    local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
+    local base=(os.getenv('TEMP')or'.')..'\\hd2r_mb_test_'..tostring(os.time())
+    modbuilder.base=base
+    local root=base..'\\HD2RuntimeGUI'
+    local id='11111111-2222-4333-8444-555555555555'
+    win.mkdir(root..'\\Projects\\'..id)
+    local function put(path,text)local f=assert(io.open(path,'wb'));f:write(text);f:close()end
+    put(root..'\\library.json',[[{"formatVersion":1,"projects":[{"id":"]]..id..[[","displayName":"Railgun And Rifle",
+        "resourceId":"mods/someone/railgun_and_rifle","sdkVersion":"0.28.1","modifiedAt":"2026-09-30T10:00:00+00:00"}]}]])
+    put(root..'\\Projects\\'..id..'\\project.hd2mod.json',[[{"formatVersion":11,"id":"]]..id..[[",
+        "displayName":"Railgun And Rifle","author":"someone","resourceId":"mods/someone/railgun_and_rifle",
+        "version":"1.0.0","sdkVersion":"0.28.1","runtimeApi":1,
+        "weaponChanges":[{"weapon":"AR-23P Liberator Penetrator","semanticFieldId":"weapon.fire_rate","fieldType":"number",
+            "expectedValue":640,"desiredValue":777,"enabled":true},
+          {"weapon":"AR-23P Liberator Penetrator","semanticFieldId":"weapon.made_up","fieldType":"number",
+            "expectedValue":1,"desiredValue":2,"enabled":true}],
+        "supportChanges":[{"instanceKey":"support-field/v1/rs-422-railgun/projectile-reference/primary/damage-standard-damage/0000000000000000",
+            "weapon":"RS-422 Railgun","attackRole":"primary","semanticFieldId":"damage.standard_damage","fieldType":"integer",
+            "expectedValue":600,"desiredValue":900,"enabled":true}],
+        "customLua":{"enabled":true,"source":"local hd2=require('mods/skyeshade/hd2runtime')\nhd2.ensure({patch={id='x',target=hd2.weapon('AR-23P Liberator Penetrator'),field='weapon.ergonomics',expect=1,value=2}})\nhd2.on_frame(function() end)\n"}}]])
+    H.app:set_view('presets')
+    local n_presets=#H.presets:list()
+    H.app.mb_list=nil
+    assert(#H.app:mb_projects()==1,'the library lists the project')
+    H.app.preset_index=n_presets+2
+    step({},nil,'56_modbuilder_header')
+    H.app.preset_index=n_presets+3
+    step({},nil,'57_modbuilder_project')
+    local open=H.app.mb_open
+    assert(open and not open.error,'read: '..tostring(open and open.error))
+    local by={}
+    for _,it in ipairs(open.items)do by[(it.row and(it.row.object.name..'|'..tostring(it.row.field))or it.label)]=it end
+    local rate=by['AR-23P Liberator Penetrator|weapon.fire_rate']
+    assert(rate and rate.selected and rate.value==777,'the weapon change matches')
+    local rail
+    for _,it in ipairs(open.items)do if it.row and it.row.object.name:find('Railgun',1,true)then rail=it end end
+    assert(rail and rail.selected and rail.value==900,'the support change matches by weapon, role and field')
+    local unknown=by['AR-23P Liberator Penetrator: weapon.made_up']
+    assert(unknown and not unknown.selected and unknown.why,'an unknown field is listed with why')
+    local ergo=by['AR-23P Liberator Penetrator|weapon.ergonomics']
+    assert(ergo and ergo.why==nil or ergo and ergo.row,'the custom Lua patch matches by target code')
+    -- choose none, then one, then stage
+    local before=H.app.pending_n
+    H.app:mb_action_run(3,H.app:mb_projects()[1])
+    rate.selected=true
+    H.app:mb_action_run(1,H.app:mb_projects()[1])
+    assert(H.app.pending_n==before+1 and H.app.pending[rate.row.key],'only the chosen edit is staged')
+    assert(H.app.toast_msg.text:find('Staged 1 values',1,true),'and says so: '..H.app.toast_msg.text)
+    -- back to ModBuilder from the Export tab
+    H.app:set_view('export')
+    local list,x=H.app:export_changes()
+    for key in pairs(x.selected)do x.selected[key]=false end
+    x.selected[rate.row.key]=true
+    x.meta.name,x.meta.version,x.meta.author='Roundtrip From Editor','1.0.0','Tester'
+    H.app:export_modbuilder()
+    assert(H.app.toast_msg.text:find('ModBuilder project',1,true),'saved: '..H.app.toast_msg.text)
+    H.app.mb_list=nil
+    local saved
+    for _,p in ipairs(H.app:mb_projects())do if p.resource=='mods/tester/roundtrip_from_editor'then saved=p end end
+    assert(saved,'the library lists the saved project')
+    local items=modbuilder.items(H.catalog,assert(modbuilder.read(saved.id)))
+    assert(#items==1 and items[1].row==rate.row and items[1].value==777,'it imports again')
+    -- a project ModBuilder owns is never overwritten
+    x.meta.name,x.meta.author='Railgun And Rifle','someone'
+    H.app:export_modbuilder()
+    assert(H.app.toast_msg.text:find('changes of its own',1,true),'refused: '..H.app.toast_msg.text)
+    H.app:unstage(rate.row)
+    modbuilder.base=nil
+    H.app.mb_list=nil
+    os.execute('rmdir /s /q "'..base..'" 2>nul')
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

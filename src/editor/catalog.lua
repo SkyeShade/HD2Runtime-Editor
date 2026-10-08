@@ -514,6 +514,7 @@ local function player_rows(hd2,object,entry)
                     common.section=join('Projectile',role_label(role),'Swap')
                     common.options=function(row)return projectile_options(hd2,row)end
                     rows[#rows+1]=make_value_row(object,common)
+                    rows[#rows].swap={kind='projectile',role=role}
                 end
             elseif f.type=='explosion_reference'and b.branch and b.phase then
                 local role,phase=b.branch,b.phase
@@ -532,11 +533,14 @@ local function player_rows(hd2,object,entry)
                         common.section=join('Explosion',role_label(role),util.humanize(phase))
                         common.options=function(row)return explosion_options(hd2,row)end
                         rows[#rows+1]=make_value_row(object,common)
+                        rows[#rows].swap={kind='terminal',role=role,phase=phase}
                     end
                 end
             end
         end
     end
+    -- the catalogue weapon each row writes ('AR/GL-21 One-Two / underbarrel' for a sub-weapon): ModBuilder's identity
+    for _,r in ipairs(rows)do r.weapon_name=name end
     return rows
 end
 
@@ -841,6 +845,8 @@ local function vehicle_weapon_rows(hd2,object,entry)
             end
         end
     end
+    -- ModBuilder's identity (entityChanges: resource vehicle_weapon, entity = the weapon's catalogue name)
+    for _,r in ipairs(rows)do r.mb_resource,r.mb_entity,r.mb_where='vehicle_weapon',entry.name,''end
     return rows
 end
 
@@ -969,6 +975,9 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
                     storage=s.storage or(f.backing or{}).storage,field=f.id,target=target,shared=s.shared==true,
                     unverified=ack=='allow_unverified_effect',descriptor=f,section=section,group=group,
                     disabled_value=s.disabledValue or f.disabledValue})
+                rows[#rows].mb_resource=structure and'structure'or'enemy'
+                rows[#rows].mb_entity=entry.semanticId
+                rows[#rows].mb_where=f.path..'|'..tostring(f.zone or f.attack or'')
             end
         end
     end
@@ -1075,6 +1084,7 @@ local function pod_rows(hd2,object,rack)
                     target=function()return hd2.pod_rack(name):slot(index)end,expect=expect,vanilla=vanilla,
                     section='Hellpod',options=function(row)return pickup_options(hd2,row)end,shared=shared,
                     editable=not locked and slot.writable~=false,reason=reason or slot.reason})
+                if rack.semanticId then rows[#rows].mb_key='pod_rack|'..rack.semanticId..'|'..i end
             end
         end
     end
@@ -1635,6 +1645,50 @@ function Catalog:index_step(budget)
         end
     end
     return false
+end
+-- Every row by the identities ModBuilder projects name them with (editor/modbuilder.lua): instance[instanceKey] and
+-- weapon['<catalogue weapon>|<semanticFieldId>'], swap (projectile and terminal explosion swaps), ident (rows without
+-- an instance key, by ModBuilder's other identity fields), and rows (all). Opens the whole catalogue first; built once.
+function Catalog:import_index()
+    if self.import_lookup then return self.import_lookup end
+    while not self:index_step(500)do end
+    local lookup={instance={},weapon={},swap={},ident={},rows={}}
+    for _,group in ipairs(M.GROUPS)do
+        for _,item in ipairs(group.items)do
+            for _,object in ipairs((self:objects(item.id))or{})do
+                for _,row in ipairs(object.rows or{})do
+                    lookup.rows[#lookup.rows+1]=row
+                    local d=type(row.descriptor)=='table'and row.descriptor or{}
+                    if d.instanceKey and not lookup.instance[d.instanceKey]then lookup.instance[d.instanceKey]=row end
+                    if row.weapon_name and d.semanticFieldId then
+                        local key=row.weapon_name..'|'..d.semanticFieldId
+                        if not lookup.weapon[key]then lookup.weapon[key]=row end
+                    end
+                    -- the identities of rows without an instance key: support weapon fields by weapon, role and field;
+                    -- vehicle weapons, enemies and structures by entity (and path / zone); pod slots by rack and slot
+                    local function reg(key)if key and not lookup.ident[key]then lookup.ident[key]=row end end
+                    local t=type(d.target)=='table'and d.target or{}
+                    local sids={d.semanticTarget,d.semanticFieldId,d.id}
+                    if t.resource=='support_weapon'and t.weapon then
+                        for _,sid in pairs(sids)do reg('support|'..t.weapon..'|'..tostring(t.attack or'')..'|'..sid)end
+                    end
+                    if row.mb_entity then
+                        for _,sid in pairs(sids)do
+                            reg(row.mb_resource..'|'..row.mb_entity..'|'..row.mb_where..'|'..sid)
+                        end
+                    end
+                    reg(row.mb_key)
+                    -- swaps: 'projectile|<weapon>|<role>' and 'terminal|<weapon>|<role>|<phase>'
+                    local s=row.swap
+                    if s and row.weapon_name then
+                        lookup.swap[s.kind..'|'..row.weapon_name..'|'..s.role..(s.phase and('|'..s.phase)or'')]=row
+                    end
+                end
+            end
+        end
+    end
+    self.import_lookup=lookup
+    return lookup
 end
 -- The other rows that write a row's native bytes, on other objects (a value shared by several weapons, enemies or
 -- stratagems: changing one changes them all). {row, ...}; complete once the index is built (index_step).

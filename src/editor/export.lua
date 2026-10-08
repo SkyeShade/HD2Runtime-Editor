@@ -188,7 +188,7 @@ local function json(v,indent,level)
     elseif v==nil then return'null'end
     local pad=string.rep('  ',level+1)
     local close=string.rep('  ',level)
-    if#v>0 or next(v)==nil and v.__array then
+    if#v>0 or rawget(v,'__array')then
         local parts={}
         for i,x in ipairs(v)do parts[i]=pad..json(x,indent,level+1)end
         if#parts==0 then return'[]'end
