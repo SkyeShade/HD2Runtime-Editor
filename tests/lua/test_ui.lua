@@ -821,12 +821,12 @@ do
             "expectedValue":600,"desiredValue":900,"enabled":true}],
         "customLua":{"enabled":true,"source":"local hd2=require('mods/skyeshade/hd2runtime')\nhd2.ensure({patch={id='x',target=hd2.weapon('AR-23P Liberator Penetrator'),field='weapon.ergonomics',expect=1,value=2}})\nhd2.on_frame(function() end)\n"}}]])
     H.app:set_view('presets')
-    local n_presets=#H.presets:list()
     H.app.mb_list=nil
     assert(#H.app:mb_projects()==1,'the library lists the project')
-    H.app.preset_index=n_presets+2
+    local mb_header=assert(H.app:preset_index_of('mb_header'))
+    H.app.preset_index=mb_header
     step({},nil,'56_modbuilder_header')
-    H.app.preset_index=n_presets+3
+    H.app.preset_index=mb_header+1
     step({},nil,'57_modbuilder_project')
     local open=H.app.mb_open
     assert(open and not open.error,'read: '..tostring(open and open.error))
@@ -899,6 +899,61 @@ do
         H.catalog:open(kit)
         for _,r in ipairs(kit.rows)do assert(r.risk==nil,'kit piece weights are ordinary data')end
     end
+end
+-- shared preset files: SHARE writes a preset to the shared folder (a temp folder here), the Presets tab lists the
+-- folder, a file's values load as pending changes or save as a preset, and a file from elsewhere is imported into it
+do
+    local preset_files=require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
+    local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
+    local base=(os.getenv('TEMP')or'.')..'\\hd2r_presets_test_'..tostring(os.time())
+    preset_files.base=base..'\\Presets'
+    H.app:set_view('presets')
+    -- a preset with one field
+    local row
+    for _,o in ipairs(H.catalog:objects('primary'))do
+        H.catalog:open(o)
+        for _,r in ipairs(o.rows)do if not row and r.editable and not r.kind and r.field=='weapon.fire_rate'then row=r end end
+    end
+    assert(H.presets:save('Share Me',{[row.key]=row.vanilla+5}))
+    local preset=H.presets:find('Share Me')
+    H.app:share_preset(preset)
+    assert(H.app.toast_msg.text:find('Shared as',1,true),'shared: '..H.app.toast_msg.text)
+    local files=H.app:preset_files()
+    assert(#files==1 and files[1].name=='Share-Me','the folder lists it: '..tostring(files[1]and files[1].name))
+    local text=preset_files.read_file(files[1].path)
+    assert(text:find('"format": "hd2r-editor-preset"',1,true)and text:find(row.object.name,1,true),'a readable file')
+    -- the list shows it under its header; its detail reads it
+    local header=assert(H.app:preset_index_of('file_header'))
+    H.app.preset_index=header
+    step({},nil,'59_shared_files_header')
+    H.app.preset_index=header+1
+    step({},nil,'60_shared_file')
+    local open=H.app.pf_open
+    assert(open and open.preset and open.preset.values[row.key]==row.vanilla+5,'the file reads back')
+    -- LOAD stages it; SAVE AS PRESET keeps it
+    local before=H.app.pending_n
+    H.app:preset_file_action_run(1,files[1])
+    assert(H.app.pending[row.key]and H.app.pending[row.key].value==row.vanilla+5,'LOAD stages the value')
+    H.app:unstage(row)
+    assert(H.app.pending_n==before)
+    H.app:preset_file_action_run(2,files[1])
+    assert(H.presets:find('Share Me (2)')or H.presets:find('Share Me 2'),'SAVE AS PRESET keeps it: '..H.app.toast_msg.text)
+    -- a file from elsewhere: checked, then copied into the folder; a non-preset file is refused
+    local other=base..'\\Elsewhere'
+    win.mkdir(other)
+    local f=assert(io.open(other..'\\from-a-friend.json','wb'))
+    f:write(preset_files.encode('From A Friend',{[row.key]=row.vanilla+7},nil,{editor='0.8.4'}));f:close()
+    local path,got=preset_files.import(other..'\\from-a-friend.json',preset_files.folder(),win.mkdir)
+    assert(path and got.name=='From A Friend','imported')
+    f=assert(io.open(other..'\\not-a-preset.json','wb'));f:write('{"hello":1}');f:close()
+    local bad,why=preset_files.import(other..'\\not-a-preset.json',preset_files.folder(),win.mkdir)
+    assert(not bad and why:find('not an HD2R Editor preset',1,true),'refused: '..tostring(why))
+    H.app.pf_list=nil
+    assert(#H.app:preset_files()==2,'both files listed')
+    for _,name in ipairs({'Share Me','Share Me (2)','Share Me 2'})do if H.presets:find(name)then H.presets:delete(name)end end
+    preset_files.base=nil
+    H.app.pf_list=nil
+    os.execute('rmdir /s /q "'..base..'" 2>nul')
 end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title

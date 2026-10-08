@@ -13,6 +13,8 @@ local views=require('mods/skyeshade/hd2runtime_editor/editor/ui/views')
 local export_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/export_view')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
+local preset_files=require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
+local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
 local L=i18n.L
 local C,SZ=theme.colour,theme.size
 local M={}
@@ -1668,14 +1670,87 @@ function App:finish_rename()
     local ok,why=self.presets:rename(r.old,r.text)
     if ok then self:toast(L('Renamed to ')..r.text,C.ok)else self:toast(tostring(why),C.error)end
 end
-local PRESET_ACTIONS={'LOAD','SAVE OVER','RENAME','DELETE'}
+local PRESET_ACTIONS={'LOAD','SAVE OVER','RENAME','SHARE','DELETE'}
 function App:preset_action_run(index,preset)
     if not preset then return end
     local a=PRESET_ACTIONS[index]
     if a=='LOAD'then self:load_preset(preset.name)
     elseif a=='SAVE OVER'then self:save_preset(preset.name)
     elseif a=='RENAME'then self.rename={old=preset.name,text=preset.name}
+    elseif a=='SHARE'then self:share_preset(preset)
     elseif a=='DELETE'then self:ask('delete_preset',preset.name)end
+end
+--------------------------------------------------------------------------------------- shared preset files --
+-- The shared folder's preset files (editor/preset_files.lua), listed again every few seconds while the tab shows
+-- them, so a file dropped into the folder appears by itself.
+function App:preset_files()
+    if not self.pf_list or self.time-(self.pf_time or-99)>3 then
+        self.pf_list=preset_files.list(preset_files.folder(),win.list)
+        self.pf_time=self.time
+    end
+    return self.pf_list
+end
+-- A preset as a file in the shared folder, with each field's name for people reading it.
+function App:share_preset(preset)
+    local folder=preset_files.folder()
+    if not folder then self:toast(L('No Documents folder (%USERPROFILE%)'),C.error);return end
+    local values,labels={},{}
+    for _,item in ipairs(preset.fields or{})do
+        values[item.k]=item.v
+        local row=self.catalog:row(item.k)
+        if row then labels[item.k]=row.object.name..' · '..row.label end
+    end
+    local ok,path=pcall(preset_files.save,folder,preset.name,values,labels,
+        {editor=self.ctx.version,runtime=self.ctx.minimum},win.mkdir)
+    if not ok then self:toast(L('Not shared: %s'):format(tostring(path)),C.error);return end
+    self.pf_list=nil
+    self:toast(L('Shared as %s'):format(path),C.ok)
+    if self.ctx.log then self.ctx.log('shared the preset '..preset.name..' as '..path)end
+end
+-- A file's preset, read once per size: {preset, error}.
+function App:preset_file_open(f)
+    local key=f.path..'@'..tostring(f.size)
+    if self.pf_key~=key then
+        local preset,why=preset_files.load(f.path)
+        self.pf_open,self.pf_key,self.detail_scroll={preset=preset,error=preset==nil and tostring(why)or nil},key,0
+    end
+    return self.pf_open
+end
+local FILE_ACTIONS={'LOAD','SAVE AS PRESET'}
+function App:preset_file_action_run(index,f)
+    local open=self:preset_file_open(f)
+    if not open.preset then self:toast(tostring(open.error),C.error);return end
+    local p=open.preset
+    if FILE_ACTIONS[index]=='LOAD'then
+        local missing=self:stage_map(p.values)
+        self:toast(L('Loaded ')..p.name..': '..self.pending_n..' pending'..(missing>0 and(', '..missing..' unknown fields skipped')or'')
+            ..'. Press Apply.',missing>0 and C.pending or C.ok)
+    else
+        local name=self.presets:unique_name(p.name)
+        local ok,why=self.presets:save(name,p.values)
+        if ok then self:toast(L('Saved preset ')..name..' ('..util.count(p.values)..' fields)',C.ok)
+        else self:toast(L('Could not save: ')..tostring(why),C.error)end
+    end
+end
+-- A preset file from anywhere: the Windows open-file dialog, then a copy into the shared folder.
+function App:preset_file_pick()
+    if self.pf_picking then return end
+    local job,why=win.pick_file({title=L('Choose a preset file'),
+        filter=L('HD2R Editor presets')..' (*.hd2rpreset.json)|*.hd2rpreset.json;*.json|',folder=preset_files.folder()})
+    if not job then self:toast(L('The Windows file dialog did not open (%s)'):format(tostring(why)),C.error);return end
+    self.pf_picking=job
+end
+function App:preset_file_poll()
+    local job=self.pf_picking
+    if not job then return end
+    local result=job.poll()
+    if result==nil then return end
+    self.pf_picking=nil
+    if not result then return end
+    local path,preset=preset_files.import(result,preset_files.folder(),win.mkdir)
+    if not path then self:toast(L('Not imported: %s'):format(tostring(preset)),C.error);return end
+    self.pf_list=nil
+    self:toast(L('Imported %s into the shared folder'):format(path:match('([^\\]+)$')or path),C.ok)
 end
 function App:new_preset()
     if next(self:current_values())==nil then self:toast(L('Nothing to save: edit a field first'),C.dim);return end
@@ -1720,16 +1795,29 @@ function App:mb_stage(open,name)
         failed>0 and C.pending or C.ok)
     self:sound('click')
 end
--- The Presets list: 1 the new preset, the presets, the ModBuilder header, ModBuilder's projects.
-function App:preset_entry(i)
-    local list=self.presets:list()
-    if i==1 then return {kind='new'}end
-    if i<=#list+1 then return {kind='preset',preset=list[i-1]}end
-    if i==#list+2 then return {kind='mb_header'}end
-    local p=self:mb_projects()[i-#list-2]
-    return p and{kind='mb',project=p}or{kind='mb_header'}
+-- The Presets list: the new preset, the presets, the shared files (under their header), ModBuilder's projects (under
+-- theirs). Built again when a frame passes or any of the lists changes.
+function App:preset_entries()
+    local presets,files,projects=self.presets:list(),self:preset_files(),self:mb_projects()
+    local key=tostring(self.time)..'|'..#presets
+    if not self.pe_list or self.pe_key~=key or self.pe_files~=files or self.pe_projects~=projects then
+        local out={{kind='new'}}
+        for _,p in ipairs(presets)do out[#out+1]={kind='preset',preset=p}end
+        out[#out+1]={kind='file_header'}
+        for _,f in ipairs(files)do out[#out+1]={kind='file',file=f}end
+        out[#out+1]={kind='mb_header'}
+        for _,p in ipairs(projects)do out[#out+1]={kind='mb',project=p}end
+        self.pe_list,self.pe_key,self.pe_files,self.pe_projects=out,key,files,projects
+    end
+    return self.pe_list
 end
-function App:preset_count()return #self.presets:list()+2+#self:mb_projects()end
+-- The list index of the first entry of a kind ('file_header', 'mb_header', ...), or nil.
+function App:preset_index_of(kind)
+    for i,e in ipairs(self:preset_entries())do if e.kind==kind then return i end end
+    return nil
+end
+function App:preset_entry(i)return self:preset_entries()[i]or{kind='new'}end
+function App:preset_count()return #self:preset_entries()end
 local MB_ACTIONS={'STAGE CHOSEN','CHOOSE ALL','CHOOSE NONE'}
 function App:mb_action_run(index,p)
     local open=self:mb_open_project(p)
@@ -1745,7 +1833,7 @@ function App:handle_presets_keys(f)
     if k.UP then self.preset_index=clamp_index(self.preset_index-1,n)end
     if k.DOWN then self.preset_index=clamp_index(self.preset_index+1,n)end
     local entry=self:preset_entry(self.preset_index)
-    local actions=entry.kind=='mb'and MB_ACTIONS or PRESET_ACTIONS
+    local actions=entry.kind=='mb'and MB_ACTIONS or entry.kind=='file'and FILE_ACTIONS or PRESET_ACTIONS
     if k.LEFT then self.preset_action=clamp_index(self.preset_action-1,#actions)end
     if k.RIGHT then self.preset_action=clamp_index(self.preset_action+1,#actions)end
     self.preset_action=clamp_index(self.preset_action,#actions)
@@ -1754,6 +1842,8 @@ function App:handle_presets_keys(f)
         if entry.kind=='new'then self:new_preset()
         elseif entry.kind=='preset'then self:preset_action_run(self.preset_action,entry.preset)
         elseif entry.kind=='mb'then self:mb_action_run(self.preset_action,entry.project)
+        elseif entry.kind=='file'then self:preset_file_action_run(self.preset_action,entry.file)
+        elseif entry.kind=='file_header'then self:preset_file_pick()
         else self.mb_list=nil end
     end
     if k.DELETE and entry.kind=='preset'then self:ask('delete_preset',entry.preset.name)end
@@ -1761,9 +1851,9 @@ end
 function App:draw_presets(y0,h)
     local cv=self.canvas
     local P=theme.panel
-    local list=self.presets:list()
     local n=self:preset_count()
     self.preset_index=clamp_index(self.preset_index,n)
+    self:preset_file_poll()
     cv:rect(0,y0,PRESETS_W,h,C.panel_alt,1)
     cv:rect(PRESETS_W-1,y0,1,h,C.line,2)
     cv:text(L('PRESETS'),18,y0+20,{size=SZ.heading,font='title',colour=C.faint})
@@ -1794,7 +1884,16 @@ function App:draw_presets(y0,h)
                 return
             end
             local entry=self:preset_entry(i)
-            if entry.kind=='mb_header'then
+            if entry.kind=='file_header'then
+                cv:text(L('SHARED PRESET FILES'),x+22,y+rh/2,{size=SZ.tab,font='title',colour=C.faint,max=w-120})
+                cv:text(tostring(#self:preset_files()),x+w-22,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
+                return
+            elseif entry.kind=='file'then
+                local f=entry.file
+                cv:text(f.name,x+22,y+17,{size=SZ.label,colour=selected and C.text or C.dim,max=w-60})
+                cv:text(L('file')..'   '..string.format('%.1f KB',(f.size or 0)/1024),x+22,y+35,{size=SZ.tiny,colour=C.faint,max=w-44})
+                return
+            elseif entry.kind=='mb_header'then
                 cv:text(L('MODBUILDER PROJECTS'),x+22,y+rh/2,{size=SZ.tab,font='title',colour=C.faint,max=w-120})
                 cv:text(tostring(#self:mb_projects()),x+w-22,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
                 return
@@ -1858,6 +1957,8 @@ function App:draw_presets(y0,h)
         return
     end
     local entry=self:preset_entry(self.preset_index)
+    if entry.kind=='file_header'then return self:draw_files_header(x0,y0,w,h)end
+    if entry.kind=='file'then return self:draw_preset_file(entry.file,x0,y0,w,h)end
     if entry.kind=='mb_header'then return self:draw_mb_header(x0,y0,w,h)end
     if entry.kind=='mb'then return self:draw_mb_project(entry.project,x0,y0,w,h)end
     local p=entry.preset
@@ -1885,6 +1986,59 @@ function App:draw_presets(y0,h)
     local values={}
     for _,item in ipairs(p.fields or{})do values[item.k]=item.v end
     self:draw_value_list(values,x0,y0+124,w,y0+h-y0-128)
+end
+function App:draw_files_header(x0,y0,w,h)
+    local cv=self.canvas
+    cv:text(L('SHARED PRESET FILES'),x0+20,y0+24,{size=20,font='title',colour=C.text})
+    local lines={L('Presets as files, to share with other players. The editor lists this folder:'),
+        tostring(preset_files.folder()or L('(no %USERPROFILE%)')),'',
+        L('SHARE on a preset writes it here. Put a file someone sent you here (or use IMPORT A FILE) and it shows up.'),
+        L('Pick a file to see its values; LOAD stages them, SAVE AS PRESET keeps them with your presets.')}
+    for i,line in ipairs(lines)do
+        cv:text(line,x0+20,y0+56+(i-1)*22,{size=SZ.small,colour=i==2 and C.dim or C.faint,max=w-40})
+    end
+    self.btn_pf_import=self.btn_pf_import or{click=function()self:preset_file_pick()end}
+    self.btn_pf_open=self.btn_pf_open or{click=function()
+        local folder=preset_files.folder()
+        if folder then win.mkdir(folder)end
+        local ok,why=win.open(folder or'')
+        if not ok then self:toast(L('Could not open it: %s'):format(tostring(why)),C.error)end
+    end}
+    button(self,self.pf_picking and L('CHOOSE IN THE WINDOWS DIALOG...')or L('IMPORT A FILE'),x0+20,y0+200,300,34,
+        'primary',self.btn_pf_import)
+    button(self,L('OPEN THE FOLDER'),x0+332,y0+200,220,34,'normal',self.btn_pf_open)
+end
+function App:draw_preset_file(f,x0,y0,w,h)
+    local cv=self.canvas
+    local open=self:preset_file_open(f)
+    local p=open.preset
+    cv:text(p and p.name or f.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
+    if not p then
+        cv:text(L('Could not read this file: %s'):format(tostring(open.error)),x0+20,y0+47,{size=SZ.small,colour=C.error,max=w-40})
+        return
+    end
+    local info=f.name..'   '..util.count(p.values)..' fields'..(p.editor and('   '..L('from editor %s'):format(p.editor))or'')
+        ..(p.skipped>0 and('   '..L('%d unreadable fields skipped'):format(p.skipped))or'')
+    cv:text(info,x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
+    self.pf_btns=self.pf_btns or{}
+    local bx=x0+20
+    for i,label in ipairs(FILE_ACTIONS)do
+        local action=self.pf_btns[i]
+        if not action then
+            local index=i
+            action={click=function()
+                self.preset_action=index
+                local e=self:preset_entry(self.preset_index)
+                if e.kind=='file'then self:preset_file_action_run(index,e.file)end
+            end}
+            self.pf_btns[i]=action
+        end
+        local bw=cv:measure(L(label),SZ.tab,'title')+40
+        button(self,L(label),bx,y0+72,bw,34,i==1 and'primary'or'normal',action)
+        if i==self.preset_action then cv:rect(bx,y0+108,bw,2,C.gold,5)end
+        bx=bx+bw+10
+    end
+    self:draw_value_list(p.values,x0,y0+124,w,y0+h-y0-128)
 end
 function App:draw_mb_header(x0,y0,w,h)
     local cv=self.canvas
