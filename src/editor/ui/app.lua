@@ -199,16 +199,19 @@ function App:field_items(object)
         elseif not emitted[section.group]then
             emitted[section.group]=true
             local g=section.group
-            local count=0
-            for _,sec in ipairs(groups[g])do count=count+#sec.rows end
+            local count,rows=0,{}
+            for _,sec in ipairs(groups[g])do
+                count=count+#sec.rows
+                for _,row in ipairs(sec.rows)do rows[#rows+1]=row end
+            end
             local gkey='g|'..g
             local open=self:is_open(object,gkey)
-            add({header=g,key=gkey,open=open,count=count,subs=#groups[g],depth=0},true)
+            add({header=g,key=gkey,open=open,count=count,subs=#groups[g],depth=0,rows=rows},true)
             if open then
                 for _,sec in ipairs(groups[g])do
                     local skey='s|'..g..'|'..sec.label
                     local sopen=self:is_open(object,skey)
-                    add({header=sec.label,key=skey,open=sopen,count=#sec.rows,depth=1,parent=gkey},true)
+                    add({header=sec.label,key=skey,open=sopen,count=#sec.rows,depth=1,parent=gkey,rows=sec.rows},true)
                     if sopen then
                         for _,row in ipairs(sec.rows)do add({row=row,depth=2,parent=skey},true)end
                     end
@@ -255,21 +258,67 @@ end
 function App:markers()
     local key=self.layer.version..':'..self.ledger.version..':'..self.pending_n
     if self.marker_key==key then return self.marker_cache end
-    local m={pending={},editor={},mod={}}
-    for _,p in pairs(self.pending)do m.pending[p.row.object.key]=true end
-    for _,slot in pairs(self.layer.slots)do
-        if slot.user and slot.row and slot.row.object then m.editor[slot.row.object.key]=true end
+    local m={pending={},editor={},mod={},row_pending={},loc_editor={},loc_mod={},category={}}
+    local function in_category(object,kind)
+        local category=object and object.category
+        if not category then return end
+        local c=m.category[category]
+        if not c then c={};m.category[category]=c end
+        c[kind]=true
     end
-    for _,claims in pairs(self.ledger.by_loc)do
+    for _,p in pairs(self.pending)do
+        m.pending[p.row.object.key]=true
+        m.row_pending[p.row.key]=true
+        in_category(p.row.object,'pending')
+    end
+    for loc,slot in pairs(self.layer.slots)do
+        if slot.user and slot.row and slot.row.object then
+            m.editor[slot.row.object.key]=true
+            m.loc_editor[loc]=true
+            in_category(slot.row.object,'editor')
+        end
+    end
+    for loc,claims in pairs(self.ledger.by_loc)do
         for _,claim in ipairs(claims)do
+            m.loc_mod[loc]=true
             if claim.object then
                 local object=self.catalog:object(claim.object)
                 m.mod[object and object.key or claim.object]=true
+                in_category(object,'mod')
             end
         end
     end
+    m.key=key
     self.marker_key,self.marker_cache=key,m
     return m
+end
+-- What a collapsible header's rows hold: {pending, editor, mod} (cached on the item per marker state).
+function App:header_marks(item,m)
+    if item.marks_key==m.key then return item.marks end
+    local marks={}
+    for _,row in ipairs(item.rows or{})do
+        if m.row_pending[row.key]then marks.pending=true end
+        if m.loc_editor[row.loc]then marks.editor=true end
+        if m.loc_mod[row.loc]then marks.mod=true end
+    end
+    item.marks,item.marks_key=marks,m.key
+    return marks
+end
+-- Draws the markers right to left from x (pending orange, edited by you yellow pencil piece, set by a mod blue
+-- piece), centred on cy; returns the x left of them.
+function App:draw_marks(marks,x,cy,size)
+    local cv=self.canvas
+    local dot=math.floor(size*0.4)
+    if marks.pending then cv:rect(x-dot,cy-dot/2,dot,dot,C.pending,4);x=x-dot-6 end
+    if marks.editor then
+        if not self:draw_ui_icon('edited',x-size,cy-size/2,size,C.gold)then cv:rect(x-dot,cy-dot/2,dot,dot,C.gold,4)end
+        x=x-size-2
+    end
+    if marks.mod then
+        if not self:draw_ui_icon('mod',x-size,cy-size/2,size,C.mod)then cv:rect(x-dot,cy-dot/2,dot,dot,C.mod,4)end
+        x=x-size-2
+    end
+    return x
 end
 
 ---------------------------------------------------------------------------------------------- staging --
@@ -862,6 +911,7 @@ function App:draw_categories(y0,h)
     cv:rect(0,y0,CAT_W,h,C.panel_alt,1)
     cv:rect(CAT_W-1,y0,1,h,C.line,2)
     self.cat_actions=self.cat_actions or{}
+    local cat_marks=self:markers().category
     local focused=self.focus=='categories'
     local y=y0+10
     for i,item in ipairs(self.categories)do
@@ -884,9 +934,11 @@ function App:draw_categories(y0,h)
                 cv:rect(8,y,3,rh,tone or(focused and C.gold or C.gold_dim),3)
             elseif self.hover==action then cv:rect(8,y,CAT_W-16,rh,C.hover,2)end
             if tone and not selected then cv:rect(8,y+9,3,rh-18,tone,3)end
-            cv:text(L(item.label),22,y+rh/2,{size=SZ.label,colour=selected and C.text or C.dim,max=CAT_W-80})
             local count=self.catalog:count(item.id)
-            cv:text(tostring(count),CAT_W-20,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
+            local cw=cv:text(tostring(count),CAT_W-20,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
+            local mx=self:draw_marks(cat_marks[item.id]or{},CAT_W-28-(tonumber(cw)or 24),y+rh/2,26)
+            cv:text(L(item.label),22,y+rh/2,{size=SZ.label,colour=selected and C.text or C.dim,
+                max=math.min(CAT_W-80,mx-30)})
             cv:hit(8,y,CAT_W-16,rh,action)
             y=y+rh
         end
@@ -1001,6 +1053,7 @@ function App:draw_fields(y0,h)
     if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end
     cv:text(object.name,hx,y0+24,{size=20,font='title',colour=C.text,max=w-40-(hx-x0)})
     local items,selectable=self:field_items(object)
+    local markers=self:markers()
     local edited=0
     for _,row in ipairs(object.rows)do
         local _,source=self:row_view(row)
@@ -1059,13 +1112,19 @@ function App:draw_fields(y0,h)
                 elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
                 local cy=y+rh/2
                 cv:text(item.open and'↓'or'→',x+indent,cy,{size=SZ.small,colour=C.gold,font='title'})
+                -- what its fields hold, so an edit inside a closed group is visible without opening it
+                local mx=self:draw_marks(self:header_marks(item,markers),x+lw-14,cy,28)
+                local right=mx<x+lw-14 and mx-8 or x+lw-18
+                local reserve=x+lw-right
                 if item.depth==0 then
-                    cv:text(string.upper(L(item.header)),x+indent+20,cy,{size=SZ.small,font='title',colour=C.gold,max=lw-indent-170})
-                    cv:text(L('%d parts · %d fields'):format(item.subs,item.count),x+lw-18,cy,
+                    cv:text(string.upper(L(item.header)),x+indent+20,cy,{size=SZ.small,font='title',colour=C.gold,
+                        max=lw-indent-170-reserve})
+                    cv:text(L('%d parts · %d fields'):format(item.subs,item.count),right,cy,
                         {size=SZ.tiny,colour=C.faint,align='right'})
                 else
-                    cv:text(L(item.header),x+indent+20,cy,{size=SZ.label,colour=selected and C.text or C.dim,max=lw-indent-150})
-                    cv:text(L('%d fields'):format(item.count),x+lw-18,cy,{size=SZ.tiny,colour=C.faint,align='right'})
+                    cv:text(L(item.header),x+indent+20,cy,{size=SZ.label,colour=selected and C.text or C.dim,
+                        max=lw-indent-150-reserve})
+                    cv:text(L('%d fields'):format(item.count),right,cy,{size=SZ.tiny,colour=C.faint,align='right'})
                 end
                 return
             end

@@ -44,14 +44,14 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 
   Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
 - **The game's own icons.** Every stratagem and booster shows its own HUD icon, the game's pixels from your installed game (an opt-in local build step, see [Game icons](#game-icons)). SG-88 and CQC-72 have no call-in stratagem, so the game has no icon for them: they show a plain square in their category colour.
-- **What is changed, at a glance.** In the object lists, a yellow pencil piece marks objects you edited and a blue piece marks objects a mod changed.
+- **What is changed, at a glance.** A yellow pencil piece marks what you edited, a blue piece what a mod changed, and an orange square what is pending. They mark the objects in the lists, the categories that hold them, and every collapsible group and part inside an object (a vehicle weapon, a damage zone), so a change inside a closed group shows without opening it.
 - **Your language, your sounds.** The game's menu sounds play on the buttons (Settings). Every interface text can be translated with a plain text file (see [Localisation](#localisation)).
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
 - **Optimised apply.** Edits are staged as pending changes and applied together. Only fields whose value changed are written, and each change is a single guarded write.
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.7.1, development build for HD2Runtime r55.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 to 0.7.1 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab, the Helldiver, Armor and attachment fields) are not live-tested yet.
+> **Status: 0.7.2, development build for HD2Runtime r55.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 to 0.7.2 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab, the Helldiver, Armor and attachment fields) are not live-tested yet.
 
 ## Requirements
 

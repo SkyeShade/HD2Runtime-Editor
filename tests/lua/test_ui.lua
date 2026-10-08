@@ -258,6 +258,23 @@ assert(opened>#items,'a zone opened')
 step({},nil,'21_vehicle_zones')
 step({'LEFT'})
 assert(#H.app:field_items(frv)<opened,'Left closes the zone')
+-- an edit inside a closed group marks the group header, its section and the category
+local zone_row
+for _,r in ipairs(frv.rows)do if r.group=='Damage Zones'and not r.kind and r.editable then zone_row=r;break end end
+assert(H.app:stage(zone_row,zone_row.vanilla+1),'zone field staged')
+local marks_header,marks_section
+for _,it in ipairs((H.app:field_items(frv)))do
+    if it.header=='Damage Zones'then marks_header=H.app:header_marks(it,H.app:markers())end
+    if it.header==zone_row.section and it.depth==1 then marks_section=H.app:header_marks(it,H.app:markers())end
+end
+assert(marks_header and marks_header.pending,'the closed group header shows the pending edit')
+assert(not marks_section or marks_section.pending,'its section shows it too')
+assert((H.app:markers().category.vehicles or{}).pending,'the category shows it')
+step({},nil,'22_group_marks')
+H.app:unstage(zone_row)
+for _,it in ipairs((H.app:field_items(frv)))do
+    if it.header=='Damage Zones'then assert(not H.app:header_marks(it,H.app:markers()).pending,'cleared with the edit')end
+end
 -- magazines live inside the weapon that uses them
 local conc=open_object('pw|AR-23C Liberator Concussive')
 local mags=0
