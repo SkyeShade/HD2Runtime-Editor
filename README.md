@@ -12,7 +12,8 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - HD2Runtime mods show the values they applied this session, any operation the Runtime refused (with the reason), and their in-game options with the current settings and the operations they drive. Select a value to jump to that field.
   - Other mods replace game files directly, so what they change cannot be read; their name, description and any Lua addons are shown.
   - A field a mod sets names the mod and, when its in-game options drive it, the options page.
-- **Your changes in one place.** The Changes tab lists every value the editor applied or has pending (never your mods' own). Enter jumps to the field; Del or a right-click reverts it.
+- **Your changes in one place.** The Changes tab lists every value the editor applied or has pending (never your mods' own). Enter jumps to the field. Each change has a **RESET** button (or Backspace) that resets it right away, to the mod's value if a mod set one, else to the game's. Del or a right-click stages that reset for the next Apply instead.
+- **Setting the default is a reset.** Editing a field back to its base value (the mod's value over a mod, else the game's) resets the field instead of holding an editor value equal to it. This also applies to presets and the restored session. A pending change like that shows as PENDING RESET.
 - **Export your changes as a mod.** The Export tab is a three-step wizard. Pick which changes to include, give the mod a name, version, author, description and an HD2 Arsenal image from your PC, then press Export. It writes a mod ZIP, ready for your mod manager, in ModBuilder's layout (see [Exporting a mod](#exporting-a-mod)). The values are also saved as a preset.
 - **The log, live.** The Logs tab follows `HD2Runtime.log` as it is written, coloured by kind (errors red, warnings orange, applied values green, the editor's own lines gold), with filters and buttons to open the file or its folder.
 - **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state, coloured like the game colours their carrier (offensive red, defensive green, support blue). Their cooldown and uses can be tuned on this machine, from the next call.
@@ -51,7 +52,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.7.3, development build for HD2Runtime r55.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 to 0.7.3 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab, the Helldiver, Armor and attachment fields) are not live-tested yet.
+> **Status: 0.7.4, development build for HD2Runtime r55.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 to 0.7.4 changes (keeping input from the game, the popup wheel, the steer takeover, the exporter, the Logs tab, the Helldiver, Armor and attachment fields) are not live-tested yet.
 
 ## Requirements
 

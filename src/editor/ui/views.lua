@@ -84,6 +84,21 @@ function M.install(App)
         self:stage(entry.row,base)
         self:toast(L('Staged: back to %s (press Apply)'):format(self:text(entry.row,base)),C.pending)
     end
+    -- Resets one change now, as RESET TO DEFAULTS does for every field: its pending value is dropped and an applied
+    -- editor value goes back to the base (the mod's value, or the game's when no mod set it).
+    function App:reset_change(entry)
+        if not entry then return end
+        local row=entry.row
+        local dropped=self:unstage(row)
+        local slot=self.layer:slot_of(row)
+        local reset=slot and(slot.user or slot.error)and self.layer:reset(row)
+        if reset then self.save_session=true end
+        local base,holder=self.layer:base(row)
+        if reset or dropped then
+            self:toast(L('%s: back to %s'):format(L(row.label),self:text(row,base))
+                ..(holder and(' ('..L('the mod value')..')')or''),C.gold)
+        end
+    end
     function App:handle_changes_keys(f)
         local k=f.keys
         local list=self:changes()
@@ -94,6 +109,7 @@ function M.install(App)
         if k.PAGEDOWN then self.change_index=clamp_index(self.change_index+12,#list)end
         if(k.ENTER or k.RIGHT)and list[self.change_index]then self:sound('open');self:reveal(list[self.change_index].row)end
         if k.DELETE then self:revert_change(list[self.change_index])end
+        if k.BACKSPACE then self:reset_change(list[self.change_index])end
     end
     function App:draw_changes(y0,h)
         local cv=self.canvas
@@ -116,12 +132,15 @@ function M.install(App)
         cv:text(L('FIELD'),330,hy+11,{size=SZ.tiny,font='title',colour=C.faint})
         cv:text(L('DEFAULT'),W-420,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
         cv:text(L('VALUE'),W-250,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
-        cv:text(L('STATE'),W-20,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
+        cv:text(L('STATE'),W-112,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
         if#list==0 then
             cv:text(L('No editor changes. Edit a field in Browse, then Apply.'),20,hy+44,{size=SZ.small,colour=C.faint})
         end
         self.change_actions=self.change_actions or{}
-        if self.change_actions_key~=self.changes_key then self.change_actions,self.change_actions_key={},self.changes_key end
+        if self.change_actions_key~=self.changes_key then
+            self.change_actions,self.change_reset_actions,self.change_actions_key={},{},self.changes_key
+        end
+        self.change_reset_actions=self.change_reset_actions or{}
         self:list({x=0,y=hy+24,w=W,h=y0+h-hy-28,count=#list,row_h=32,selected=self.change_index,
             scroll_key='change_scroll',focused=true,actions=self.change_actions,
             click=function(i)
@@ -140,10 +159,21 @@ function M.install(App)
                 cv:text(self:text(e.row,base),x+lw-420,cy,{size=SZ.small,colour=C.faint,align='right',max=150})
                 cv:text(self:text(e.row,e.value),x+lw-250,cy,{size=SZ.label,colour=C.gold,align='right',max=160})
                 local fg,bg,label=C.gold,C.gold_wash,L('EDITED')
-                if e.state=='pending'then fg,bg,label=C.pending,C.pending_soft,L('PENDING')
+                if e.state=='pending'then
+                    -- a pending value equal to the base resets the field when applied
+                    fg,bg,label=C.pending,C.pending_soft,util.same(e.value,base)and L('PENDING RESET')or L('PENDING')
                 elseif e.state=='applying'then fg,bg,label={255,199,44,255},C.gold_soft,L('APPLYING')
                 elseif e.state=='error'or e.error then fg,bg,label=C.error,C.error_soft,L('ERROR')end
-                chip(cv,label,x+lw-20,cy,fg,bg,'right')
+                chip(cv,label,x+lw-112,cy,fg,bg,'right')
+            end,
+            after=function(i,x,y,lw,rh)
+                local action=self.change_reset_actions[i]
+                if not action then
+                    local index=i
+                    action={click=function()self:reset_change(self:changes()[index])end}
+                    self.change_reset_actions[i]=action
+                end
+                button(self,L('RESET'),x+lw-96,y+4,80,rh-8,'danger',action)
             end})
     end
 

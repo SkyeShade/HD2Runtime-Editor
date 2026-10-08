@@ -105,6 +105,7 @@ check(settle(wd)=='active','watchdog field active')
 local slot=layer:slot_of(wd)
 slot.watch={status='waiting',runs=slot.watch.runs,rebinds=0,recoveries=0,cancel=function()end,
     debug=function()return {dirty=true,debounce=0.5,ticks=0}end}
+-- back to the default: a reset, steered through the stuck ensure
 assert(layer:set(wd,wd.vanilla))
 run(3)
 check(layer:state(wd)=='applying','still applying after 3 s')
@@ -112,7 +113,7 @@ local taken=false
 local state=settle(wd)
 for _,line in ipairs(layer.history)do if line:find('fresh ensure')and line:find('ticks=0')then taken=true end end
 check(taken,'taken over by a fresh ensure, with the internals of the stuck ensure logged')
-check(state=='active'and util.same(layer:value(wd),wd.vanilla),'the change applied: '..tostring(state))
+check(state=='idle'and util.same(layer:value(wd),wd.vanilla),'the reset applied and released the field: '..tostring(state))
 layer:reset(wd)
 settle(wd)
 out[#out+1]='steer watchdog ok'
@@ -236,4 +237,18 @@ settle(precision)
 check(S.memory[precision.loc]==mod_bytes,'reset returns the mod code')
 check(layer:state(precision)=='held','held at the mod code')
 out[#out+1]='mod code takeover ok'
+-- a value equal to the base is a reset: the mod's value over a mod, the game's value otherwise
+assert(layer:set(precision,{'left','left','up'}))
+check(settle(precision)=='active','editor code over the mod again')
+assert(layer:set(precision,mod_code))
+settle(precision)
+check(layer:state(precision)=='held'and S.memory[precision.loc]==mod_bytes and layer:overrides()[precision.key]==nil,
+    'setting the mod value resets to it: '..tostring(layer:state(precision)))
+local plain=row_of('pw|AR-2 Coyote',function(r)return r.field=='weapon.horizontal_spread'end)
+assert(layer:set(plain,9));check(settle(plain)=='active','plain field edited')
+assert(layer:set(plain,plain.vanilla))
+check(settle(plain)=='idle'and layer:overrides()[plain.key]==nil,'setting the default resets the field')
+assert(layer:set(plain,plain.vanilla))
+check(layer:slot_of(plain)==nil,'the default on an untouched field changes nothing')
+out[#out+1]='base value is a reset ok'
 return table.concat(out,'\n')

@@ -856,7 +856,8 @@ function App:draw_header()
 end
 
 -- A vertical list with virtual scrolling. opts: {x, y, w, h, count, row_h, selected, scroll_key, draw(i, x, y, w, h),
--- click(i), focused}. Returns nothing; keeps the selection in view.
+-- click(i), focused, after(i, x, y, w, h) (controls drawn over the row's click region)}. Returns nothing; keeps the
+-- selection in view.
 function App:list(opts)
     local cv=self.canvas
     local rows=math.max(1,math.floor(opts.h/opts.row_h))
@@ -882,6 +883,8 @@ function App:list(opts)
             action.scroll=nil
             cv:hit(opts.x,y,opts.w,opts.row_h,action)
         end
+        -- controls inside the row (a button) register after the row, so they take its clicks
+        if opts.after then opts.after(i,opts.x,y,opts.w,opts.row_h)end
     end
     -- scrollbar: drawn thin, grabbed wide; click the track to jump, drag to scroll
     if opts.count>rows then
@@ -1245,7 +1248,7 @@ function App:draw_status(y,h)
         cv:text(L('Every deployed mod. HD2Runtime mods show their in-game options and the values they applied; the editor overrides them only when you apply an edit.'),
             18,cy,{size=SZ.small,colour=C.faint,max=maxw})
     elseif self.view=='changes'then
-        cv:text(L('Enter jumps to the field. Del or right-click reverts a change (Apply to write it).'),
+        cv:text(L('Enter jumps to the field. RESET or Backspace resets a change now; Del or right-click stages it (Apply to write it).'),
             18,cy,{size=SZ.small,colour=C.faint,max=maxw})
     elseif self.view=='custom'then
         cv:text(L('Custom stratagems other mods registered. Cooldown and uses can be tuned on this machine.'),

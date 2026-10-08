@@ -248,6 +248,12 @@ function Layer:set(row,value)
         return false,'this field shares its game data with "'..tostring(existing.row.label)
             ..'", which the editor holds: reset that field first'
     end
+    -- the base value itself (the mod's, or the game's when no mod set it) is a reset, never an editor value
+    if util.same(held,hold(row,(self:base(row))))then
+        local slot=self.slots[row.loc]
+        if slot and(slot.user or slot.error)then self:reset(row)end
+        return true
+    end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
     self:changed()
