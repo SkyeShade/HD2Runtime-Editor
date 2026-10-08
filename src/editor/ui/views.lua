@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The editor's other tabs, installed onto the app (ui/app.lua):
 --   CHANGES   every value the editor applied or has pending (never a mod's own values), with revert;
 --   MODS      every deployed mod: HD2Runtime mods with the values they applied and their in-game options, and the

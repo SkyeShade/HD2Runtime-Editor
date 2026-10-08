@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- A small JSON reader for the mod managers' state files (Echelon state.json, HD2 Arsenal hd2a_data.json).
 -- decode(text, yield_every): objects become tables, arrays become lists, null becomes nil. With yield_every, the
 -- decoder calls coroutine.yield() after that many values, so a caller running it in a coroutine can spread a large

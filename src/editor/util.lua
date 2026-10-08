@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- Small helpers shared by the editor's modules: numbers, text and safe calls. No game access.
 local M={}
 

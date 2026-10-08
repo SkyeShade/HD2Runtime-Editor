@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- A drawing surface over one overlay frame: 1080p units relative to the panel, scaled and snapped to whole pixels,
 -- text measured with the overlay's own metrics (and cached), and the clickable regions of the frame.
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')

@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The editor's override layer: live values over what the game and the installed mods set, applied through the
 -- Runtime's own guarded ensures, and taken back exactly.
 --

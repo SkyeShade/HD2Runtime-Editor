@@ -50,7 +50,8 @@ def find_sdk():
 
 
 def describe(path):
-    """Rewrite manifest.json inside the built ZIP with the editor's description (every other entry unchanged)."""
+    """Rewrite manifest.json inside the built ZIP with the editor's description and add LICENSE and THIRD_PARTY.md
+    (every other entry unchanged)."""
     with zipfile.ZipFile(path) as source:
         entries = [(info, source.read(info.filename)) for info in source.infolist()]
     temporary = path.with_suffix('.tmp')
@@ -66,6 +67,11 @@ def describe(path):
                     option['Description'] = text
                 data = json.dumps(manifest, indent=2).encode()
             target.writestr(info, data)
+        # the license and third-party notices travel with every release
+        names = {info.filename for info, _ in entries}
+        for extra in ('LICENSE', 'THIRD_PARTY.md'):
+            if extra not in names and (ROOT / extra).is_file():
+                target.write(ROOT / extra, extra)
     os.replace(temporary, path)
     report = ROOT / 'build' / 'build-report.json'
     if report.is_file():

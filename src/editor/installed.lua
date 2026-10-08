@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- Every mod the player has deployed, HD2Runtime or not, as the mod manager that deployed it lists it: Echelon
 -- (%APPDATA%\Echelon\state.json) or HD2 Arsenal (%LOCALAPPDATA%\hd2arsenal\hd2a_data.json), whichever deployed
 -- last. Read-only. What a non-Runtime mod changes cannot be known (it replaces game files); its name, description and

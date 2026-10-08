@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- One frame of input for the editor, read through hd2.input (sampled once per update, only while the game window has
 -- the focus). Navigation keys repeat while held; typing keys become characters. Nothing is consumed: the game sees
 -- every key too (docs/events.md "Input blocking"), so the editor only reads keys while it is open.

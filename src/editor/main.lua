@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- HD2Runtime Editor: wiring. Every module is required here, at load: the engine resolves a mod's archived Lua
 -- resources only while its startup package is loaded.
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')

@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The editor window: Browse (categories -> objects -> fields), Changes, Mods, Custom stratagems, Presets, Settings.
 -- Edits are staged as pending values and applied together; Reset to defaults gives every field back to the mods'
 -- values (or vanilla). Keyboard first (the cursor is the game's while playing), mouse where the cursor is free.

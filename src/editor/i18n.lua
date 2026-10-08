@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- Localisation: every text the editor shows goes through L(text). English is built in (the text itself); other
 -- languages are plain UTF-8 text files in a folder the editor reads at startup and on Reload:
 --     %LOCALAPPDATA%\HD2RuntimeEditor\localization\<anything>.txt

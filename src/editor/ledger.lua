@@ -1,3 +1,5 @@
+-- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- What the installed HD2Runtime mods write, and through which operations.
 --
 -- * Applied values: the Runtime records every APPLIED / ALREADY_DESIRED change in core/shared_records (claim); the
