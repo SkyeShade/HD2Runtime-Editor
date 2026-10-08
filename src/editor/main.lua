@@ -23,7 +23,7 @@ local game_icons=optional('game_icons')
 local mod_icon_map=optional('mod_icons')
 local M={}
 
-M.VERSION='0.7.2'
+M.VERSION='0.7.3'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -96,7 +96,7 @@ function M.start(hd2,id)
     local ui_icons
     if type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
         ui_icons={}
-        for _,name in ipairs({'mod','edited'})do
+        for _,name in ipairs({'mod','edited','pending'})do
             local ok,handle=pcall(hd2.resources.image,'ui_'..name)
             if ok and handle then ui_icons[name]=handle end
         end

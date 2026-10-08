@@ -58,7 +58,9 @@ function M.install(App)
     function App:picker_items(row)
         local items={}
         if row.kind=='uses'then
-            if row.unlimited or row.vanilla=='unlimited'then items[#items+1]={value='unlimited',label='Unlimited'}end
+            if row.unlimited or row.vanilla=='unlimited'then
+                items[#items+1]={value='unlimited',label='Unlimited',sub='type 0 or -1'}
+            end
             for n=row.min or 1,row.max or 100 do items[#items+1]={value=n,label=tostring(n)}end
             return items
         end
@@ -82,12 +84,23 @@ function M.install(App)
         local p=self.picker
         local q=p.filter:lower()
         p.shown={}
+        local typed=p.row.kind=='uses'and tonumber(q)
+        if typed and typed<=0 then
+            -- mission uses: 0 or -1 means unlimited (where the stratagem can be unlimited)
+            for i,item in ipairs(p.items)do if item.value=='unlimited'then p.shown[1]=i end end
+            p.cursor=1
+            return
+        end
         for i,item in ipairs(p.items)do
             local hay=(item.label..' '..(item.sub or'')):lower()
             if q==''or hay:find(q,1,true)then p.shown[#p.shown+1]=i end
         end
         p.cursor=1
         for s,i in ipairs(p.shown)do if i==p.index then p.cursor=s end end
+        -- a typed count selects that count itself (typing 5 picks 5, not the first of 5, 15, 25)
+        if typed then
+            for s,i in ipairs(p.shown)do if p.items[i].value==typed then p.cursor=s end end
+        end
     end
     function App:picker_choose()
         local p=self.picker

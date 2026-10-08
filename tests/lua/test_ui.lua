@@ -98,10 +98,34 @@ x.meta.name=''
 for _,key in ipairs({'L','I','B','SPACE','B','U','F','F'})do step({key})end
 assert(x.meta.name=='lib buff','typed the name: '..x.meta.name)
 x.meta.name,x.meta.version,x.meta.description='Lib Buff','1.0.0','Faster Liberator.'
--- the image browser lists a folder; picking a file sets the image
+-- the image comes from the Windows open-file dialog (stubbed here: no real dialog in tests); the game keeps drawing
+-- while it is open, and its answer is picked up by the next frame
 local folder=(os.getenv('TEMP')or'.')
 local img=folder..'\\hd2r_test_icon.png'
 local fi=assert(io.open(img,'wb'));fi:write('\137PNG\r\n\26\n test');fi:close()
+local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
+local real_pick=win.pick_file
+local answer,asked
+win.pick_file=function(opts)
+    asked=opts
+    return {poll=function()return answer end}
+end
+H.app:export_pick_image()
+assert(asked and asked.filter:find('%*%.png'),'the dialog filters images')
+step({},nil,'39_export_dialog_open')
+assert(x.picking and not x.meta.image,'waiting for the dialog')
+answer=img
+step({})
+assert(x.meta.image==img and not x.picking,'image from the dialog: '..tostring(x.meta.image))
+x.meta.image=nil
+answer=false
+H.app:export_pick_image();step({})
+assert(not x.picking and not x.meta.image,'a cancelled dialog leaves no image')
+-- without the dialog, the in-game browser lists a folder; picking a file sets the image
+win.pick_file=function()return nil,'no FFI'end
+H.app:export_pick_image()
+assert(x.browser,'falls back to the in-game browser')
+win.pick_file=real_pick
 H.app:export_browse(folder)
 step({},nil,'39_export_browser')
 assert(x.browser and#x.browser.entries>0,'browser lists the folder')
@@ -194,6 +218,30 @@ assert(edited[#edited]=='left','arrow key appended a direction')
 step({'ENTER'})
 assert(H.app.pending[code.key],'code staged')
 local uses=row_where('st|EXO-55 Breakthrough Exosuit',function(r)return r.kind=='uses'end)
+-- mission uses: 0 or -1 typed means unlimited; a typed count picks that count; Left below the lowest is unlimited
+local unl
+for _,cat in ipairs({'offensive','defensive','support_weapons','vehicles'})do
+    for _,o in ipairs(H.catalog:objects(cat))do
+        if not unl then
+            H.catalog:open(o)
+            for _,r in ipairs(o.rows)do if r.kind=='uses'and r.unlimited and r.vanilla~='unlimited'then unl=r end end
+        end
+    end
+end
+assert(unl,'a stratagem that can be made unlimited')
+for _,typed in ipairs({'0','-1'})do
+    H.app:open_picker(unl,typed)
+    local p=H.app.picker
+    assert(#p.shown==1 and p.items[p.shown[p.cursor]].value=='unlimited','typing '..typed..' offers unlimited')
+    H.app.picker=nil
+end
+H.app:open_picker(unl,'5')
+assert(H.app.picker.items[H.app.picker.shown[H.app.picker.cursor]].value==5,'typing 5 selects 5')
+H.app.picker=nil
+H.app:stage(unl,unl.min or 1)
+H.app:nudge(unl,-1)
+assert(H.app.pending[unl.key]and H.app.pending[unl.key].value=='unlimited','Left below the lowest count is unlimited')
+H.app:unstage(unl)
 H.app:reveal(uses)
 step({'5'})
 assert(H.app.picker and H.app.picker.filter=='5','digits open the uses picker filtered')
@@ -338,8 +386,11 @@ H.app.drag=nil
 -- the window X closes the editor
 local shut=false
 H.app.ctx.close=function()shut=true end
+local heard=#H_sounds
 H.app.btn_close.click()
 assert(shut,'the window X closes the editor')
+assert(H_sounds[heard+1]=='back'and#H_sounds==heard+1,'the X plays the close sound Escape plays')
+assert(H.app.btn_close.sound==false,'and not the click sound')
 -- the weapon-group filter: Primary only, the game's groups
 for i,item in ipairs(H.app.categories)do if item.id=='primary'then H.app:select_category(i)end end
 H.app.focus='objects'

@@ -304,20 +304,26 @@ function App:header_marks(item,m)
     item.marks,item.marks_key=marks,m.key
     return marks
 end
--- Draws the markers right to left from x (pending orange, edited by you yellow pencil piece, set by a mod blue
--- piece), centred on cy; returns the x left of them.
+-- Draws the markers right to left from x (pending orange hourglass piece, edited by you yellow pencil piece, set by a
+-- mod blue piece), centred on cy; returns the x left of them. The glyphs fill about half of their square (x 25% to
+-- 76%), so the squares overlap: one glyph width and a small gap apart.
 function App:draw_marks(marks,x,cy,size)
     local cv=self.canvas
-    local dot=math.floor(size*0.4)
-    if marks.pending then cv:rect(x-dot,cy-dot/2,dot,dot,C.pending,4);x=x-dot-6 end
-    if marks.editor then
-        if not self:draw_ui_icon('edited',x-size,cy-size/2,size,C.gold)then cv:rect(x-dot,cy-dot/2,dot,dot,C.gold,4)end
-        x=x-size-2
+    local step=math.floor(size*0.62+0.5)
+    local first=true
+    local function mark(name,colour)
+        local left=x-size+(first and math.floor(size*0.22)or 0)
+        if not self:draw_ui_icon(name,left,cy-size/2,size,colour)then
+            local dot=math.floor(size*0.4)
+            cv:rect(left+(size-dot)/2,cy-dot/2,dot,dot,colour,4)
+        end
+        x=left+size-step
+        first=false
     end
-    if marks.mod then
-        if not self:draw_ui_icon('mod',x-size,cy-size/2,size,C.mod)then cv:rect(x-dot,cy-dot/2,dot,dot,C.mod,4)end
-        x=x-size-2
-    end
+    if marks.pending then mark('pending',C.pending)end
+    if marks.editor then mark('edited',C.gold)end
+    if marks.mod then mark('mod',C.mod)end
+    x=first and x or x-math.floor(size*0.2)
     return x
 end
 
@@ -420,6 +426,11 @@ function App:nudge(row,direction,shift,ctrl)
     elseif row.kind=='uses'then
         local value=self:row_view(row)
         if value=='unlimited'then if direction<0 then self:stage(row,row.max or 100)end return end
+        -- below the lowest count is unlimited (0 or -1 typed means the same), where the stratagem allows it
+        if direction<0 and value<=(row.min or 1)and(row.unlimited or row.vanilla=='unlimited')then
+            self:stage(row,'unlimited')
+            return
+        end
         local n=util.clamp(value+direction*(shift and 10 or 1),row.min or 1,row.max or 100)
         self:stage(row,n)
         return
@@ -817,7 +828,11 @@ function App:draw_header()
     end
     local tabs_end=tx+8
     -- the close button, then the status chips, right to left
-    self.btn_close=self.btn_close or{click=function()if self.ctx.close then self.ctx.close()end end}
+    -- the window's X closes it with the same sound as Escape
+    self.btn_close=self.btn_close or{sound=false,click=function()
+        self:sound('back')
+        if self.ctx.close then self.ctx.close()end
+    end}
     local hovered=self.hover==self.btn_close
     cv:rect(P.w-50,12,36,34,hovered and C.error_soft or C.panel,3)
     cv:frame(P.w-50,12,36,34,hovered and C.error or C.line_strong,4)
@@ -1022,17 +1037,10 @@ function App:draw_objects(y0,h)
             if self:draw_icon(object,x+18,y+5,rh-10)then tx=x+18+rh end
             cv:text(object.name,tx,y+15,{size=SZ.label,colour=selected and C.text or C.dim,max=w-56-(tx-x)})
             cv:text(object.subtitle or'',tx,y+31,{size=SZ.tiny,colour=C.faint,max=w-56-(tx-x)})
-            -- markers, right to left: pending (orange), edited by you (yellow pencil piece), set by a mod (blue piece)
-            local mx=x+w-16
-            local ms=34
-            if markers.pending[object.key]then cv:rect(mx-14,y+rh/2-7,14,14,C.pending,4);mx=mx-20 end
-            if markers.editor[object.key]then
-                if not self:draw_ui_icon('edited',mx-ms,y+rh/2-ms/2,ms,C.gold)then cv:rect(mx-14,y+rh/2-7,14,14,C.gold,4)end
-                mx=mx-ms-2
-            end
-            if markers.mod[object.key]then
-                if not self:draw_ui_icon('mod',mx-ms,y+rh/2-ms/2,ms,C.mod)then cv:rect(mx-14,y+rh/2-7,14,14,C.mod,4)end
-            end
+            -- markers, right to left: pending (orange hourglass piece), edited by you (yellow pencil piece), set by
+            -- a mod (blue piece)
+            self:draw_marks({pending=markers.pending[object.key],editor=markers.editor[object.key],
+                mod=markers.mod[object.key]},x+w-10,y+rh/2,34)
         end})
 end
 

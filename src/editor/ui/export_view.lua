@@ -2,8 +2,8 @@
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- EXPORT: a three-step wizard that turns the editor's changes into an HD2Runtime mod (editor/export.lua):
 --   1. pick the changes to export;
---   2. the mod's name, version, author, description and its HD2 Arsenal image (a file from your PC, picked in an
---      in-game browser of your Pictures, Desktop, Downloads and Documents);
+--   2. the mod's name, version, author, description and its HD2 Arsenal image (a file from your PC, picked in the
+--      Windows open-file dialog over the game; an in-game browser of your folders when the dialog cannot open);
 --   3. done: the folder it was written to (the mod ZIP and its project), opened with one click, and a preset with the
 --      exported values saved in Presets.
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
@@ -94,6 +94,32 @@ function M.install(App)
         end
         x.browser={path=path,entries=shown,cursor=1,scroll=0}
     end
+    -- The image: the Windows open-file dialog, on top of the game (editor/win.lua pick_file); the in-game browser only
+    -- when the dialog cannot open.
+    function App:export_pick_image()
+        local x=state(self)
+        if x.picking then return end
+        local job,why=win.pick_file({title=L('Choose the HD2 Arsenal image'),
+            filter=L('Images')..' (*.png, *.jpg)|*.png;*.jpg;*.jpeg|',folder=(win.places()[1]or{}).path})
+        if job then x.picking=job;return end
+        self:toast(L('The Windows file dialog did not open (%s); browsing in game'):format(tostring(why)),C.dim)
+        self:export_browse((win.places()[1]or{}).path or'C:\\')
+    end
+    -- Picks up the dialog's answer (called every frame while it is open).
+    function App:export_poll_image()
+        local x=self.exporter
+        local job=x and x.picking
+        if not job then return end
+        local result=job.poll()
+        if result==nil then return end
+        x.picking=nil
+        if result then
+            local ext=(result:match('%.(%w+)$')or''):lower()
+            if not IMAGE_TYPES[ext]then self:toast(L('Not a PNG or JPEG image: %s'):format(result),C.error);return end
+            x.meta.image=result
+            self:toast(L('Arsenal image: %s'):format(result:match('([^\\]+)$')or result),C.ok)
+        end
+    end
     function App:export_browser_pick(e)
         local x=self.exporter
         local b=x.browser
@@ -137,7 +163,7 @@ function M.install(App)
                 if k.BACKSPACE then text=text:sub(1,-2)end
                 x.meta[field.key]=text
             elseif k.ENTER then
-                self:export_browse((win.places()[1]or{}).path or'C:\\')
+                self:export_pick_image()
             elseif k.DELETE then x.meta.image=nil end
         elseif x.step=='done'then
             if k.ENTER then win.open(x.done.folder)end
@@ -145,6 +171,7 @@ function M.install(App)
     end
 
     function App:draw_export(y0,h)
+        self:export_poll_image()
         local cv=self.canvas
         local W=theme.panel.w
         local list,x=self:export_changes()
@@ -223,9 +250,7 @@ function M.install(App)
                 local index=i
                 action={click=function()
                     self.exporter.field=index
-                    if FIELDS[index].key=='image'then
-                        self:export_browse((win.places()[1]or{}).path or'C:\\')
-                    end
+                    if FIELDS[index].key=='image'then self:export_pick_image()end
                 end}
                 self.export_field_actions[i]=action
             end
@@ -235,8 +260,10 @@ function M.install(App)
             cv:rect(200,y,W-440,fh,C.box,3)
             cv:frame(200,y,W-440,fh,focused and C.box_focus or C.box_edge,4)
             if field.key=='image'then
-                local text=x.meta.image or L('none (click or Enter to pick an image from your PC)')
-                cv:text(text,212,y+fh/2,{size=SZ.small,colour=x.meta.image and C.text or C.faint,max=W-470,z=6})
+                local text=x.picking and L('Choose the image in the Windows dialog...')
+                    or x.meta.image or L('none (click or Enter to pick an image from your PC)')
+                cv:text(text,212,y+fh/2,{size=SZ.small,colour=(x.meta.image and not x.picking)and C.text or C.faint,
+                    max=W-470,z=6})
             elseif field.key=='description'then
                 local lines=self.wrap and self.wrap(cv,x.meta.description,W-470,SZ.small,3)or{x.meta.description}
                 if#lines==0 then lines={''}end

@@ -137,6 +137,15 @@ Only then does it take the field over with a fresh ensure, as above. A failed fi
 
 ## The Logs tab (editor/logfile.lua)
 
+The Arsenal image is chosen in the Windows open-file dialog (`editor/win.lua` `pick_file`):
+- `GetOpenFileNameW` takes one pointer and returns a BOOL, the shape of a thread procedure. So `CreateThread` starts it
+  directly on its own thread, and the game's frame loop never waits for the dialog.
+- The export view polls the thread every frame (`WaitForSingleObject(thread, 0)`), then reads the chosen path from its
+  buffer. Every buffer stays referenced until the thread ends.
+- The game window owns the dialog, so it stays above the game. The owner is the foreground window, used only when it
+  belongs to this process (a window of another process would make the dialog fail).
+- Without the FFI, or if the thread cannot start, the in-game folder browser is used instead.
+
 The log is read with `io.open`:
 - the last 256 KB on first look, then only the appended bytes, at most twice a second;
 - a file that shrank (a new session) is read again from its end.
