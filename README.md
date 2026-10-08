@@ -44,7 +44,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **Statuses, on/off switches and enums.**
 
   Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
-- **The game's own icons.** Every stratagem and booster shows its own HUD icon, the game's pixels from your installed game (an opt-in local build step, see [Game icons](#game-icons)). SG-88 and CQC-72 have no call-in stratagem, so the game has no icon for them: they show a plain square in their category colour.
+- **The game's own icons.** Every stratagem and booster shows its own HUD icon, drawn by HD2Runtime straight from the game's own atlas, with nothing shipped (or, in builds you make yourself, extracted locally; see [Game icons](#game-icons)). SG-88 and CQC-72 have no call-in stratagem, so the game has no icon for them: they show a plain square in their category colour.
 - **What is changed, at a glance.** A yellow pencil piece marks what you edited, a blue piece what a mod changed, and an orange hourglass piece what is pending (not applied yet). They mark the objects in the lists, the categories that hold them, and every collapsible group and part inside an object (a vehicle weapon, a damage zone), so a change inside a closed group shows without opening it.
 - **Your language, your sounds.** The game's menu sounds play on the buttons (Settings). Every interface text can be translated with a plain text file (see [Localisation](#localisation)).
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
@@ -52,7 +52,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.7.5, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 0.8.0, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 
@@ -168,7 +168,9 @@ Each target is written from the editor row's own target code (for example `hd2.w
 - **No icon:** an item the game has no sprite for (SG-88, CQC-72) gets a plain square in its category colour.
 - **Removing them.** `py tools/game_icons.py --clean` deletes them again.
 
-The icons are derived from Arrowhead's artwork. They are git-ignored and only end up in builds you make yourself, so publish such a build only if you are allowed to redistribute them. Without them the editor simply shows no icons.
+The icons are derived from Arrowhead's artwork. They are git-ignored and only end up in builds you make yourself, so publish such a build only if you are allowed to redistribute them.
+
+**Without them, the editor draws the game's own icons through HD2Runtime** (`hd2.resources.game_icon`): straight from the game's own HUD atlas at run time, so nothing is shipped and nothing is written. A stratagem's category layer takes its category colour; a booster keeps its yellow plate. Booster icons are not shown during a mission, where the game unloads them. Icons you build locally take precedence.
 
 ## Mod icons
 

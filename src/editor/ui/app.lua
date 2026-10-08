@@ -1378,6 +1378,16 @@ function App:draw_icon(object,x,y,size)
     local entry
     if icons and STRATAGEM_FAMILIES[family]then entry=icons.stratagems[object.stratagem or object.name]
     elseif icons and family=='bo'then entry=icons.boosters[object.name]end
+    if entry and entry.game then
+        -- the game's own HUD icon through HD2Runtime: a stratagem's category layer in its category colour, the white
+        -- layer white; a booster as the Runtime draws it (its yellow plate)
+        if family=='bo'then self.canvas:image(entry.handle,x,y,size,size,{z=4})
+        else
+            local tone=object.tone and theme.tone[object.tone]or C.gold
+            self.canvas:image(entry.handle,x,y,size,size,{colours={r=tone,g={255,255,238,255},b={0,0,0,0}},z=4})
+        end
+        return true
+    end
     if entry then
         -- the game's HUD sprite: R in its accent, G white, B (a booster's glyph) in its own measured colour
         self.canvas:image(entry.handle,x,y,size,size,

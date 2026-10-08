@@ -606,6 +606,25 @@ settle(6)
 assert(H.layer:state(rof)~='active'and H.sim.value(rof)==1200,'RESET returned the field to the mod value: '
     ..tostring(H.sim.value(rof)))
 for _,c in ipairs(H.app:changes())do assert(c.row~=rof,'the change is gone from the list')end
+-- without locally built icons, the game's own HUD icons through HD2Runtime (hd2.resources.game_icon): a stratagem's
+-- category layer in its category colour, a booster as the Runtime draws it
+do
+    local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
+    local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
+    local saved,real_image=H.app.ctx.icons,H.app.canvas.image
+    local seen={}
+    H.app.canvas.image=function(cv,handle,x,y,w,h,opts)seen[#seen+1]={handle=handle,opts=opts}end
+    local strat,boost
+    for _,o in ipairs(H.catalog:objects('offensive'))do strat=strat or o end
+    for _,o in ipairs(H.catalog:objects('boosters'))do boost=boost or o end
+    local SH,BH={game_icon='strat'},{game_icon='boost'}
+    H.app.ctx.icons={game=true,stratagems={[strat.stratagem or strat.name]={handle=SH,game=true}},
+        boosters={[boost.name]={handle=BH,game=true}}}
+    assert(H.app:draw_icon(strat,0,0,40)and H.app:draw_icon(boost,0,0,40))
+    assert(seen[1].handle==SH and util.same(seen[1].opts.colours.r,theme.tone.offensive),'stratagem in its category colour')
+    assert(seen[2].handle==BH and seen[2].opts.colours==nil,'booster as the Runtime draws it')
+    H.app.ctx.icons,H.app.canvas.image=saved,real_image
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')
