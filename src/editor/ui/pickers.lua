@@ -1,4 +1,4 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The two value editors that open over the window: a searchable picker (choices, mission uses, projectile and
 -- explosion donors) and a calldown code editor. Installed onto the app (ui/app.lua).

@@ -1,8 +1,8 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- Localisation: every text the editor shows goes through L(text). English is built in (the text itself); other
 -- languages are plain UTF-8 text files in a folder the editor reads at startup and on Reload:
---     %LOCALAPPDATA%\HD2RuntimeEditor\localization\<anything>.txt
+--     %LOCALAPPDATA%\HD2REditor\localization\<anything>.txt
 -- One line per text, the English original, then " = ", then the translation; # starts a comment. A line
 -- "@language Deutsch" names the language (else the file name does). Formats such as "%d fields" keep their %d / %s.
 -- Settings → Write template puts template.txt (every text of the editor's interface) in that folder to translate.
@@ -42,7 +42,7 @@ end
 local function env(name)local ok,v=pcall(os.getenv,name);return ok and v or nil end
 function M.folder()
     local base=env('LOCALAPPDATA')
-    return base and(base..'\\HD2RuntimeEditor\\localization')or nil
+    return base and(base..'\\HD2REditor\\localization')or nil
 end
 local function read(path)
     if type(io)~='table'or type(io.open)~='function'then return nil end
@@ -148,7 +148,7 @@ function M.write_template(strings)
     local path=folder..'\\template.txt'
     local ok,f=pcall(io.open,path,'wb')
     if not ok or not f then return nil,'cannot write '..path end
-    f:write('# HD2Runtime Editor localisation template. Copy this file (any name ending in .txt), set the language\n')
+    f:write('# HD2R Editor localisation template. Copy this file (any name ending in .txt), set the language\n')
     f:write('# name below and write each translation after " = ". Lines without a translation are ignored.\n')
     f:write('@language My language\n\n')
     for _,s in ipairs(strings or{})do f:write(s,' = \n')end

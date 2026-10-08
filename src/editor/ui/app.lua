@@ -1,4 +1,4 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The editor window: Browse (categories -> objects -> fields), Changes, Mods, Custom stratagems, Presets, Settings.
 -- Edits are staged as pending values and applied together; Reset to defaults gives every field back to the mods'
@@ -728,7 +728,7 @@ function App:draw_header()
     cv:rect(0,h-1,P.w,1,C.line_strong,2)
     logo(cv,18,15,28)
     local x=60
-    x=x+cv:text('HD2RUNTIME',x,h/2,{size=SZ.title,font='title',colour=C.text})
+    x=x+cv:text('HD2R',x,h/2,{size=SZ.title,font='title',colour=C.text})
     cv:text('EDITOR',x+8,h/2,{size=SZ.title,font='title',colour=C.gold})
     -- tabs
     local tx=300

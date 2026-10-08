@@ -1,4 +1,4 @@
-"""HD2Runtime Editor offline tests, on the game's own LuaJIT (tests/lua_host.py) and the HD2Runtime source checkout.
+"""HD2R Editor offline tests, on the game's own LuaJIT (tests/lua_host.py) and the HD2Runtime source checkout.
 
     py -m unittest discover -s tests -v
 

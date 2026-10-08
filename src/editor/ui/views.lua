@@ -1,4 +1,4 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The editor's other tabs, installed onto the app (ui/app.lua):
 --   CHANGES   every value the editor applied or has pending (never a mod's own values), with revert;
@@ -300,7 +300,7 @@ function M.install(App)
         self:draw_mod_icon(mod,x0+20,y0+14,46)
         cv:text(mod.name..(mod.version and('  '..mod.version)or''),x0+78,y0+28,{size=20,font='title',colour=C.text,max=w-100})
         local sub
-        if mod.self then sub=L('HD2Runtime Editor itself')
+        if mod.self then sub=L('HD2R Editor itself')
         elseif mod.runtime then
             sub=mod.resource..'   '..L('%d operations, %d values applied'):format(#mod.operations,mod.applied)
                 ..(mod.refused>0 and('   '..L('%d refused'):format(mod.refused))or'')

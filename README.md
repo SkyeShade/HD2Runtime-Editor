@@ -1,10 +1,12 @@
-<p align="center"><img src="assets/HD2Editor%20%C2%B7%20icon%401x.png" width="96" alt="HD2Runtime Editor icon"></p>
+<p align="center"><img src="assets/HD2Editor%20%C2%B7%20icon%401x.png" width="96" alt="HD2R Editor icon"></p>
 
-# HD2Runtime Editor
+# HD2R Editor
+
+*HD2R Editor (formerly HD2Runtime Editor) is a mod built on HD2Runtime; it is not HD2Runtime itself.*
 
 **Live, in-game editing of every value [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) exposes, on top of the mods you have installed.**
 
-HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows every mod you have deployed and what each HD2Runtime mod changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
+HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mod you have deployed and what each HD2Runtime mod changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
 - **See what your mods do.** The Mods tab lists every mod your mod manager (Echelon or HD2 Arsenal) deployed, with its icon (see [Mod icons](#mod-icons)): HD2Runtime mods first, then the other mods, each under its own heading.
   - HD2Runtime mods show the values they applied this session, any operation the Runtime refused (with the reason), and their in-game options with the current settings and the operations they drive. Select a value to jump to that field.
@@ -43,7 +45,7 @@ HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows ev
 - **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last can be restored automatically when the game starts.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.5.1, development build for HD2Runtime r53.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 changes (keeping input from the game, the popup wheel, the steer takeover) are not live-tested yet.
+> **Status: 0.5.2, development build for HD2Runtime r53.** Everything is tested offline against the real HD2Runtime source (see [Tests](#tests)). 0.2.0 on r50 and 0.4.0 on r51 were seen in game. 0.5.0 on r52 was seen in game (the wheel, the new tabs). The 0.5.1 changes (keeping input from the game, the popup wheel, the steer takeover) are not live-tested yet.
 
 ## Requirements
 
@@ -59,7 +61,7 @@ HD2Runtime Editor is a Helldivers 2 mod with its own in-game window. It shows ev
 
 ## Installation
 
-Install `HD2RuntimeEditor-<version>.zip` with your mod manager (HD2 Arsenal shows its icon and description), next to HD2Runtime. Like every HD2Runtime mod, it does not bundle the Runtime.
+Install `HD2REditor-<version>.zip` with your mod manager (HD2 Arsenal shows its icon and description), next to HD2Runtime. Like every HD2Runtime mod, it does not bundle the Runtime.
 
 ## Using it
 
@@ -146,7 +148,7 @@ The icons are derived from Arrowhead's artwork. They are git-ignored and only en
 
 Every interface text goes through one lookup. To translate the editor:
 
-1. In game, open **Settings** and press **WRITE TEMPLATE**. It writes `template.txt` (every interface text) into `%LOCALAPPDATA%\HD2RuntimeEditor\localization\`.
+1. In game, open **Settings** and press **WRITE TEMPLATE**. It writes `template.txt` (every interface text) into `%LOCALAPPDATA%\HD2REditor\localization\`.
 2. Copy it to a new name ending in `.txt`, set the `@language` line, and write each translation after ` = `. Keep `%d` and `%s` where they are. Lines without a translation are ignored, and field names may be added too.
 3. Press **RELOAD LANGUAGES**, then pick the language. The choice is saved.
 
@@ -164,7 +166,7 @@ The build uses the HD2Runtime SDK (the `sdk/` folder of an HD2Runtime checkout, 
 py build.py      # or double-click build.cmd
 ```
 
-`build.py` finds the SDK through `HD2RUNTIME_SDK`, then the `sdk` path in `hd2runtime.json` (`../HD2Runtime/sdk`), then the parent folders. It runs `hd2.py build`, which packs every `src/**/*.lua` and ships the icon as `thumbnail.png` (the manifest's `IconPath`). It then writes the Arsenal description into `manifest.json`. The result is `build/HD2RuntimeEditor-<version>.zip`.
+`build.py` finds the SDK through `HD2RUNTIME_SDK`, then the `sdk` path in `hd2runtime.json` (`../HD2Runtime/sdk`), then the parent folders. It runs `hd2.py build`, which packs every `src/**/*.lua` and ships the icon as `thumbnail.png` (the manifest's `IconPath`). It then writes the Arsenal description into `manifest.json`. The result is `build/HD2REditor-<version>.zip`.
 
 ## Tests
 
@@ -183,4 +185,4 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 
 ## License and credit
 
-See [LICENSE](LICENSE). HD2Runtime Editor is built on [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) by SkyeShade, and uses its public API and its in-game catalogues. It is an unofficial fan project, not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment.
+See [LICENSE](LICENSE). HD2R Editor is built on [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) by SkyeShade, and uses its public API and its in-game catalogues. It is an unofficial fan project, not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment.

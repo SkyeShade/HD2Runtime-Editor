@@ -1,6 +1,6 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
--- HD2Runtime Editor: wiring. Every module is required here, at load: the engine resolves a mod's archived Lua
+-- HD2R Editor: wiring. Every module is required here, at load: the engine resolves a mod's archived Lua
 -- resources only while its startup package is loaded.
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
@@ -23,7 +23,7 @@ local game_icons=optional('game_icons')
 local mod_icon_map=optional('mod_icons')
 local M={}
 
-M.VERSION='0.5.1'
+M.VERSION='0.5.2'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -57,7 +57,7 @@ function M.start(hd2,id)
     local function log(message)pcall(mod.log,mod,'[editor] '..tostring(message))end
     local missing=M.missing(hd2)
     if#missing>0 then
-        log('HD2Runtime Editor '..M.VERSION..' is inactive: this HD2Runtime ('..tostring(hd2.version_label or hd2.version)
+        log('HD2R Editor '..M.VERSION..' is inactive: this HD2Runtime ('..tostring(hd2.version_label or hd2.version)
             ..') lacks '..table.concat(missing,', ')..'. Install HD2Runtime 0.30.0-dev with the UI services or newer.')
         return {status='unavailable',missing=missing}
     end
@@ -136,7 +136,7 @@ function M.start(hd2,id)
         if not ok then
             if why~=last_error then last_error=why;log('frame failed: '..why)end
             d:rect(40*d.scale,64*d.scale,760*d.scale,44*d.scale,{120,24,20,230})
-            d:text('HD2Runtime Editor hit an error; see HD2Runtime.log. Press '..hotkey..' to close.',
+            d:text('HD2R Editor hit an error; see HD2Runtime.log. Press '..hotkey..' to close.',
                 56*d.scale,76*d.scale,{size=18*d.scale})
         end
     end)
@@ -195,7 +195,7 @@ function M.start(hd2,id)
             presets:set_session(app:encode_values(layer:overrides()))
         end
     end,{id='hd2runtime_editor.layer'})
-    log('HD2Runtime Editor '..M.VERSION..' ready; press '..hotkey..' to open')
+    log('HD2R Editor '..M.VERSION..' ready; press '..hotkey..' to open')
     return state
 end
 

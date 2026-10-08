@@ -1,4 +1,4 @@
-"""Build the HD2Runtime Editor mod ZIP with the HD2Runtime SDK, then give it its HD2 Arsenal description.
+"""Build the HD2R Editor mod ZIP with the HD2Runtime SDK, then give it its HD2 Arsenal description.
 
 The SDK (the folder holding hd2.py and metadata.json) is found in this order: the HD2RUNTIME_SDK environment variable;
 the "sdk" path in hd2runtime.json; then this folder and every folder above it, each one itself or a subfolder named
@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+ARTIFACT = 'HD2REditor'
 DESCRIPTION = (
     'An in-game editor for every value HD2Runtime exposes. See which installed HD2Runtime mods change what, edit any '
     'field live (also the ones a mod sets), apply only what changed, and reset to the mods\' and game values at any '
@@ -91,10 +92,13 @@ def main():
     if status != 0:
         return status
     version = (ROOT / 'VERSION').read_text().strip()
-    artifact = ROOT / 'build' / (ROOT.name + '-' + version + '.zip')
-    if not artifact.is_file():
-        print('build finished but ' + artifact.name + ' is missing', file=sys.stderr)
+    built = ROOT / 'build' / (ROOT.name + '-' + version + '.zip')
+    if not built.is_file():
+        print('build finished but ' + built.name + ' is missing', file=sys.stderr)
         return 1
+    # released as HD2R Editor (not to be confused with HD2Runtime itself)
+    artifact = ROOT / 'build' / (ARTIFACT + '-' + version + '.zip')
+    os.replace(built, artifact)
     describe(artifact)
     print('Arsenal description written: ' + str(artifact))
     return 0

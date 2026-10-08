@@ -1,4 +1,4 @@
-# How HD2Runtime Editor works
+# How HD2R Editor works
 
 ## Modules (`src/`)
 

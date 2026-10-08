@@ -1,4 +1,4 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- Presets, the saved session and settings, in the editor's own saved data (hd2.store: one JSON file per mod in
 -- %LOCALAPPDATA%\HD2Runtime\mod_data). Values are stored by row key ('pw|AR-23 Liberator|weapon.fire_rate'), never

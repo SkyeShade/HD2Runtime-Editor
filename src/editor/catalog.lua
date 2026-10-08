@@ -1,4 +1,4 @@
--- HD2Runtime Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
+-- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The editor's field catalogue: every numeric field HD2Runtime publishes as writable, grouped like the ModBuilder
 -- (Weapons, Stratagems, Equipment, Enemies), read in game from the Runtime's own generated catalogues. Those tables
