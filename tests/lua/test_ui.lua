@@ -687,6 +687,37 @@ do
     H.presets:set_setting('ui_scale',1)
     step({})
 end
+-- Settings: the open key. Enter waits for a key with the current one held off; a key the editor uses is refused; the
+-- new chord is taken once released; a key another mod holds is refused; Esc cancels; Del returns to F8
+do
+    H.app:set_view('settings');H.app.settings_index=6
+    step({'ENTER'})
+    assert(H.app.key_capture and H_hotkey.held==true,'waiting for a key, the current one held off')
+    step({'UP'})
+    assert(H.app.key_capture and not H.app.key_capture.chord and H.app.toast_msg.text:find('already uses',1,true),
+        'the editor keys are refused')
+    step({'A'})
+    assert(not H.app.key_capture.chord and H.app.toast_msg.text:find('Ctrl or Alt',1,true),'a typing key needs Ctrl or Alt')
+    step({'F4'},{down={'ALT'}})
+    assert(not H.app.key_capture.chord,'not Alt+F4')
+    step({'F6'},{down={'CTRL'}},'54_hotkey_capture')
+    assert(H.app.key_capture.chord=='Ctrl+F6','the chord: '..tostring(H.app.key_capture.chord))
+    step({},{down={'F6','CTRL'}})
+    assert(H.app.key_capture and H.app:hotkey()=='F8','taken only once the key is up')
+    step({})
+    assert(not H.app.key_capture and H.app:hotkey()=='Ctrl+F6'and H_hotkey.held==false,'Ctrl+F6 taken on release')
+    step({},nil,'55_hotkey_set')
+    local found
+    for _,it in ipairs(H.frame({}).items)do if it.k=='t'and it.s:find('Ctrl+F6 close',1,true)then found=true end end
+    assert(found,'the footer hint names the new key')
+    step({'ENTER'});step({'F7'});step({})
+    assert(H.app:hotkey()=='Ctrl+F6'and H.app.toast_msg.text:find('already used by mods/someone/other',1,true),
+        'a key another mod holds is refused')
+    step({'ENTER'});step({'ESCAPE'})
+    assert(not H.app.key_capture and H_hotkey.held==false and H.app.view=='settings','Esc cancels; the window stays')
+    step({'DELETE'})
+    assert(H.app:hotkey()=='F8','Del returns to F8')
+end
 -- a weapon HD2Runtime blocks (duplicate identity: LAS-5 Scythe) shows its stats as locked rows with the reason
 do
     local scythe=H.catalog:object('pw|LAS-5 Scythe')

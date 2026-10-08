@@ -654,6 +654,7 @@ end
 
 function App:handle_keys(f)
     local k=f.keys
+    if self.key_capture then return self:handle_key_capture(f)end
     if self.picker then return self:handle_picker_keys(f)end
     if self.coder then return self:handle_code_keys(f)end
     if self.moder then return self:handle_modes_keys(f)end
@@ -736,6 +737,86 @@ function App:handle_keys(f)
     elseif self.view=='presets'then self:handle_presets_keys(f)end
 end
 function App:key_down_once(name)return self.input:query('pressed',name)end
+
+----------------------------------------------------------------------------------------- the open key --
+App.DEFAULT_HOTKEY='F8'
+M.DEFAULT_HOTKEY=App.DEFAULT_HOTKEY
+function App:hotkey()return tostring(self.ctx.hotkey or App.DEFAULT_HOTKEY)end
+-- Why a chord cannot open and close the editor, or nil: the keys the editor reads while open (with any modifier),
+-- the keys it types with (unless Ctrl or Alt is held), Ctrl+F (search) and Alt+F4. name: an hd2.input key name.
+function M.hotkey_refusal(name,ctrl,shift,alt)
+    for _,nav in ipairs(input_module.NAV)do
+        if nav==name then return L('The editor already uses %s'):format(name)end
+    end
+    if not ctrl and not alt and(input_module.CHARS[name]or name:match('^%u$'))then
+        return L('%s types text in the editor: hold Ctrl or Alt with it'):format(name)
+    end
+    if ctrl and not alt and not shift and name=='F'then return L('Ctrl+F searches in the editor')end
+    if alt and name=='F4'then return L('Alt+F4 closes the game')end
+    return nil
+end
+-- Every key a binding accepts (hd2.input.keys); F1-F12 without it.
+function App:bindable_keys()
+    if not self.key_list then
+        local list={}
+        local fn=type(self.hd2.input)=='table'and self.hd2.input.keys
+        if type(fn)=='function'then
+            local ok,names=pcall(fn)
+            if ok and type(names)=='table'then for _,name in ipairs(names)do list[#list+1]=name end end
+        end
+        if#list==0 then for i=1,12 do list[i]='F'..i end end
+        table.sort(list)
+        self.key_list=list
+    end
+    return self.key_list
+end
+-- Moves the open key to a chord ('Ctrl+F7'): main.lua rebinds it (the Runtime refuses one another binding holds).
+function App:set_hotkey(chord)
+    if not self.ctx.set_hotkey then self:toast(L('This HD2Runtime cannot rebind the key'),C.error);return false end
+    local ok,why,holder=self.ctx.set_hotkey(chord)
+    if ok then
+        self:toast(L('The editor now opens and closes with %s'):format(self:hotkey()),C.ok)
+    elseif why=='conflict'then
+        self:toast(L('%s is already used by %s'):format(chord,tostring(holder or L('another mod'))),C.error)
+    else
+        self:toast(tostring(why),C.error)
+    end
+    return ok
+end
+-- Waiting for the new key: the current one is held off meanwhile, so pressing it does not close the window.
+function App:start_key_capture()
+    if not self.ctx.set_hotkey then self:toast(L('This HD2Runtime cannot rebind the key'),C.error);return end
+    self.key_capture={}
+    if self.ctx.hold_hotkey then self.ctx.hold_hotkey(true)end
+end
+function App:end_key_capture()
+    if not self.key_capture then return end
+    self.key_capture=nil
+    if self.ctx.hold_hotkey then self.ctx.hold_hotkey(false)end
+end
+function App:handle_key_capture(f)
+    local cap=self.key_capture
+    if self.view~='settings'then return self:end_key_capture()end
+    if cap.chord then
+        -- taken once the key is up: a binding that found its key already held would close the window at once
+        if not self.input:query('down',cap.main)then
+            local chord=cap.chord
+            self:end_key_capture()
+            if self:set_hotkey(chord)then self:sound('click')end
+        end
+        return
+    end
+    if f.keys.ESCAPE then self:end_key_capture();self:sound('back');return end
+    for _,name in ipairs(self:bindable_keys())do
+        if name~='ESCAPE'and self.input:query('pressed',name)then
+            local why=M.hotkey_refusal(name,f.ctrl,f.shift,f.alt)
+            if why then self:toast(why,C.error);return end
+            cap.main=name
+            cap.chord=(f.ctrl and'Ctrl+'or'')..(f.shift and'Shift+'or'')..(f.alt and'Alt+'or'')..name
+            return
+        end
+    end
+end
 
 function App:ask(kind,data)
     if kind=='reset'then
@@ -1398,6 +1479,8 @@ function App:draw_footer(y,h)
     elseif self.view=='browse'and self.focus=='fields'then
         hint=L('F8 close   ←→ adjust (Shift x10, Ctrl ÷10)   digits type a value   Del revert   F9 apply')
     else hint=L('F8 close   ↑↓ select   ←→ panes   Tab next pane   Shift+Tab next tab   F9 apply') end
+    -- the key chosen in Settings (the translated hints keep naming F8)
+    if self:hotkey()~='F8'then hint=hint:gsub('F8',(self:hotkey():gsub('%%','%%%%')),1)end
     cv:text(hint,18,y+h/2,{size=SZ.small,colour=C.faint,max=P.w-560})
     local bh=34
     local by=y+(h-bh)/2
@@ -1674,7 +1757,7 @@ function App:draw_presets(y0,h)
         cv:text(L('Free the mouse from the camera while open (experimental)'),tx+46,cy2,{size=SZ.small,colour=C.dim,max=PRESETS_W-80})
         cv:hit(tx,cy2-12,PRESETS_W-36,24,self.toggle_cursor)
     end
-    cv:text(L('Open the editor with ')..tostring(self.ctx.hotkey or'F8')..'. Edits apply live through HD2Runtime\'s guarded writes.',
+    cv:text(L('Open the editor with ')..self:hotkey()..'. Edits apply live through HD2Runtime\'s guarded writes.',
         18,sy+70,{size=SZ.tiny,colour=C.faint,max=PRESETS_W-36})
     -- detail
     local x0=PRESETS_W

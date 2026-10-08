@@ -164,6 +164,7 @@ function M.start(hd2,id)
     end
     local function toggle()
         if overlay:status().visible then
+            app:end_key_capture()
             block(false)
             overlay:hide()
             app.input:reset()
@@ -175,8 +176,35 @@ function M.start(hd2,id)
     state.toggle=toggle
     app.ctx.close=function()if overlay:status().visible then toggle()end end
     local binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle})
+    if type(binding)=='table'and binding.state=='rejected'and hotkey~=M.HOTKEY then
+        log('the saved hotkey '..tostring(hotkey)..' is not a key ('..tostring(binding.reason)..'); using '..M.HOTKEY)
+        hotkey=M.HOTKEY
+        app.ctx.hotkey=hotkey
+        binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle})
+    end
     if type(binding)=='table'and binding.state=='conflict'then
-        log('the hotkey '..hotkey..' is used by another mod; rebind it in the Presets tab settings or saved data')
+        log('the hotkey '..hotkey..' is used by another mod; choose another in the editor\'s Settings tab')
+    end
+    -- Settings: another open key. The Runtime refuses a chord another binding holds; the editor then keeps its key.
+    -- ok, or false and 'conflict' and the holder's mod, or false and why.
+    if type(binding)=='table'and type(binding.rebind)=='function'and binding.state~='rejected'then
+        app.ctx.set_hotkey=function(text)
+            local previous=hotkey
+            local ok,why=binding:rebind(text)
+            if not ok then
+                local holder=type(binding.conflict)=='table'and binding.conflict.owner or nil
+                if binding.key==nil then binding:rebind(previous)end
+                return false,why,holder
+            end
+            hotkey=binding.key or text
+            app.ctx.hotkey=hotkey
+            presets:set_setting('hotkey',hotkey)
+            log('the editor now opens with '..hotkey)
+            return true
+        end
+        app.ctx.hold_hotkey=function(on)
+            if on then binding:disable()else binding:enable()end
+        end
     end
 
     -- Every frame: drive the override layer; restore the last session once; save the session when it settles.

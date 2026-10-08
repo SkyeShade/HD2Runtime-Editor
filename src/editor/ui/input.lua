@@ -13,6 +13,8 @@ local CHARS={PERIOD='.',DECIMAL='.',MINUS='-',SUBTRACT='-',SPACE=' ',SLASH='/',C
 for i=0,9 do CHARS[tostring(i)]=tostring(i);CHARS['NUMPAD'..i]=tostring(i)end
 local LETTERS={}
 for i=0,25 do LETTERS[#LETTERS+1]=string.char(65+i)end
+-- the keys the editor reads while open (the open/close key must leave them alone)
+M.NAV,M.CHARS=NAV,CHARS
 
 local Input={};Input.__index=Input
 function M.new(hd2)

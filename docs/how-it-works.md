@@ -5,7 +5,7 @@
 | File | Role |
 | --- | --- |
 | `addon.lua` | Entry point; the SDK wraps it with the dependency check and runs it as the mod (`hd2.events.run_as`). |
-| `editor/main.lua` | Wiring: checks for the Runtime services, binds F8, ticks the layer every frame, restores and saves the session. Every module is required at load, because the engine resolves a mod's archived Lua only while its startup package is loaded. |
+| `editor/main.lua` | Wiring: checks for the Runtime services, binds the open key (F8, or the one chosen in Settings), ticks the layer every frame, restores and saves the session. Every module is required at load, because the engine resolves a mod's archived Lua only while its startup package is loaded. |
 | `editor/catalog.lua` | Categories → objects → sections → rows, read from the installed Runtime's generated catalogues. One adapter per family; a family whose table changed shape is reported unavailable. |
 | `editor/ledger.lua` | Which mod applied which value: an observer on `core/shared_records.claim`, plus the operation registry behind `hd2.diagnostics.operations`. |
 | `editor/layer.lua` | The override layer: adopt, hand-over, steer, reset (below). |

@@ -29,7 +29,17 @@ local input={pressed={},down={},mouse=nil}
 local fake={input={
     wheel=function()return input.wheel or 0 end,
     pressed=function(name)return input.pressed[name]==true end,
-    down=function(name)return input.down[name]==true or input.pressed[name]==true end}}
+    down=function(name)return input.down[name]==true or input.pressed[name]==true end,
+    keys=function()
+        local names={'ESCAPE','ENTER','TAB','UP','DOWN','LEFT','RIGHT','INSERT','HOME','PAUSE','NUMPAD0','GRAVE'}
+        for i=1,12 do names[#names+1]='F'..i end
+        for i=0,25 do names[#names+1]=string.char(65+i)end
+        for i=0,9 do names[#names+1]=tostring(i)end
+        return names
+    end}}
+-- the open key (main.lua's rebind): F7 is held by another mod
+H_hotkey={}
+local hotkey_ctx
 -- a custom stratagem a mod registered (hd2.custom_stratagem, HD2Runtime r51 tune/untune)
 H_custom={id='pelican_gas',owner='mods/someone/pelicans',label='Pelican Gas Support',kind='pelican',code='left down',
     code_values={4,3},cooldown=300,group='any_red',state='ship',registered={cooldown=300},tuned=false}
@@ -64,6 +74,12 @@ end
 local app=require('mods/skyeshade/hd2runtime_editor/editor/ui/app').new({hd2=fake,catalog=catalog,layer=layer,
     ledger=ledger,presets=presets,hotkey='F8',label='HD2Runtime 0.30.0-dev  ·  Editor 0.2.0',
     mouse=function()return input.mouse end,icons=icons,choices=true,set_free_cursor=function()end,
+    set_hotkey=function(text)
+        if text=='F7'then return false,'conflict','mods/someone/other'end
+        hotkey_ctx.hotkey=text
+        return true
+    end,
+    hold_hotkey=function(on)H_hotkey.held=on end,
     ui_icons={mod={image='ui_mod'},edited={image='ui_edited'},pending={image='ui_pending'}},id='mods/skyeshade/hd2runtime_editor',
     strings=require('mods/skyeshade/hd2runtime_editor/editor/strings'),
     sounds={played={},tick=function()end,play=function(kind)H_sounds[#H_sounds+1]=kind end},
@@ -75,6 +91,7 @@ local app=require('mods/skyeshade/hd2runtime_editor/editor/ui/app').new({hd2=fak
         return {done=true,step=function()return true end,result=function()return {source='echelon',mods=mods}end}
     end})
 
+hotkey_ctx=app.ctx
 local W,H=args.width or 1920,args.height or 1080
 local function frame_builder()
     local d={items={},width=W,height=H,scale=math.min(W/1920,H/1080),refused={}}

@@ -751,18 +751,22 @@ function M.install(App)
     function App:handle_settings_keys(f)
         local k=f.keys
         local langs=self:languages()
-        self.settings_index=clamp_index(self.settings_index or 1,5+#langs)
-        if k.UP then self.settings_index=clamp_index(self.settings_index-1,5+#langs)end
-        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,5+#langs)end
+        self.settings_index=clamp_index(self.settings_index or 1,6+#langs)
+        if k.UP then self.settings_index=clamp_index(self.settings_index-1,6+#langs)end
+        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,6+#langs)end
         local i=self.settings_index
         if i==5 then
             -- the interface size: left smaller, right or Enter larger
             if k.LEFT then self:step_ui_scale(-1)elseif k.RIGHT or k.ENTER then self:step_ui_scale(1)end
+        elseif i==6 then
+            -- the open key: Enter waits for a new one, Del returns to the default
+            if k.ENTER or k.RIGHT then self:start_key_capture()
+            elseif(k.DELETE or k.BACKSPACE)and self:hotkey()~=App.DEFAULT_HOTKEY then self:set_hotkey(App.DEFAULT_HOTKEY)end
         elseif k.ENTER or k.RIGHT or k.LEFT then
             if i<=4 then
                 local action=(self.settings_toggles or{})[i]
                 if action then action.click()end
-            else self:use_language(langs[i-5].name)end
+            else self:use_language(langs[i-6].name)end
         end
     end
     function App:use_language(name)
@@ -820,8 +824,23 @@ function M.install(App)
             cv:text(L('(%d%% fits this screen)'):format(math.floor(shown*100+0.5)),x+552,y,{size=SZ.tiny,colour=C.faint})
         end
         y=y+34
-        cv:text(L('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.'):format(tostring(self.ctx.hotkey or'F8')),
-            x,y+4,{size=SZ.tiny,colour=C.faint,max=W-48})
+        -- the key that opens and closes the editor
+        if self.settings_index==6 then cv:rect(x-8,y-14,560,28,C.select,1)end
+        cv:text(L('Key to open and close the editor'),x,y,{size=SZ.label,colour=C.dim})
+        self.btn_hotkey=self.btn_hotkey or{click=function()
+            if self.key_capture then self:end_key_capture()else self:start_key_capture()end
+        end}
+        self.btn_hotkey_default=self.btn_hotkey_default or{click=function()self:set_hotkey(App.DEFAULT_HOTKEY)end}
+        local capturing=self.key_capture~=nil
+        cv:text(capturing and(self.key_capture.chord or L('press a key...'))or self:hotkey(),x+390,y,
+            {size=SZ.label,font='title',colour=capturing and C.gold or C.text,align='right'})
+        button(self,capturing and L('CANCEL')or L('CHANGE'),x+400,y-13,140,26,'normal',self.btn_hotkey)
+        button(self,L('DEFAULT'),x+552,y-13,110,26,self:hotkey()~=App.DEFAULT_HOTKEY and'normal'or'disabled',
+            self.btn_hotkey_default)
+        y=y+34
+        cv:text(capturing and L('Press the new key, or Ctrl / Shift / Alt with it. Esc cancels.')
+            or L('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.'):format(self:hotkey()),
+            x,y+4,{size=SZ.tiny,colour=capturing and C.gold or C.faint,max=W-48})
         -- language
         y=y+40
         cv:text(L('LANGUAGE'),x,y,{size=SZ.heading,font='title',colour=C.gold})
@@ -836,7 +855,7 @@ function M.install(App)
                 self.language_actions[lang.name]=action
             end
             local current=i18n.language()==lang.name
-            if self.settings_index==5+i then cv:rect(x-8,y-2,560,28,C.select,1)
+            if self.settings_index==6+i then cv:rect(x-8,y-2,560,28,C.select,1)
             elseif self.hover==action then cv:rect(x-8,y-2,560,28,C.hover,1)end
             cv:rect(x,y+6,14,14,current and C.gold or C.line_strong,3)
             cv:text(lang.name,x+26,y+13,{size=SZ.label,colour=current and C.text or C.dim})

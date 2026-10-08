@@ -70,7 +70,7 @@ Install `HD2REditor-<version>.zip` with your mod manager (HD2 Arsenal shows its 
 
 ## Using it
 
-Press **F8** in game to open or close the editor, or **Esc** to close it (the game's pause menu also opens on Esc). The window is centred on the screen.
+Press **F8** in game to open or close the editor, or **Esc** to close it (the game's pause menu also opens on Esc). The window is centred on the screen. **Settings → Key to open and close the editor** picks another key or a Ctrl / Shift / Alt combination (Del on that row returns to F8).
 
 While it is open, the editor asks the engine to free the mouse from the camera: show the cursor, stop clipping it, and drop the camera's mouse focus. This is experimental; turn it off in Settings if it misbehaves.
 
@@ -78,7 +78,7 @@ The tabs are Browse, Changes, Export, Mods, Custom, Presets, Logs and Settings (
 
 | Key | Action |
 | --- | --- |
-| F8 | Open or close the editor |
+| F8 | Open or close the editor (another key in Settings) |
 | ↑ ↓, PgUp PgDn, Home End | Move in the focused list |
 | → / ← | Go deeper or back (categories, objects, fields). In the field list: nudge the value (Shift ×10, Ctrl ÷10) |
 | Tab / Shift+Tab | Next pane / next tab (Browse, Mods, Presets) |
