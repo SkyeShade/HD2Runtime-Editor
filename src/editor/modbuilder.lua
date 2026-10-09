@@ -335,7 +335,8 @@ function M.items(cat,project)
         if not lookup.code then
             local code={}
             for _,row in ipairs(lookup.rows)do
-                local ok,text=pcall(export.trace,row.target)
+                local ok,text=true,row.target_code
+                if not text then ok,text=pcall(export.trace,row.target)end
                 if ok and text and row.field then
                     local key=text..'|'..tostring(row.field)
                     if not code[key]then code[key]=row end

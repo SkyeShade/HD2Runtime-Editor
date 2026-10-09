@@ -669,7 +669,7 @@ function App:handle_keys(f)
     if self.rater then return self:handle_rates_keys(f)end
     if self.traiter then return self:handle_traits_keys(f)end
     if self.confirm then
-        if k.ENTER or k.F10 and self.confirm.kind=='reset'or k.INSERT then self:confirm_yes()
+        if k.ENTER or k.INSERT then self:confirm_yes()
         elseif k.ESCAPE or k.BACKSPACE or k.DELETE then self.confirm=nil end
         return
     end
@@ -727,7 +727,6 @@ function App:handle_keys(f)
         return
     end
     if k.F9 then self:apply()end
-    if k.F10 then self:ask('reset')end
     if k.ENTER then self:sound('click')end
     if f.ctrl and self:key_down_once('F')and self.view=='browse'then
         self.search=self.search or{text=''}
@@ -747,11 +746,27 @@ end
 function App:key_down_once(name)return self.input:query('pressed',name)end
 
 ----------------------------------------------------------------------------------------- the open key --
+-- HD2Runtime 0.30.2: the wheel hook is the player's install choice. With "Mouse wheel hook off" the wheel only scrolls
+-- over a game menu: the Runtime's notice (wheel_status().notice), or nil when the wheel works. Read every few seconds.
+function App:wheel_notice()
+    if not self.wheel_checked or self.time-self.wheel_checked>2 then
+        self.wheel_checked=self.time
+        local fn=type(self.hd2.input)=='table'and self.hd2.input.wheel_status
+        local status
+        if type(fn)=='function'then
+            local ok,v=pcall(fn)
+            status=ok and type(v)=='table'and v or nil
+        end
+        self.wheel_off=status and status.install_option=='hook_off'and(status.notice or true)or nil
+    end
+    return self.wheel_off
+end
 App.DEFAULT_HOTKEY='F8'
 M.DEFAULT_HOTKEY=App.DEFAULT_HOTKEY
 function App:hotkey()return tostring(self.ctx.hotkey or App.DEFAULT_HOTKEY)end
 -- Why a chord cannot open and close the editor, or nil: the keys the editor reads while open (with any modifier),
 -- the keys it types with (unless Ctrl or Alt is held), Ctrl+F (search) and Alt+F4. name: an hd2.input key name.
+function App.hotkey_refusal_fn(...)return M.hotkey_refusal(...)end
 function M.hotkey_refusal(name,ctrl,shift,alt)
     for _,nav in ipairs(input_module.NAV)do
         if nav==name then return L('The editor already uses %s'):format(name)end
@@ -760,6 +775,7 @@ function M.hotkey_refusal(name,ctrl,shift,alt)
         return L('%s types text in the editor: hold Ctrl or Alt with it'):format(name)
     end
     if ctrl and not alt and not shift and name=='F'then return L('Ctrl+F searches in the editor')end
+    if name=='F10'and not ctrl and not alt and not shift then return L('F10 opens the HD2Runtime settings')end
     if alt and name=='F4'then return L('Alt+F4 closes the game')end
     return nil
 end
@@ -1494,7 +1510,12 @@ function App:draw_footer(y,h)
     else hint=L('F8 close   ↑↓ select   ←→ panes   Tab next pane   Shift+Tab next tab   F9 apply') end
     -- the key chosen in Settings (the translated hints keep naming F8)
     if self:hotkey()~='F8'then hint=hint:gsub('F8',(self:hotkey():gsub('%%','%%%%')),1)end
-    cv:text(hint,18,y+h/2,{size=SZ.small,colour=C.faint,max=P.w-560})
+    local hw=cv:text(hint,18,y+h/2,{size=SZ.small,colour=C.faint,max=P.w-560})
+    -- the wheel is off (the player's HD2Runtime install choice): say how to scroll, after the hints
+    if self:wheel_notice()then
+        cv:text(L('Wheel off: PgUp / PgDn or the scrollbar'),18+hw+18,y+h/2,
+            {size=SZ.small,colour=C.pending,max=math.max(40,P.w-560-hw-18)})
+    end
     local bh=34
     local by=y+(h-bh)/2
     local bx=P.w-14

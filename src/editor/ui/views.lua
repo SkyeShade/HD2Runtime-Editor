@@ -841,6 +841,16 @@ function M.install(App)
         cv:text(capturing and L('Press the new key, or Ctrl / Shift / Alt with it. Esc cancels.')
             or L('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.'):format(self:hotkey()),
             x,y+4,{size=SZ.tiny,colour=capturing and C.gold or C.faint,max=W-48})
+        -- the wheel hook off (the player's HD2Runtime install choice): the Runtime's own notice, and what it turns off here
+        local wheel=self:wheel_notice()
+        if wheel then
+            y=y+22
+            cv:text(type(wheel)=='string'and wheel or L('Mouse wheel scrolling is off in mod windows (HD2Runtime install choice).'),
+                x,y+4,{size=SZ.tiny,colour=C.pending,max=W-48})
+            y=y+18
+            cv:text(L('Keeping keys, clicks and the wheel from the game needs that hook too, so that setting has no effect.'),
+                x,y+4,{size=SZ.tiny,colour=C.faint,max=W-48})
+        end
         -- language
         y=y+40
         cv:text(L('LANGUAGE'),x,y,{size=SZ.heading,font='title',colour=C.gold})

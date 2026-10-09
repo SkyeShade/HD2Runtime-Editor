@@ -178,8 +178,11 @@ assert(#H.presets:list()==2,'preset saved (with the export preset)')
 step({'DOWN'},nil,'09_preset')
 local preset=H.presets:list()[1]
 assert(preset.count==2,'preset has two fields: '..preset.count)
--- reset to defaults (asks first)
-step({'F10'},nil,'10_confirm')
+-- reset to defaults (asks first); F10 is HD2Runtime's settings panel (0.30.2), not the editor's
+step({'F10'})
+assert(not H.app.confirm,'F10 does nothing in the editor')
+H.app:ask('reset')
+step({},nil,'10_confirm')
 assert(H.app.confirm and H.app.confirm.kind=='reset','confirm dialog')
 step({'ENTER'})
 settle(8)
@@ -954,6 +957,69 @@ do
     preset_files.base=nil
     H.app.pf_list=nil
     os.execute('rmdir /s /q "'..base..'" 2>nul')
+end
+-- HD2Runtime 0.30.2 in the editor: sentry and emplacement projectile swaps (MG-43 / G-16 read-only with the reason),
+-- exported and imported through the Lua that reaches their target; a team-reload weapon's own ammunition rows locked
+-- (the backpack holds it); the wheel hook install choice shown in the footer and Settings; F10 refused as the open key
+do
+    local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
+    local export=require('mods/skyeshade/hd2runtime_editor/editor/export')
+    local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
+    local VW=require('hd2runtime/domains/vehicle_weapon_authoring')
+    if VW.weapons['A/AC-8 Autocannon Sentry / weapon']then
+        local function swap_of(name)
+            local o=H.catalog:object('st|'..name)
+            H.catalog:open(o)
+            for _,r in ipairs(o.rows)do if r.field=='attack.projectile'then return r end end
+        end
+        local ac=swap_of('A/AC-8 Autocannon Sentry')
+        assert(ac and ac.editable and ac.kind=='reference','the Autocannon Sentry has a projectile swap')
+        local donor
+        for _,o in ipairs(ac.options(ac))do if o.label=='PLAS-1 Scorcher'then donor=o.value end end
+        assert(donor,'donors offered')
+        local ok,acks=catalog_module.probe(ac,donor)
+        assert(ok,'the Runtime validator accepts a donor: '..tostring(acks))
+        local text=assert(export.operation(catalog_module,{row=ac,value=donor},'x'))
+        assert(text:find('projectile_source().target',1,true)and text:find('hd2.attack_output(',1,true),
+            'exported through projectile_source(): '..text)
+        -- the exported patch imports again by its target code
+        local patches=modbuilder.lua_patches("local hd2=require('mods/skyeshade/hd2runtime')\n"
+            ..text:gsub('^%-%-[^\n]*\n',''):gsub('add%(function%(%) return ',''):gsub(' end%)\n$',''))
+        assert(patches and patches[1]and patches[1].target==ac.target_code,'the target code round-trips: '
+            ..tostring(patches and patches[1]and patches[1].target))
+        local mg=swap_of('A/MG-43 Machine Gun Sentry')
+        assert(mg and not mg.editable and mg.reason:find('magazine',1,true),'MG-43 read-only with the reason')
+    end
+    -- team-reload ammunition rows: locked, saying the backpack holds it
+    local S=require('hd2runtime/domains/support_weapon_authoring')
+    local flagged
+    for _,f in ipairs((S.weapons['AC-8 Autocannon']or{}).fields or{})do if f.noEffect then flagged=true end end
+    if flagged then
+        local o=H.catalog:object('sp|AC-8 Autocannon')
+        H.catalog:open(o)
+        local spare
+        for _,r in ipairs(o.rows)do if r.field=='rounds.spare_rounds'then spare=r end end
+        assert(spare and not spare.editable and spare.reason:find('backpack',1,true),'AC-8 spare rounds locked')
+    end
+    -- the wheel: footer and Settings say it is off; nothing when it works
+    H_wheel={native=false,install_option='hook_off',
+        notice='GameGuard safety: mouse wheel scrolling is off in mod windows.'}
+    H.app.wheel_checked=nil
+    H.app:set_view('settings')
+    local d=step({},nil,'61_wheel_off_settings')
+    local footer,settings
+    for _,it in ipairs(d.items)do
+        if it.k=='t'and it.s:find('Wheel off',1,true)then footer=true end
+        if it.k=='t'and it.s:find('GameGuard safety',1,true)then settings=true end
+    end
+    assert(footer and settings,'the footer and Settings say the wheel is off')
+    H_wheel={native=true,install_option='hook_on'}
+    H.app.wheel_checked=nil
+    d=step({})
+    for _,it in ipairs(d.items)do assert(not(it.k=='t'and it.s:find('Wheel off',1,true)),'nothing when the wheel works')end
+    H_wheel=nil
+    H.app.wheel_checked=nil
+    assert(H.app.hotkey_refusal_fn('F10',false,false,false):find('HD2Runtime',1,true),'F10 is HD2Runtime\'s')
 end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title

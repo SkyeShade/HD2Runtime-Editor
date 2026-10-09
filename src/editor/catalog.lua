@@ -238,6 +238,7 @@ function M.encode(row,value)
     if getmetatable(value)==nil and rawget(value,'path')~='no_explosion'then return value end
     local output=rawget(value,'output')
     if output then return {ref='output',id=output}end
+    if rawget(value,'resource')=='vehicle_weapon'then return nil end
     if rawget(value,'resource')=='pickup'then return {ref='pickup',id=rawget(value,'semanticId')}end
     if rawget(value,'path')=='no_explosion'then return {ref='none'}end
     local weapon,attack,phase=rawget(value,'weapon'),rawget(value,'attack'),rawget(value,'phase')
@@ -599,6 +600,17 @@ local function support_rows(hd2,object,entry)
                 common.section=join(section,'Status')
                 rows[#rows+1]=make_value_row(object,common)
             end
+        end
+    end
+    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows do nothing (its backpack holds the ammunition):
+    -- shown locked with the reason, so nobody edits a value the game ignores
+    for _,r in ipairs(rows)do
+        local d=type(r.descriptor)=='table'and r.descriptor
+        -- (the reason itself in the domain, {reason} in the SDK JSON)
+        local why=d and(type(d.noEffect)=='table'and d.noEffect.reason or d.noEffect)
+        if why and r.editable then
+            r.editable,r.reason=false,'no effect: the backpack holds this weapon\'s ammunition (HD2Runtime: '
+                ..util.plain(tostring(why),120)..')'
         end
     end
     return rows
@@ -1135,6 +1147,35 @@ local function player_category(slot)
 end
 CATEGORY.primary=player_category('primary')
 CATEGORY.secondary=player_category('secondary')
+-- A sentry's or emplacement's projectile swap (HD2Runtime 0.30.2): its deployed entity's ProjectileWeapon record,
+-- through hd2.stratagem(name):attack('primary'):projectile_source() (the host '<name> / weapon' in
+-- vehicle_weapon_authoring). The target is a handle no hd2 call chain builds, so the row carries the Lua that reaches it
+-- (target_code / expect_code) for the exporter and the ModBuilder import. MG-43 and G-16 stay read-only with the reason.
+local function sentry_swap_rows(hd2,object,name)
+    local VW=load('vehicle_weapon_authoring')
+    local host=VW and type(VW.weapons)=='table'and VW.weapons[name..' / weapon']
+    if not host or host.stratagemHost~=name then return {}end
+    local f=(host.fields or{})[1]
+    if not f or f.type~='projectile_reference'then return {}end
+    local function source()return hd2.stratagem(name):attack('primary'):projectile_source()end
+    local ok,src=pcall(source)
+    local code='hd2.stratagem('..string.format('%q',name)..'):attack("primary"):projectile_source()'
+    local common={id='attack.projectile@stratagem',kind='reference',label='Projectile',field='attack.projectile',
+        section='Projectile · Swap',descriptor=f,unverified=true,
+        target=function()return source().target end,expect=function()return source().expect end,
+        options=function(row)return projectile_options(hd2,row)end}
+    if ok and type(src)=='table'and src.writable and src.expect then
+        common.vanilla=src.expect
+    else
+        common.editable=false
+        common.reason=tostring(ok and type(src)=='table'and src.reason or f.reason or'read-only in this HD2Runtime')
+        common.vanilla='own'
+        common.labels={{value='own',label='Own round'}}
+    end
+    local row=make_value_row(object,common)
+    row.target_code,row.expect_code=code..'.target',code..'.expect'
+    return {row}
+end
 local function stratagem_category(families,subtitles)
     return function(cat)
         local ST,why=load('stratagem_authoring')
@@ -1143,7 +1184,9 @@ local function stratagem_category(families,subtitles)
         for name,entry in pairs(ST.stratagems or{})do
             if families[entry.family]then
                 list[#list+1]={key='st|'..name,name=name,subtitle=subtitles[entry.family]or util.humanize(entry.family),
-                    build=function(object)return stratagem_rows(cat.hd2,object,entry)end}
+                    build=function(object)
+                        return append(stratagem_rows(cat.hd2,object,entry),sentry_swap_rows(cat.hd2,object,name))
+                    end}
             end
         end
         return sorted_objects(list)

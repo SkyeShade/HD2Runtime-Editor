@@ -41,7 +41,8 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **The armory's presentation:** each weapon's displayed traits (up to five, in order) and displayed armor penetration.
   - **Mission uses:** a count or unlimited. Type 0 or -1 for unlimited, or step below the lowest count, where the stratagem can be unlimited.
   - **Hellpod contents:** the items a support weapon, backpack or Resupply pod drops, and how many.
-  - **Projectile swaps and terminal explosion payloads**, from a searchable donor list.
+  - **Projectile swaps and terminal explosion payloads**, from a searchable donor list. With HD2Runtime 0.30.2, the
+    sentries and emplacements that can fire another round have a swap too (the MG-43 and G-16 stay read-only).
   - **Statuses, on/off switches and enums.**
 
   Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
@@ -60,7 +61,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - It never overwrites a project ModBuilder made. Reopen ModBuilder's project list to see a new one.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.8.3, for HD2Runtime 0.30.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 0.8.4, for HD2Runtime 0.30.0 or later (0.30.2 recommended).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 
@@ -128,7 +129,10 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 
 ## Limitations
 
-- **Seven weapons are read only for now.** HD2Runtime cannot yet tell apart the two game records behind the LAS-5 Scythe, LAS-7 Dagger, CQC-42 Machete, CQC-73 Entrenchment Tool, GP-31 Grenade Pistol, P-72 Crisper and SMG-37 Defender, so it blocks writes to them. The editor still shows their stats, marked LOCKED; their attachments stay editable.
+- **Seven weapons need HD2Runtime 0.30.2.** Older Runtimes cannot tell apart the two game records behind the LAS-5 Scythe, LAS-7 Dagger, CQC-42 Machete, CQC-73 Entrenchment Tool, GP-31 Grenade Pistol, P-72 Crisper and SMG-37 Defender, so they block writes to them: the editor then shows their stats marked LOCKED. 0.30.2 resolves all seven, and they are editable (the Scythe's heat capacity and heatsinks stay read-only: its default heatsink overwrites them).
+- **Backpack-fed ammunition.** The AC-8 Autocannon, GR-8 Recoilless Rifle, FAF-14 Spear, RL-77 Airburst and StA-X3 W.A.S.P. keep their ammunition in the backpack: their own ammunition rows are shown locked (with HD2Runtime 0.30.2), because a change there does nothing.
+- **F10 is HD2Runtime's.** From 0.30.2, F10 opens the HD2Runtime settings panel, so the editor no longer uses it: reset to defaults with the RESET TO DEFAULTS button.
+- **Mouse wheel.** If HD2Runtime was installed with the choice "Mouse wheel hook off" (it may avoid GameGuard crashes), the wheel does not scroll mod windows. The editor says so in its footer and in Settings; scroll with Page Up / Page Down or the scrollbars.
 - **Armor classes and the damage curve may trigger GameGuard.** Those values live in the game's own program data (game.dll), and a player reported GameGuard closing the game after changing them. The editor marks those rows GAMEGUARD RISK and warns when you stage one. A kit's piece weights are ordinary game data and are not affected.
 - **Not every value type.** Weapon functions, function projectiles, sounds and stratagem presentation stay with ModBuilder.
 - **Fields that move together.**

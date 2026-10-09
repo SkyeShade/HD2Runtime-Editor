@@ -1,5 +1,10 @@
 # HD2Runtime work the editor is waiting on
 
+> **Status with HD2Runtime 0.30.2 (release candidate `4118452`):** R1 done (all seven weapons resolved), R6 done
+> (`noEffect` reasons; the editor locks those rows), R7 diagnostics only (the refusal names the row; `capture()` still
+> refuses on another resource's row), R9 timed. Editor 0.8.4 adopts the sentry swaps, the wheel notice, the locked
+> backpack rows and F10. Open: R2, R3, R4, R5, R7 (fix), R8, R10.
+
 Collected from player reports and editor work up to editor main `601a0ae`, checked against the HD2Runtime branch
 `wip/custom-projectile-rows` at `37f8c8a` (0.30.2 in development). Each item says what players asked for, what the
 Runtime has today, and the evidence. The second part lists what 0.30.2 already gives the editor, and the editor-only

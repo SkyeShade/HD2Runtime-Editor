@@ -7,7 +7,7 @@ local M={}
 local REPEAT_DELAY,REPEAT_RATE=0.36,0.045
 
 local NAV={'UP','DOWN','LEFT','RIGHT','PAGEUP','PAGEDOWN','HOME','END','TAB','ENTER','ESCAPE','BACKSPACE','DELETE',
-    'F9','F10','INSERT'}
+    'F9','INSERT'}
 local REPEATS={UP=true,DOWN=true,LEFT=true,RIGHT=true,PAGEUP=true,PAGEDOWN=true,BACKSPACE=true}
 local CHARS={PERIOD='.',DECIMAL='.',MINUS='-',SUBTRACT='-',SPACE=' ',SLASH='/',COMMA=','}
 for i=0,9 do CHARS[tostring(i)]=tostring(i);CHARS['NUMPAD'..i]=tostring(i)end

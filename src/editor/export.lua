@@ -281,8 +281,8 @@ function M.operation(catalog_module,entry,id)
     local row,value=entry.row,entry.value
     if row.controller then return nil,row.export_reason or'this change is not an ensure and cannot be exported'end
     local ok,text=pcall(function()
-        local target=M.trace(row.target)
-        local expect=row.expect and M.trace(row.expect)or literal(row.vanilla)
+        local target=row.target_code or M.trace(row.target)
+        local expect=row.expect_code or(row.expect and M.trace(row.expect))or literal(row.vanilla)
         local val=M.value_code(catalog_module,row,value,target)
         local acks={}
         local okp,result=catalog_module.probe(row,value)

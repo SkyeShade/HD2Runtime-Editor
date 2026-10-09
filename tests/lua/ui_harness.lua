@@ -28,6 +28,8 @@ local presets=presets_module.new(store)
 local input={pressed={},down={},mouse=nil}
 local fake={input={
     wheel=function()return input.wheel or 0 end,
+    -- HD2Runtime 0.30.2: the player's wheel hook install choice (H_wheel in a test; nil = no wheel_status)
+    wheel_status=function()return H_wheel end,
     pressed=function(name)return input.pressed[name]==true end,
     down=function(name)return input.down[name]==true or input.pressed[name]==true end,
     keys=function()
