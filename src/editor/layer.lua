@@ -283,9 +283,11 @@ end
 
 -- A live handle for a field: integer steps, or 0.001; its range holds `values`, the field's range and storage.
 function Layer:handle(row,current,values)
-    -- a field with a disable sentinel (-1, or above 0): no continuous range can span the gap (the bind-time proof
-    -- checks the range's ends and one step), so its handle holds exactly the values this change needs
-    if row.kind or row.disabled_value~=nil then
+    -- a field with a disable sentinel (-1, or above 0), or one ordered against another (a turret's minimum below its
+    -- maximum): no continuous range can span the gap (the bind-time proof checks the range's ends and one step, and a
+    -- range end past the other limit is refused, TURRET_LIMIT_ORDER), so its handle holds exactly the values this
+    -- change needs
+    if row.kind or row.disabled_value~=nil or row.exact then
         -- a script choice over the values this change needs: the one held now first, then the target and the base
         local list={current}
         for _,v in ipairs(values)do

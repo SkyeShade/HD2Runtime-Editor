@@ -109,6 +109,8 @@ end
 -- unverified, unverified_reference, descriptor, section, editable, reason, disabled_value}. disabled_value: a field
 -- whose reviewed domain is that sentinel OR a value above 0 up to max (the whole-body gib threshold: -1 disables it);
 -- nothing between the two is valid.
+-- Fields the Runtime checks against another field (HD2Runtime player_weapon_writes TURRET_PAIRS).
+local ORDERED_LIMITS={['turret.yaw_min']=true,['turret.yaw_max']=true,['turret.pitch_min']=true,['turret.pitch_max']=true}
 local function make_row(object,spec)
     local integer=spec.type=='integer'or(spec.type~='number'and INTEGER_STORAGE[spec.storage or'']~=nil)
     local min,max=spec.min,spec.max
@@ -125,6 +127,9 @@ local function make_row(object,spec)
             allow_unverified_reference=spec.unverified_reference==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group,
         note=spec.note,disabled_value=spec.disabled_value}
+    -- a turret's limits are ordered (minimum below maximum, checked against the other limit's reviewed value): the
+    -- layer gives them exact-value handles, never a range that would cross the other limit
+    row.exact=ORDERED_LIMITS[tostring(spec.field)]or nil
     row.loc=location(spec.descriptor,'row:'..row.key)
     if row.editable then
         local held=util.representable(row.vanilla,integer,spec.storage)

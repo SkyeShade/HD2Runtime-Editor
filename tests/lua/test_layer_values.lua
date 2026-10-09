@@ -272,4 +272,37 @@ check(settle(plain)=='idle'and layer:overrides()[plain.key]==nil,'setting the de
 assert(layer:set(plain,plain.vanilla))
 check(layer:slot_of(plain)==nil,'the default on an untouched field changes nothing')
 out[#out+1]='base value is a reset ok'
+
+-- turret limits are ordered (minimum below maximum; HD2Runtime checks a limit against the other's reviewed value):
+-- exact-value handles, so a full ±180 traverse is reachable one limit at a time, and a mod's ±180 transaction is
+-- taken over whole (its ensure handed over, no CONFLICT) and given back on reset
+do
+    local function turret_row(field)
+        return row_of('ve|TD-110 Maelstrom',function(r)
+            return r.field==field and tostring(r.vw_key or''):find('attach_tank_gun',1,true)~=nil end)
+    end
+    local ymin,ymax=turret_row('turret.yaw_min'),turret_row('turret.yaw_max')
+    check(ymin.exact and ymax.exact,'turret limits use exact handles')
+    assert(layer:set(ymax,180))
+    check(settle(ymax)=='active'and layer:value(ymax)==180,'right limit to 180 alone')
+    assert(layer:set(ymin,-180))
+    check(settle(ymin)=='active'and layer:value(ymin)==-180,'left limit to -180: full traverse')
+    layer:reset(ymin);settle(ymin);layer:reset(ymax);settle(ymax)
+    check(layer:value(ymin)==ymin.vanilla and layer:value(ymax)==ymax.vanilla,'reset to the vanilla limits')
+    local mod=hd2.events.run_as('mods/test/turrets',function()
+        return hd2.ensure({transaction={id='turret-360',target=hd2.vehicle('TD-110 Maelstrom'):weapon('attach_tank_gun'),
+            allow_unverified_effect=true,changes={{field='turret.yaw_min',expect=ymin.vanilla,value=-180},
+            {field='turret.yaw_max',expect=ymax.vanilla,value=180}}}})
+    end)
+    run(6)
+    check(layer:value(ymin)==-180 and layer:value(ymax)==180,'the mod applied ±180')
+    assert(layer:set(ymax,170))
+    check(settle(ymax)=='active','editor over the mod limit')
+    check(mod.status=='cancelled','the mod transaction was handed over whole: '..tostring(mod.status))
+    run(70)
+    check(layer:value(ymin)==-180 and layer:value(ymax)==170,'the other limit stays the mod\'s: '..tostring(layer:value(ymin)))
+    layer:reset(ymax);settle(ymax)
+    check(layer:value(ymax)==180 and layer:value(ymin)==-180,'reset gives the mod\'s ±180 back')
+end
+out[#out+1]='turret limits ok'
 return table.concat(out,'\n')
