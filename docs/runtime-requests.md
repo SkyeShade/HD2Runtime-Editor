@@ -3,7 +3,7 @@
 > **Status with HD2Runtime 0.30.2 (release candidate `4118452`):** R1 done (all seven weapons resolved), R6 done
 > (`noEffect` reasons; the editor locks those rows), R7 diagnostics only (the refusal names the row; `capture()` still
 > refuses on another resource's row), R9 timed. Editor 0.8.4 adopts the sentry swaps, the wheel notice, the locked
-> backpack rows and F10. Open: R2, R3, R4, R5, R7 (fix), R8, R10.
+> backpack rows and F10. Open: R2, R3, R4, R5, R7 (fix), R8, R10, R11.
 
 Collected from player reports and editor work up to editor main `601a0ae`, checked against the HD2Runtime branch
 `wip/custom-projectile-rows` at `37f8c8a` (0.30.2 in development). Each item says what players asked for, what the
@@ -136,6 +136,18 @@ If confirmed:
   touching the image; a class beyond heavy, as here, would need another non-image lever.
 - The editor offers the class tables and the curve today (Helldiver → Armor). Until then it could warn on those rows
   or hide them.
+
+### R11. Unlimited uses for a tuned custom stratagem
+
+Request: custom stratagems set to unlimited uses, as the editor already offers for game stratagems (0 or -1).
+`runtime/custom_stratagems.lua`: a custom stratagem registered without `uses` is unlimited (`d.uses=nil`), but
+`hd2.custom_stratagem.tune(id, {cooldown, uses})` only takes `uses` as a whole number from 1 to `M.MAX_USES` (100);
+`uses=nil` means "leave it". So a limited custom stratagem cannot be made unlimited, only set to 100.
+
+Wanted: `tune(id, {uses='unlimited'})` setting `d.uses=nil` (the stratagem uses field's own word), with
+`registered_values` kept so `untune` still restores the registered count, and a test that the slot cooldown treats it
+as unlimited from the next call. Eagles stay out (their uses are per rearm). The editor's Custom tab then takes 0 / -1
+as Unlimited.
 
 ### R9. Smaller
 
