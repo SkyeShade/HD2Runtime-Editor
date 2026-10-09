@@ -151,6 +151,11 @@ as Unlimited.
 
 ### R12. Chinese (and other non-Latin) text in mod windows
 
+> **Done in HD2Runtime 0.30.4 (development, issue #8):** mod windows draw Chinese, Japanese, Korean and Russian in the
+> game's own language fonts, in any game language (the Runtime loads the font package a text needs); the Runtime's
+> panels too. `hd2.ui.unsupported(text)` counts only characters no game font has; the editor uses it (i18n.undrawable)
+> and keeps the FS Sinclair count for older Runtimes.
+
 Report: a player translated the editor into Chinese (UTF-8, correct file); every Chinese character shows as "?".
 The editor passes the text through unchanged. The overlay draws with HD2Runtime's own FS Sinclair fonts
 (`hd2runtime_fonts/fs_sinclair*`, `domains/ui_fonts.lua`), built by `scripts/hd2_font.py` from `CODEPOINTS` =

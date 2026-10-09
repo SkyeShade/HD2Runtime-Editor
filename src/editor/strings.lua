@@ -167,6 +167,7 @@ return {
     'LANGUAGE',
     'Language files are read from:',
     'Language: %s',
+    'Language: %s. %d of its characters are in none of the game fonts (shown as ?).',
     'Language: %s. %d of its characters cannot be drawn yet (shown as ?): the HD2Runtime font has Latin letters only.',
     'Light',
     'LOAD',

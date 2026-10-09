@@ -607,6 +607,25 @@ do
     assert(warned,'Settings says the language cannot be drawn')
     H.app.language_cache=nil
 end
+-- HD2Runtime 0.30.4+ (issue #8): the game's own fonts draw Chinese in any game language; only characters no game font
+-- has count (hd2.ui.unsupported), in one call for the whole file
+do
+    local before=package.loaded['mods/skyeshade/hd2runtime']
+    local hd2=before or{}
+    package.loaded['mods/skyeshade/hd2runtime']=hd2
+    local had=hd2.ui and hd2.ui.unsupported
+    hd2.ui=hd2.ui or{}
+    local seen
+    hd2.ui.unsupported=function(text)seen=text;return text:find('',1,true)and 1 or 0,{''}end
+    assert(i18n.drawing()=='game_fonts')
+    local n=i18n.undrawable({BROWSE='浏览',SETTINGS='设置 Réglages'})
+    assert(n==0 and seen:find('浏览',1,true)and seen:find('设置',1,true),'Chinese draws with the game fonts')
+    local m,sample=i18n.undrawable({GREEK=''})
+    assert(m==1 and sample[1]=='','Greek is in no game font')
+    hd2.ui.unsupported=had
+    package.loaded['mods/skyeshade/hd2runtime']=before
+    assert(i18n.drawing()=='latin'or before,'restored')
+end
 -- the menu sounds played on clicks and keys
 assert(#H_sounds>0,'menu sounds played')
 -- the armory's displayed traits editor

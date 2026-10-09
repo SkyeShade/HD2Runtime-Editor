@@ -845,7 +845,9 @@ function M.install(App)
             for _,l in ipairs(self:languages())do if l.name==name then missing=l.undrawable or 0 end end
             if missing>0 then
                 -- the game's text shows '?' for a character the font has no glyph for
-                self:toast(L('Language: %s. %d of its characters cannot be drawn yet (shown as ?): the HD2Runtime font has Latin letters only.')
+                self:toast((i18n.drawing()=='game_fonts'
+                    and L('Language: %s. %d of its characters are in none of the game fonts (shown as ?).')
+                    or L('Language: %s. %d of its characters cannot be drawn yet (shown as ?): the HD2Runtime font has Latin letters only.'))
                     :format(i18n.language(),missing),C.pending)
             else
                 self:toast(L('Language: %s'):format(i18n.language()),C.ok)
