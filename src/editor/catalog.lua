@@ -1632,6 +1632,55 @@ function Catalog:objects(category)
     return list,self.errors[category]
 end
 function Catalog:count(category)return#(self:objects(category))end
+-- Values another mod owns (HD2Runtime 0.30.4+: hd2.inspect). A mod outside HD2Runtime (a data-file mod, or one that
+-- writes game memory itself, such as one rebuilding a weapon's components) owns a value HD2Runtime refuses to write;
+-- its row is locked with that reason instead of failing when it is edited. Values another HD2Runtime mod holds stay
+-- editable (the editor takes such an operation over). Once per object, read only, in the background: one request per
+-- target, at most 64 fields each. Without hd2.inspect (an older HD2Runtime) nothing changes.
+local function handle_key(handle)
+    local parts={}
+    for k,v in pairs(type(handle)=='table'and handle or{})do
+        if type(v)=='string'or type(v)=='number'or type(v)=='boolean'then parts[#parts+1]=tostring(k)..'='..tostring(v)end
+    end
+    table.sort(parts)
+    return table.concat(parts,'|')
+end
+function Catalog:check_owners(object)
+    local hd2=self.real_hd2
+    if object.owners_checked or type(hd2)~='table'or type(hd2.inspect)~='function'then return end
+    object.owners_checked=true
+    local groups,order={},{}
+    for _,row in ipairs(object.rows or{})do
+        if row.editable and type(row.target)=='function'and type(row.field)=='string'then
+            local ok,target=pcall(row.target)
+            local okx,expect=pcall(M.expect,row)
+            if ok and type(target)=='table'and okx and expect~=nil then
+                local key=handle_key(target)
+                local g=groups[key]
+                if not g then g={target=target,rows={},fields={}};groups[key]=g;order[#order+1]=g end
+                if#g.fields<64 then
+                    g.rows[#g.rows+1]=row
+                    g.fields[#g.fields+1]={field=row.field,expect=expect}
+                end
+            end
+        end
+    end
+    for _,g in ipairs(order)do
+        pcall(hd2.inspect,{target=g.target,fields=g.fields,on_result=function(result)
+            for i,f in ipairs(result.fields or{})do
+                local row=g.rows[i]
+                if row and(f.state=='foreign'or f.state=='changed')then
+                    row.editable=false
+                    row.foreign=true
+                    row.reason=f.state=='foreign'
+                        and('changed by another mod (not HD2Runtime)'..(f.value~=nil and(': it is '..tostring(f.value))or'')
+                            ..'; HD2Runtime leaves it as it is')
+                        or('another mod (not HD2Runtime) changed the data of this item; HD2Runtime leaves it as it is')
+                end
+            end
+        end})
+    end
+end
 -- An object's rows and sections (built once): object.rows, object.sections = {{label, rows}}.
 function Catalog:open(object)
     if object.rows then return object end

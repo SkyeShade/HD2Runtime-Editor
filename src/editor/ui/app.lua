@@ -121,7 +121,11 @@ end
 function App:object()
     local list=self:objects()
     local object=list[self.obj]
-    if object then self.catalog:open(object)end
+    if object then
+        self.catalog:open(object)
+        -- values another mod (not HD2Runtime) owns are locked once the Runtime has read them (catalog check_owners)
+        if self.catalog.check_owners then pcall(self.catalog.check_owners,self.catalog,object)end
+    end
     return object
 end
 -- The selected object's flat field list: {{section=label} | {row=row}}, and the indices of rows.

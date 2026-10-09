@@ -118,4 +118,43 @@ check(S.value(rof)==1200 and math.abs(S.value(vel)-vel.vanilla)<1e-3,'reset all'
 local active,applying,errors=layer:counts()
 check(active==0 and applying==0 and errors==0,'nothing active after reset all')
 out[#out+1]='reset all ok'
+
+-- 7. Values another mod owns (HD2Runtime 0.30.4 hd2.inspect): the rows hd2.inspect reports foreign or changed are
+-- locked with the reason, one request per target; the others stay editable; an older Runtime changes nothing.
+do
+    local object=assert(cat:object('pw|AR-23 Liberator'))
+    cat:open(object)
+    local real=cat.real_hd2
+    local requests={}
+    cat.real_hd2=setmetatable({inspect=function(req)
+        requests[#requests+1]=req
+        local result={fields={}}
+        for i,f in ipairs(req.fields)do
+            result.fields[i]={field=f.field,state=(f.field=='weapon.fire_rate'and'foreign')
+                or(f.field=='projectile.velocity'and'changed')or'vanilla',owner='unknown',value=1500}
+        end
+        req.on_result(result)
+        return {}
+    end},{__index=real})
+    object.owners_checked=nil
+    cat:check_owners(object)
+    cat.real_hd2=real
+    local by={}
+    for _,r in ipairs(object.rows)do by[r.field]=by[r.field]or r end
+    check(#requests>=2,'one request per target: '..#requests)
+    check(by['weapon.fire_rate'].editable==false and by['weapon.fire_rate'].reason:find('another mod',1,true)
+        and by['weapon.fire_rate'].reason:find('1500',1,true),'the foreign value is locked with its value')
+    check(by['projectile.velocity'].editable==false,'the changed value is locked')
+    check(by['weapon.ergonomics'].editable==true,'a vanilla value stays editable')
+    local before=#requests
+    cat:check_owners(object)
+    check(#requests==before,'checked once')
+    local other=assert(cat:object('pw|P-2 Peacemaker'))
+    cat:open(other)
+    cat.real_hd2=setmetatable({inspect=false},{__index=real})
+    cat:check_owners(other)
+    cat.real_hd2=real
+    for _,r in ipairs(other.rows)do check(not r.foreign,'no inspect: nothing locked')end
+end
+out[#out+1]='foreign values locked'
 return table.concat(out,'\n')

@@ -160,7 +160,7 @@ class EditorTests(unittest.TestCase):
         result = lua_host.run('local f=assert(loadfile(%s)) return f(%s)' % (
             lua_host._lua_string((LUA / 'test_layer.lua').as_posix()), lua_host._lua_string((LUA / 'sim.lua').as_posix())))
         for line in ('vanilla set/reset ok', 'mod ensure takeover/reset ok', 'one-shot mod patch override/reset ok',
-                     'rebind ok', 'refusals ok', 'reset all ok'):
+                     'rebind ok', 'refusals ok', 'reset all ok', 'foreign values locked'):
             self.assertIn(line, result)
 
     def test_value_fields_over_script_choices(self):
