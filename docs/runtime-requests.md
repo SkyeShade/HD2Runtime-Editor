@@ -3,7 +3,7 @@
 > **Status with HD2Runtime 0.30.3 (`dcd996d`):** R1 done (all seven weapons resolved), R6 done (`noEffect` reasons;
 > the editor locks those rows), R7 fixed (a stray entity map row refuses only its own resource; the live culprit was
 > the LAS-12 Sai's row), R9 timed, R11 done (custom stratagem uses 0 / -1 = unlimited). Editor 0.8.4 adopted the
-> 0.30.2 changes; 0.8.5 adds unlimited custom stratagem uses. Open: R2, R3, R4, R5, R8, R10.
+> 0.30.2 changes; 0.8.5 adds unlimited custom stratagem uses. Open: R2, R3, R4, R5, R8, R10, R12.
 
 Collected from player reports and editor work up to editor main `601a0ae`, checked against the HD2Runtime branch
 `wip/custom-projectile-rows` at `37f8c8a` (0.30.2 in development). Each item says what players asked for, what the
@@ -148,6 +148,19 @@ Wanted: `tune(id, {uses='unlimited'})` setting `d.uses=nil` (the stratagem uses 
 `registered_values` kept so `untune` still restores the registered count, and a test that the slot cooldown treats it
 as unlimited from the next call. Eagles stay out (their uses are per rearm). The editor's Custom tab then takes 0 / -1
 as Unlimited.
+
+### R12. Chinese (and other non-Latin) text in mod windows
+
+Report: a player translated the editor into Chinese (UTF-8, correct file); every Chinese character shows as "?".
+The editor passes the text through unchanged. The overlay draws with HD2Runtime's own FS Sinclair fonts
+(`hd2runtime_fonts/fs_sinclair*`, `domains/ui_fonts.lua`), built by `scripts/hd2_font.py` from `CODEPOINTS` =
+ASCII, Latin-1, the four arrows and a few punctuation marks; the engine shows "?" for any other character. So Chinese,
+Japanese, Korean, Cyrillic and Greek cannot be drawn by any mod window yet.
+
+The game ships those scripts itself (its own CJK fonts, in the language packages). Options: draw text the Runtime font
+lacks with the game's own font for that script (when loaded), or build a font from the game's CJK TTF with only the
+characters a mod asks for (a full CJK atlas is tens of thousands of glyphs). The editor (0.8.7) now counts a
+language's undrawable characters from `ui_fonts` advances and says so in Settings and when switching.
 
 ### R9. Smaller
 

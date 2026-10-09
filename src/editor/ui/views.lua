@@ -841,7 +841,15 @@ function M.install(App)
         local ok,why=i18n.use(name)
         if ok then
             self.presets:set_setting('language',name)
-            self:toast(L('Language: %s'):format(i18n.language()),C.ok)
+            local missing=0
+            for _,l in ipairs(self:languages())do if l.name==name then missing=l.undrawable or 0 end end
+            if missing>0 then
+                -- the game's text shows '?' for a character the font has no glyph for
+                self:toast(L('Language: %s. %d of its characters cannot be drawn yet (shown as ?): the HD2Runtime font has Latin letters only.')
+                    :format(i18n.language(),missing),C.pending)
+            else
+                self:toast(L('Language: %s'):format(i18n.language()),C.ok)
+            end
             self.tab_actions=nil
         else self:toast(tostring(why),C.error)end
         self.mods_cache,self.changes_key=nil,nil
@@ -937,6 +945,10 @@ function M.install(App)
             elseif self.hover==action then cv:rect(x-8,y-2,560,28,C.hover,1)end
             cv:rect(x,y+6,14,14,current and C.gold or C.line_strong,3)
             cv:text(lang.name,x+26,y+13,{size=SZ.label,colour=current and C.text or C.dim})
+            if(lang.undrawable or 0)>0 then
+                cv:text(L('%d characters cannot be drawn yet (%s)'):format(lang.undrawable,table.concat(lang.sample or{},' ')),
+                    x+552,y+13,{size=SZ.tiny,colour=C.pending,max=W-x-560})
+            end
             cv:text(lang.file and L('%d texts, %s'):format(lang.count,lang.file)or L('built in'),x+540,y+13,
                 {size=SZ.tiny,colour=C.faint,align='right'})
             cv:hit(x-8,y-2,560,28,action)

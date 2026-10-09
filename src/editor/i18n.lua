@@ -100,7 +100,34 @@ local function list_files(folder)
     return out
 end
 
--- Every language: {{name, file (nil for English), count}}.
+-- The characters of a translation map the overlay's font cannot draw (the game then shows '?'): HD2Runtime's
+-- FS Sinclair fonts hold ASCII, Latin-1, the call-in arrows and a few punctuation marks, so Chinese, Japanese, Korean,
+-- Cyrillic, Greek ... are not drawn yet. Returns how many distinct characters, and up to three of them.
+local glyphs
+function M.undrawable(map)
+    if glyphs==nil then
+        local ok,data=pcall(require,'hd2runtime/domains/ui_fonts')
+        local body=ok and type(data)=='table'and type(data.fonts)=='table'and data.fonts.body
+        glyphs=body and type(body.advances)=='table'and body.advances or false
+    end
+    if not glyphs then return 0,{}end
+    local seen,n,sample={},0,{}
+    for _,text in pairs(map or{})do
+        for ch in tostring(text):gmatch('[%z\1-\127\194-\244][\128-\191]*')do
+            local b1=ch:byte(1)
+            local cp=b1
+            if b1>=0xF0 then cp=((b1%8)*262144)+((ch:byte(2)or 128)%64)*4096+((ch:byte(3)or 128)%64)*64+((ch:byte(4)or 128)%64)
+            elseif b1>=0xE0 then cp=((b1%16)*4096)+((ch:byte(2)or 128)%64)*64+((ch:byte(3)or 128)%64)
+            elseif b1>=0xC0 then cp=((b1%32)*64)+((ch:byte(2)or 128)%64)end
+            if cp>=32 and not glyphs[cp]and not seen[cp]then
+                seen[cp]=true;n=n+1
+                if#sample<3 then sample[#sample+1]=ch end
+            end
+        end
+    end
+    return n,sample
+end
+-- Every language: {{name, file (nil for English), count, undrawable, sample}}.
 function M.languages()
     local out={{name='English',count=0}}
     local folder=M.folder()
@@ -111,7 +138,8 @@ function M.languages()
             local map,name=M.parse(text)
             local n=0
             for _ in pairs(map)do n=n+1 end
-            out[#out+1]={name=name or file:gsub('%.txt$',''),file=file,count=n}
+            local missing,sample=M.undrawable(map)
+            out[#out+1]={name=name or file:gsub('%.txt$',''),file=file,count=n,undrawable=missing,sample=sample}
         end
     end
     return out

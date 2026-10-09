@@ -595,6 +595,18 @@ i18n.set({['BROWSE']='DURCHSUCHEN',['SETTINGS']='EINSTELLUNGEN'},'Deutsch')
 H.app.tab_actions=nil
 step({},nil,'33_language')
 i18n.set({},'English')
+-- a language the overlay's font cannot draw (Chinese: the HD2Runtime font has Latin letters only): counted and shown
+do
+    local n,sample=i18n.undrawable({BROWSE='浏览',SETTINGS='设置 Réglages'})
+    assert(n==4 and#sample==3,'four Chinese characters cannot be drawn, Latin-1 can: '..tostring(n))
+    H.app.language_cache={{name='English',count=0},{name='中文',file='zh.txt',count=2,undrawable=4,sample=sample}}
+    H.app:set_view('settings')
+    local d=step({},nil,'63_language_undrawable')
+    local warned
+    for _,it in ipairs(d.items)do if it.k=='t'and it.s:find('cannot be drawn yet',1,true)then warned=true end end
+    assert(warned,'Settings says the language cannot be drawn')
+    H.app.language_cache=nil
+end
 -- the menu sounds played on clicks and keys
 assert(#H_sounds>0,'menu sounds played')
 -- the armory's displayed traits editor
