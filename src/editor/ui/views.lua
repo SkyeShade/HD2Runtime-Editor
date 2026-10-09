@@ -437,6 +437,55 @@ function M.install(App)
         self.custom_cache,self.custom_time=out,self.time
         return out
     end
+    -- Custom stratagem tunes as editor values, so presets and the saved session carry them:
+    -- 'custom|<id>|cooldown' (seconds) and 'custom|<id>|uses' (a count, or 'unlimited'), read from the Runtime's own
+    -- describe(): every tuned field that differs from the registered value.
+    function App.is_custom_key(key)return type(key)=='string'and key:sub(1,7)=='custom|'end
+    function App:custom_values()
+        local out={}
+        for _,e in ipairs(self:custom_list())do
+            local r=type(e.registered)=='table'and e.registered or nil
+            if e.tuned and r and e.id then
+                if type(e.cooldown)=='number'and e.cooldown~=r.cooldown then out['custom|'..e.id..'|cooldown']=e.cooldown end
+                if e.eagle_uses==nil and e.uses~=r.uses then out['custom|'..e.id..'|uses']=e.uses or'unlimited'end
+            end
+        end
+        return out
+    end
+    -- Applies a stored custom value (a preset, a shared file, the saved session): true, or false and why.
+    function App:apply_custom_value(key,value)
+        local id,field=tostring(key):match('^custom|(.+)|(%a+)$')
+        local api=custom_api(self)
+        if not id or(field~='cooldown'and field~='uses')then return false,'not a custom stratagem value'end
+        if not api or type(api.tune)~='function'then return false,'this HD2Runtime has no custom stratagem tuning'end
+        if field=='uses'and value=='unlimited'then value=0 end
+        if type(value)~='number'then return false,'not a number'end
+        local ok,done,why=pcall(api.tune,id,{[field]=value})
+        self.custom_cache=nil
+        self.save_session=true
+        if ok and done then return true end
+        return false,tostring(ok and why or done)
+    end
+    -- A custom value as the value lists show it: name, field label, value text.
+    function App:custom_value_text(key,value)
+        local id,field=tostring(key):match('^custom|(.+)|(%a+)$')
+        local name=id
+        for _,e in ipairs(self:custom_list())do if e.id==id then name=e.label or id end end
+        local label=field=='uses'and L('Uses per mission')or L('Cooldown')
+        local text=value=='unlimited'and L('unlimited')or(util.format(value)..(field=='cooldown'and' s'or''))
+        return tostring(name),label,text
+    end
+    -- Every custom stratagem the editor tuned, back to its registered values (Reset to defaults): how many.
+    function App:untune_custom_all()
+        local api=custom_api(self)
+        if not api or type(api.untune)~='function'then return 0 end
+        local n=0
+        for _,e in ipairs(self:custom_list())do
+            if e.tuned then pcall(api.untune,e.id);n=n+1 end
+        end
+        self.custom_cache=nil
+        return n
+    end
     -- A custom stratagem's category, as the game colours it: its carrier's (once allocated), else its carrier group's.
     local FAMILY_TONE={orbital='offensive',eagle='offensive',sentry='defensive',emplacement='defensive',mine='defensive',
         support='support',backpack='support',vehicle='support'}
@@ -472,6 +521,7 @@ function M.install(App)
             self:toast(L('Unlimited uses for a custom stratagem need HD2Runtime 0.30.3'),C.error);self:sound('error');return
         end
         local ok,why=api.tune(entry.id,{[field]=value})
+        self.save_session=true
         if ok then
             self:toast(L('%s: %s set to %s (from the next call)'):format(entry.label or entry.id,L(field),
                 unlimited and L('unlimited')or util.format(value)),C.ok)
@@ -483,6 +533,7 @@ function M.install(App)
         local api=custom_api(self)
         if api and type(api.untune)=='function'then
             api.untune(entry.id)
+            self.save_session=true
             self:toast(L('%s: back to its own cooldown and uses'):format(entry.label or entry.id),C.dim)
             self.custom_cache=nil
         end

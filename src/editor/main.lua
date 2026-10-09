@@ -231,8 +231,13 @@ function M.start(hd2,id)
                     local values=presets:session()
                     local applied,missing_rows=0,0
                     for key,stored in pairs(values)do
-                        local row,value=app:decode_value(key,stored)
-                        if row and value~=nil and layer:set(row,value)then applied=applied+1 else missing_rows=missing_rows+1 end
+                        if app.is_custom_key(key)then
+                            -- a custom stratagem tune, applied through the Runtime again
+                            if app:apply_custom_value(key,stored)then applied=applied+1 else missing_rows=missing_rows+1 end
+                        else
+                            local row,value=app:decode_value(key,stored)
+                            if row and value~=nil and layer:set(row,value)then applied=applied+1 else missing_rows=missing_rows+1 end
+                        end
                     end
                     if applied+missing_rows>0 then
                         log('restored '..applied..' saved values'..(missing_rows>0 and(' ('..missing_rows..' no longer available)')or''))
@@ -244,7 +249,10 @@ function M.start(hd2,id)
         if restored and(app.save_session or layer.version~=saved_version)and not layer:busy()then
             app.save_session=false
             saved_version=layer.version
-            presets:set_session(app:encode_values(layer:overrides()))
+            -- the layer's values and the custom stratagem tunes
+            local values=layer:overrides()
+            for key,value in pairs(app:custom_values())do values[key]=value end
+            presets:set_session(app:encode_values(values))
         end
     end,{id='hd2runtime_editor.layer'})
     log('HD2R Editor '..M.VERSION..' ready; press '..hotkey..' to open')

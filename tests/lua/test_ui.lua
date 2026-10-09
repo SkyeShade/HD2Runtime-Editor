@@ -542,6 +542,46 @@ H.app.custom_cache=nil
 step({'UP'})
 step({'ESCAPE'})
 assert(H.app.view=='custom'and H.app.custom_field==0,'Escape leaves the fields first')
+-- custom stratagem tunes are editor values: in presets (with readable names), in the saved session, applied again by
+-- loading the preset, and returned to their registered values by Reset to defaults
+do
+    H_custom.limits={cooldown={0,600},uses={1,100},unlimited_uses={0,-1}}
+    H_custom.uses,H_custom.registered.uses=4,4
+    H.app.custom_cache=nil
+    local entry=H.app:custom_list()[1]
+    H.app:custom_tune(entry,'cooldown',90)
+    H.app:custom_tune(H.app:custom_list()[1],'uses',0)
+    local values=H.app:current_values()
+    assert(values['custom|pelican_gas|cooldown']==90 and values['custom|pelican_gas|uses']=='unlimited',
+        'tunes are current values')
+    local stored=H.app:encode_values(values)
+    assert(stored['custom|pelican_gas|uses']=='unlimited','and stored as they are (the saved session)')
+    H.app:save_preset('Custom Tunes',true)
+    local preset=H.presets:find('Custom Tunes')
+    assert(preset and preset.count>=2,'a preset holds them')
+    -- shown with names, not as unknown fields
+    H.app:set_view('presets')
+    for i,e in ipairs(H.app:preset_entries())do if e.kind=='preset'and e.preset.name=='Custom Tunes'then H.app.preset_index=i end end
+    local d=step({},nil,'62_custom_preset')
+    local named,unknown
+    for _,it in ipairs(d.items)do
+        if it.k=='t'and it.s=='Pelican Gas Support'then named=true end
+        if it.k=='t'and it.s:find('Unknown field: custom|',1,true)then unknown=true end
+    end
+    assert(named and not unknown,'the preset names the custom stratagem')
+    -- back to registered, then the preset applies them again
+    H.app:custom_untune(H.app:custom_list()[1])
+    assert(next(H.app:custom_values())==nil,'untuned: no values')
+    H.app:load_preset('Custom Tunes')
+    assert(H_custom.cooldown==90 and H_custom.uses==nil,'loading the preset tunes it again')
+    -- Reset to defaults untunes it
+    H.app:reset_defaults()
+    assert(not H_custom.tuned and next(H.app:custom_values())==nil,'reset to defaults returns it to its registered values')
+    H.presets:delete('Custom Tunes')
+    H_custom.uses,H_custom.registered.uses,H_custom.limits=nil,nil,nil
+    H.app.custom_cache=nil
+    H.app:set_view('custom')
+end
 -- Settings: toggles and a language
 H.app:set_view('settings')
 step({},nil,'32_settings')

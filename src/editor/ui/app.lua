@@ -435,8 +435,13 @@ end
 function App:stage_map(map)
     local missing=0
     for key,stored in pairs(map)do
-        local row,value=self:decode_value(key,stored)
-        if row and value~=nil then self:stage(row,value)else missing=missing+1 end
+        if App.is_custom_key(key)then
+            -- a custom stratagem tune applies at once (the Runtime has no pending step for it)
+            if not self:apply_custom_value(key,stored)then missing=missing+1 end
+        else
+            local row,value=self:decode_value(key,stored)
+            if row and value~=nil then self:stage(row,value)else missing=missing+1 end
+        end
     end
     return missing
 end
@@ -457,7 +462,7 @@ function App:discard()
     self:toast(n>0 and('Discarded '..n..' pending '..(n==1 and'change'or'changes'))or'Nothing pending',C.dim)
 end
 function App:reset_defaults()
-    local n=self.layer:reset_all()
+    local n=self.layer:reset_all()+self:untune_custom_all()
     self.pending,self.pending_n={},0
     self.save_session=true
     self:toast(n>0 and('Returning '..n..(n==1 and' field'or' fields')..' to the mods\' and game values')
@@ -845,7 +850,7 @@ end
 function App:ask(kind,data)
     if kind=='reset'then
         local active=self.layer:counts()
-        if active==0 and self.pending_n==0 then self:toast(L('Nothing to reset: no editor values are active'),C.dim);return end
+        if active==0 and self.pending_n==0 and next(self:custom_values())==nil then self:toast(L('Nothing to reset: no editor values are active'),C.dim);return end
     end
     self.confirm={kind=kind,data=data}
 end
@@ -1601,6 +1606,8 @@ end
 function App:current_values()
     local values=self.layer:overrides()
     for key,p in pairs(self.pending)do values[key]=p.value end
+    -- custom stratagem tunes (applied at once, never pending)
+    for key,value in pairs(self:custom_values())do values[key]=value end
     return values
 end
 -- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the
@@ -1651,9 +1658,12 @@ function App:text(row,value)return catalog_module.text(row,value)end
 function App:encode_values(values)
     local out={}
     for key,value in pairs(values)do
-        local row=self.catalog:row(key)
-        local stored=row and catalog_module.encode(row,value)
-        if stored~=nil then out[key]=stored end
+        if App.is_custom_key(key)then out[key]=value
+        else
+            local row=self.catalog:row(key)
+            local stored=row and catalog_module.encode(row,value)
+            if stored~=nil then out[key]=stored end
+        end
     end
     return out
 end
@@ -1719,7 +1729,11 @@ function App:share_preset(preset)
     for _,item in ipairs(preset.fields or{})do
         values[item.k]=item.v
         local row=self.catalog:row(item.k)
-        if row then labels[item.k]=row.object.name..' · '..row.label end
+        if row then labels[item.k]=row.object.name..' · '..row.label
+        elseif App.is_custom_key(item.k)then
+            local name,label=self:custom_value_text(item.k,item.v)
+            labels[item.k]=name..' · '..label
+        end
     end
     local ok,path=pcall(preset_files.save,folder,preset.name,values,labels,
         {editor=self.ctx.version,runtime=self.ctx.minimum},win.mkdir)
@@ -2152,9 +2166,14 @@ function App:draw_value_list(values,x0,y,w,h)
         local row=self.catalog:row(key)
         rows[#rows+1]={key=key,row=row,value=values[key]}
     end
+    for _,item in ipairs(rows)do
+        if not item.row and App.is_custom_key(item.key)then
+            item.custom_name,item.custom_label,item.custom_text=self:custom_value_text(item.key,item.value)
+        end
+    end
     table.sort(rows,function(a,b)
-        local an=a.row and(a.row.object.name..' '..a.row.label)or a.key
-        local bn=b.row and(b.row.object.name..' '..b.row.label)or b.key
+        local an=a.row and(a.row.object.name..' '..a.row.label)or(a.custom_name and(a.custom_name..' '..a.custom_label))or a.key
+        local bn=b.row and(b.row.object.name..' '..b.row.label)or(b.custom_name and(b.custom_name..' '..b.custom_label))or b.key
         return util.natural_less(an,bn)
     end)
     cv:rect(x0,y,w,22,C.header,2)
@@ -2164,14 +2183,14 @@ function App:draw_value_list(values,x0,y,w,h)
         draw=function(i,x,ry,lw,rh)
             local item=rows[i]
             local cy=ry+rh/2
-            if item.row then
-                local name=item.row.object.name
+            if item.row or item.custom_name then
+                local name=item.row and item.row.object.name or item.custom_name
                 local nw=cv:text(name,x+18,cy,{size=SZ.small,colour=C.faint,max=(lw-140)*0.45})
-                cv:text(L(item.row.label),x+30+nw,cy,{size=SZ.small,colour=C.dim,max=lw-170-nw})
+                cv:text(item.row and L(item.row.label)or item.custom_label,x+30+nw,cy,{size=SZ.small,colour=C.dim,max=lw-170-nw})
             else
                 cv:text(L('Unknown field: ')..item.key,x+18,cy,{size=SZ.small,colour=C.faint,max=lw-140})
             end
-            cv:text(item.row and self:text(item.row,item.value)or util.value_text(item.value),x+lw-18,cy,
+            cv:text(item.row and self:text(item.row,item.value)or item.custom_text or util.value_text(item.value),x+lw-18,cy,
                 {size=SZ.label,colour=C.gold,align='right',max=170})
         end})
 end
