@@ -864,6 +864,38 @@ local function vehicle_weapon_rows(hd2,object,entry)
     end
     -- ModBuilder's identity (entityChanges: resource vehicle_weapon, entity = the weapon's catalogue name)
     for _,r in ipairs(rows)do r.mb_resource,r.mb_entity,r.mb_where='vehicle_weapon',entry.name,''end
+    -- Its projectile swap, as the primaries have it (HD2Runtime 0.30.x mounted projectile hosts: the EXO-45 Patriot
+    -- minigun, both EXO-49 Emancipator autocannons, the EXO-51 Lumberer cannon, the FRV and GATER Oil Rig guns, the
+    -- Guard Dog's gun), through the mount's projectile_source(). A mount that fires another way (the Patriot's rocket
+    -- pod spawns missile entities, the Breakthrough's magazine picks its round) shows the Runtime's reason read-only;
+    -- one with no projectile at all (a flamethrower) gets no row. Like the sentry swap, its target is a handle no hd2
+    -- call chain builds, so the row carries the Lua that reaches it for the exporter.
+    local ok,src=pcall(function()return base():projectile_source()end)
+    if ok and type(src)=='table'and(src.writable or src.status)then
+        local f
+        for _,x in ipairs(entry.fields or{})do
+            if x.type=='projectile_reference'and(x.target or{}).path=='attack'then f=x;break end
+        end
+        f=f or{type='projectile_reference',semanticFieldId='attack.projectile'}
+        local function source()return base():projectile_source()end
+        local code=drone and('hd2.backpack('..string.format('%q',carrier)..'):drone():weapon():projectile_source()')
+            or('hd2.vehicle('..string.format('%q',carrier)..'):weapon('..string.format('%q',mount)..'):projectile_source()')
+        local common={id='attack.projectile@mount',kind='reference',label='Projectile',field='attack.projectile',
+            section='Projectile · Swap',descriptor=f,unverified=true,
+            target=function()return source().target end,expect=function()return source().expect end,
+            options=function(row)return projectile_options(hd2,row)end}
+        if src.writable and src.expect then
+            common.vanilla=src.expect
+        else
+            common.editable=false
+            common.reason=tostring(src.reason or'read-only in this HD2Runtime')
+            common.vanilla='own'
+            common.labels={{value='own',label='Own round'}}
+        end
+        local row=make_value_row(object,common)
+        row.target_code,row.expect_code=code..'.target',code..'.expect'
+        rows[#rows+1]=row
+    end
     return rows
 end
 

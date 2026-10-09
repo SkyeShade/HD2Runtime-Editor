@@ -188,7 +188,8 @@ language's undrawable characters from `ui_fonts` advances and says so in Setting
 ## Editor-only work (the Runtime has it already)
 
 - Support weapon projectile swaps (8 hosts, `hd2.support_weapon(name):attack(role)`).
-- Vehicle, Exosuit and Guard Dog gun swaps (9 hosts, `hd2.vehicle(name):weapon(mount):projectile_source()`).
+- Vehicle, Exosuit and Guard Dog gun swaps (9 hosts, `hd2.vehicle(name):weapon(mount):projectile_source()`). **Done (editor, 2026-10-09):** a Projectile · Swap row
+  on every mounted weapon; the mounts that fire another way show the Runtime's reason read-only.
 - Ammunition-host swaps for the AR-23 Liberator, JAR-5 Dominator, R-63 Diligence, SG-225 Breaker, P-2 Peacemaker and
   P-19 Redeemer (`weapon:ammunition():projectile()`, `hd2.fields.ammunition.projectile`).
 - Weapon functions: `weapon_function.left` / `.right` (none, rate_of_fire, programmable_ammo) and
