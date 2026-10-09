@@ -39,7 +39,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **Calldown codes:** an arrow-key code editor. Right-click an arrow to remove it; DEFAULT restores the game's code.
   - **Fire modes and rate-of-fire modes**, as in ModBuilder. Filling an empty rate slot on a weapon without a rate selector (the Liberator, for example) binds the game's own selector in the same write.
   - **The armory's presentation:** each weapon's displayed traits (up to five, in order) and displayed armor penetration.
-  - **Mission uses:** a count or unlimited. Type 0 or -1 for unlimited, or step below the lowest count, where the stratagem can be unlimited.
+  - **Mission uses:** a count or unlimited. Type 0 or -1 for unlimited, or step below the lowest count, where the stratagem can be unlimited. Custom stratagems (the Custom tab) can be made unlimited the same way with HD2Runtime 0.30.3.
   - **Hellpod contents:** the items a support weapon, backpack or Resupply pod drops, and how many.
   - **Projectile swaps and terminal explosion payloads**, from a searchable donor list. With HD2Runtime 0.30.2, the
     sentries and emplacements that can fire another round have a swap too (the MG-43 and G-16 stay read-only).
@@ -61,7 +61,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - It never overwrites a project ModBuilder made. Reopen ModBuilder's project list to see a new one.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.8.4, for HD2Runtime 0.30.0 or later (0.30.2 recommended).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 0.8.5, for HD2Runtime 0.30.0 or later (0.30.3 recommended).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 

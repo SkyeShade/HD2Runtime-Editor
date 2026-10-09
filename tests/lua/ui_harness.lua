@@ -50,6 +50,12 @@ fake.custom_stratagem={
     describe=function(id)if id==H_custom.id then return H_custom end end,
     tune=function(id,v)
         if v.cooldown and(v.cooldown<=0 or v.cooldown>600)then return nil,'cooldown must be seconds above 0 and at most 600'end
+        -- HD2Runtime 0.30.3: uses 0 / -1 mean unlimited (no count)
+        if v.uses==0 or v.uses==-1 then
+            if not(H_custom.limits and H_custom.limits.unlimited_uses)then return nil,'uses must be 1 to 100'end
+            v={uses=nil,cooldown=v.cooldown}
+            H_custom.uses=nil
+        end
         for k,x in pairs(v)do H_custom[k]=x end
         H_custom.tuned=true
         return true

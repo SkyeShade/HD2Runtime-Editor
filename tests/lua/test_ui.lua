@@ -517,6 +517,29 @@ assert(H_custom.cooldown==120,'typed 120: '..tostring(H_custom.cooldown))
 step({},nil,'31_custom_tuned')
 step({'DELETE'})
 assert(H_custom.cooldown==300 and not H_custom.tuned,'untuned')
+-- uses: unlimited (HD2Runtime 0.30.3: 0 or -1) by typing 0, then 1 by stepping right, unlimited again stepping left
+H_custom.uses,H_custom.registered.uses=5,5
+H_custom.limits=nil
+H.app.custom_cache=nil
+step({'DOWN'})
+assert(H.app.custom_field==2,'on the uses')
+step({'ENTER'});step({'MINUS'});step({'1'});step({'ENTER'})
+assert(H_custom.uses==5 and H.app.toast_msg.text:find('0.30.3',1,true),'an older Runtime: refused with why')
+H_custom.limits={cooldown={0,600},uses={1,100},unlimited_uses={0,-1}}
+H.app.custom_cache=nil
+step({'ENTER'});step({'0'});step({'ENTER'})
+assert(H_custom.uses==nil and H.app.toast_msg.text:find('unlimited',1,true),'typed 0: unlimited')
+step({},nil,'31_custom_unlimited')
+step({'RIGHT'})
+assert(H_custom.uses==1,'right from unlimited: 1')
+step({'LEFT'})
+assert(H_custom.uses==nil,'left from 1: unlimited')
+step({'ENTER'});step({'MINUS'});step({'1'});step({'ENTER'})
+assert(H_custom.uses==nil,'typed -1: unlimited')
+step({'DELETE'})
+H_custom.uses,H_custom.registered.uses,H_custom.limits=nil,nil,nil
+H.app.custom_cache=nil
+step({'UP'})
 step({'ESCAPE'})
 assert(H.app.view=='custom'and H.app.custom_field==0,'Escape leaves the fields first')
 -- Settings: toggles and a language

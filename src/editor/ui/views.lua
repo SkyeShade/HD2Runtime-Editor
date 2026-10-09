@@ -458,14 +458,23 @@ function M.install(App)
         if not drew then self.canvas:rect(x+size*0.2,y+size*0.2,size*0.6,size*0.6,tone,4)end
     end
     local CUSTOM_FIELDS={{key='cooldown',label='Cooldown',unit='s',step=5},{key='uses',label='Uses per mission',step=1}}
+    -- HD2Runtime 0.30.3: a custom stratagem's uses can be tuned to unlimited (0 or -1); describe() says so.
+    local function unlimited_ok(entry)
+        return type(entry)=='table'and type(entry.limits)=='table'and entry.limits.unlimited_uses~=nil
+    end
     function App:custom_tune(entry,field,value)
         local api=custom_api(self)
         if not api or type(api.tune)~='function'then
             self:toast(L('Tuning custom stratagems needs HD2Runtime r51'),C.error);self:sound('error');return
         end
+        local unlimited=field=='uses'and(value==0 or value==-1)
+        if unlimited and not unlimited_ok(entry)then
+            self:toast(L('Unlimited uses for a custom stratagem need HD2Runtime 0.30.3'),C.error);self:sound('error');return
+        end
         local ok,why=api.tune(entry.id,{[field]=value})
         if ok then
-            self:toast(L('%s: %s set to %s (from the next call)'):format(entry.label or entry.id,L(field),util.format(value)),C.ok)
+            self:toast(L('%s: %s set to %s (from the next call)'):format(entry.label or entry.id,L(field),
+                unlimited and L('unlimited')or util.format(value)),C.ok)
             self:sound('apply')
         else self:toast(tostring(why),C.error);self:sound('error')end
         self.custom_cache=nil
@@ -486,7 +495,7 @@ function M.install(App)
         local entry=list[self.custom_index]
         local edit=self.custom_edit
         if edit then
-            for _,ch in ipairs(f.chars)do if ch:match('[%d%.]')and#edit.buffer<8 then edit.buffer=edit.buffer..ch end end
+            for _,ch in ipairs(f.chars)do if ch:match('[%d%.%-]')and#edit.buffer<8 then edit.buffer=edit.buffer..ch end end
             if k.BACKSPACE then edit.buffer=edit.buffer:sub(1,-2)end
             if k.ESCAPE or k.DELETE then self.custom_edit=nil
             elseif k.ENTER or k.TAB then
@@ -507,14 +516,19 @@ function M.install(App)
             if k.ESCAPE then self.custom_field=0 end
             if entry and field then
                 local current=entry[field.key]
+                local uses=field.key=='uses'and entry.eagle_uses==nil
                 if(k.LEFT or k.RIGHT)and type(current)=='number'then
                     local step=field.step*(f.shift and 10 or 1)
-                    self:custom_tune(entry,field.key,math.max(field.key=='uses'and 1 or step,current+(k.LEFT and-step or step)))
+                    if uses and k.LEFT and current<=1 and unlimited_ok(entry)then self:custom_tune(entry,'uses',0)
+                    else
+                        self:custom_tune(entry,field.key,math.max(field.key=='uses'and 1 or step,current+(k.LEFT and-step or step)))
+                    end
+                elseif uses and current==nil and k.RIGHT then self:custom_tune(entry,'uses',1)
                 elseif k.LEFT and current==nil then self.custom_field=0 end
                 if k.ENTER then self.custom_edit={field=field.key,buffer=''}end
                 if#f.chars>0 then
                     self.custom_edit={field=field.key,buffer=''}
-                    for _,ch in ipairs(f.chars)do if ch:match('[%d%.]')then self.custom_edit.buffer=self.custom_edit.buffer..ch end end
+                    for _,ch in ipairs(f.chars)do if ch:match('[%d%.%-]')then self.custom_edit.buffer=self.custom_edit.buffer..ch end end
                 end
                 if k.DELETE then self:custom_untune(entry)end
             end
@@ -592,6 +606,9 @@ function M.install(App)
         end
         cv:text(L('←→ adjust (Shift ×10)   digits type   Enter set   Del back to the registered values. Applies from the next call, on this machine only.'),
             x0+22,y+8,{size=SZ.tiny,colour=C.faint,max=w-44})
+        if unlimited_ok(e)and e.eagle_uses==nil then
+            cv:text(L('Uses: type 0 or -1, or step below 1, for unlimited.'),x0+22,y+24,{size=SZ.tiny,colour=C.faint,max=w-280})
+        end
         self.btn_untune=self.btn_untune or{}
         self.btn_untune.click=function()self:custom_untune(e)end
         button(self,L('RESET TO REGISTERED'),x0+w-240,y+24,220,32,e.tuned and'danger'or'disabled',self.btn_untune)

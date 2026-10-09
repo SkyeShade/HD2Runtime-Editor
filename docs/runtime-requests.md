@@ -1,9 +1,9 @@
 # HD2Runtime work the editor is waiting on
 
-> **Status with HD2Runtime 0.30.2 (release candidate `4118452`):** R1 done (all seven weapons resolved), R6 done
-> (`noEffect` reasons; the editor locks those rows), R7 diagnostics only (the refusal names the row; `capture()` still
-> refuses on another resource's row), R9 timed. Editor 0.8.4 adopts the sentry swaps, the wheel notice, the locked
-> backpack rows and F10. Open: R2, R3, R4, R5, R7 (fix), R8, R10, R11.
+> **Status with HD2Runtime 0.30.3 (`dcd996d`):** R1 done (all seven weapons resolved), R6 done (`noEffect` reasons;
+> the editor locks those rows), R7 fixed (a stray entity map row refuses only its own resource; the live culprit was
+> the LAS-12 Sai's row), R9 timed, R11 done (custom stratagem uses 0 / -1 = unlimited). Editor 0.8.4 adopted the
+> 0.30.2 changes; 0.8.5 adds unlimited custom stratagem uses. Open: R2, R3, R4, R5, R8, R10.
 
 Collected from player reports and editor work up to editor main `601a0ae`, checked against the HD2Runtime branch
 `wip/custom-projectile-rows` at `37f8c8a` (0.30.2 in development). Each item says what players asked for, what the
