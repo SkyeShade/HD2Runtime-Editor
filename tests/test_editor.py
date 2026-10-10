@@ -171,6 +171,11 @@ class EditorTests(unittest.TestCase):
         for line in ('calldown code ok', 'mission uses ok', 'boolean ok', 'status ok', 'projectile swap ok',
                      'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'direct first edit ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'skipped steer settled again ok', 'disable sentinel ok', 'helldiver fields ok', 'armor stats ok', 'armor perks ok', 'mod code takeover ok', 'base value is a reset ok', 'turret limits ok'):
             self.assertIn(line, result)
+        # HD2Runtime 0.30.4: a weapon without a fire-mode selector binds it with its second mode (when the Runtime
+        # under test offers the binding)
+        capabilities = lua_host.RUNTIME / 'sdk' / 'WeaponFireModeCapabilities.json'
+        if capabilities.is_file() and '"addable"' in capabilities.read_text(encoding='utf-8'):
+            self.assertIn('fire modes with selector binding ok', result)
 
     def test_window_frames_stay_inside_overlay_limits(self):
         result = lua_file('test_ui.lua', {'sim': (LUA / 'sim.lua').as_posix(),

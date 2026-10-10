@@ -203,9 +203,19 @@ function M.filled(list)
     for _,v in ipairs(type(list)=='table'and list or{})do if type(v)=='number'and v>0 then n=n+1 end end
     return n
 end
--- The selector binding {field, expect, value} a rates value needs written with it: more than one filled slot on a
--- weapon whose rate-of-fire selector is not bound yet (fire_rate_modes().state 'addable'); nil otherwise.
+-- The selector binding {field, expect, value} a value needs written with it: more than one filled rate slot on a
+-- weapon whose rate-of-fire selector is not bound yet (fire_rate_modes().state 'addable'), or more than one fire mode
+-- on a weapon whose fire-mode selector is not bound yet (HD2Runtime 0.30.4: fire_mode.modes descriptor fireModeState
+-- 'addable', bound on its first free input); nil otherwise.
 function M.rate_binding(row,value)
+    if row.kind=='modes'then
+        local d=row.descriptor
+        if type(value)=='table'and#value>1 and type(d)=='table'and d.fireModeState=='addable'
+            and type(d.bindableInputs)=='table'and d.bindableInputs[1]then
+            return {field='weapon_function.'..d.bindableInputs[1],expect='none',value='fire_mode'}
+        end
+        return nil
+    end
     if row.kind~='rates'or not row.rate_info or M.filled(value)<2 then return nil end
     local info=row.rate_info()
     if info and info.state=='addable'and type(info.binding)=='table'and info.binding.field then return info.binding end

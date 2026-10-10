@@ -349,15 +349,16 @@ function Layer:register(row,handle)
     -- rates that fill an empty slot of a weapon without a rate selector: one transaction with the selector binding,
     -- which follows the rates choice (HD2Runtime r51 mod:choice{follow}): bound for every value with two or more rates,
     -- unbound for the others
+    -- (0.30.4: likewise two or three fire modes on a weapon without a fire-mode selector bind the fire-mode selector)
     local binding
-    if row.kind=='rates'then
+    if row.kind=='rates'or row.kind=='modes'then
         for _,value in ipairs(handle.values or{})do binding=binding or catalog_module.rate_binding(row,value)end
     end
     local follower
     if binding then
         local values={}
         for i,value in ipairs(handle.values)do
-            values[i]=catalog_module.filled(value)>=2 and binding.value or binding.expect
+            values[i]=catalog_module.rate_binding(row,value)and binding.value or binding.expect
         end
         self.counter=self.counter+1
         local okf,f=pcall(function()
