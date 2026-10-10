@@ -17,7 +17,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Export your changes as a mod.** The Export tab is a three-step wizard. Pick which changes to include, give the mod a name, version, author, description and an HD2 Arsenal image from your PC, then press Export. It writes a mod ZIP, ready for your mod manager, in ModBuilder's layout (see [Exporting a mod](#exporting-a-mod)). The values are also saved as a preset.
 - **The log, live.** The Logs tab follows `HD2Runtime.log` as it is written, coloured by kind (errors red, warnings orange, applied values green, the editor's own lines gold), with filters and buttons to open the file or its folder.
 - **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state, coloured like the game colours their carrier (offensive red, defensive green, support blue). Their cooldown and uses can be tuned on this machine, from the next call.
-- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters), Helldiver (Helldiver, Armor) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 19,800 fields, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
+- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters), Helldiver (Helldiver, Armor) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 20,700 fields with HD2Runtime 0.30.4, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
 - **One stratagem, one place.**
   - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
   - A support backpack holds its call-in, the backpack, its drone weapon (Guard Dogs) and its hellpod.
@@ -45,7 +45,31 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **Projectile swaps and terminal explosion payloads**, from a searchable donor list. With HD2Runtime 0.30.2, the
     sentries and emplacements that can fire another round have a swap too (the MG-43 and G-16 stay read-only).
   - **Statuses, on/off switches and enums.**
-  - **With HD2Runtime 0.30.4:** beam swaps (the Trident, Dagger, Laser Cannon, Meltagun and Laser Sentry fire any catalogued beam), support weapon projectile swaps, a charge weapon's overcharge explosion, status effects on vehicle and drone weapons, and a **Status Effects** category (Equipment): each status's duration and the damage it deals while active, for every attack that applies it.
+  - **With HD2Runtime 0.30.4:**
+    - beam swaps (the Trident, Dagger, Scythe, Laser Cannon, Meltagun and Laser Sentry fire any catalogued beam; the
+      Scythe's is its default muzzle's, shared; the Rover's shows why it is read-only), the beam fire mode by name
+      (continuous, charged blast, pulsed) and a note that a pulsed beam's pulse length caps its fire rate;
+    - support weapon projectile swaps, a charge weapon's overcharge explosion, the Breaching Hammer's blast
+      (Explosion · Ability), status effects on vehicle and drone weapons;
+    - a **Wind-up** section: the heat weapons' firing charge (Sickles, Sai, Scythe, Dagger, Talon, Laser Cannon,
+      Quasar, Rover, Laser Sentry) and the spin-up of the Maxigun, Patriot minigun, Maelstrom and G-16; the derived
+      warm-up and cooldown after an overheat are shown read-only, naming the fields that set them;
+    - missiles (W.A.S.P., Spear, Commando, P-33, P-92: Missile and Function Missile), mounted spread on every
+      projectile mount, the EXO-55 Breakthrough's shield arm, the Hover Pack's flight labels;
+    - team-reload weapons' own spares (GR-8, RL-77, FAF-14, W.A.S.P.) and every backpack's ammunition (Backpack ·
+      Ammo; -1 = full at call-in);
+    - charges before cooldown (the Eagle Rearm pool; read-only on the Eagles, and joining waits for a finite Mission
+      uses), the Orbital Railcannon's targeting and the Orbital Laser's re-search interval;
+    - two or three fire modes on a weapon without a fire-mode selector bind the selector in the same write;
+    - a **Status Effects** category (Equipment): each status's duration and the damage it deals while active, for
+      every attack that applies it;
+    - values another mod changed outside HD2Runtime (a data-file mod, a moved component table, a rebuilt weapon) are
+      shown locked with the reason, read with `hd2.inspect`.
+  - **Beam conversion** (an HD2Runtime build with `hd2.beam_conversion`; absent otherwise): a projectile weapon's
+    Beam Conversion group shows the verdict and caveats (a refused weapon only its reason), the layout and its
+    multiplayer rule, the switch, its own rate, beams and pulse, and the interim per-weapon damage, AP and range rows
+    (at most 6 weapons). Unequip the weapon first: the write waits until no instance of it exists. Its settings apply
+    once the conversion is on; an exported mod writes each weapon's conversion as one transaction.
 
   Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
 - **The game's own icons.** Every stratagem and booster shows its own HUD icon, drawn by HD2Runtime straight from the game's own atlas, with nothing shipped (or, in builds you make yourself, extracted locally; see [Game icons](#game-icons)). SG-88 and CQC-72 have no call-in stratagem, so the game has no icon for them: they show a plain square in their category colour.
@@ -114,7 +138,8 @@ What each field shows:
 | `APPLYING` | Being written through HD2Runtime |
 | `EDITED` (yellow) | Your value is live |
 | `ERROR` | HD2Runtime refused the change; the status bar says why |
-| `LOCKED` | This value cannot be held exactly (more than 3 decimals) |
+| `LOCKED` | Read-only: the status bar says why (HD2Runtime's reason, another mod owns it, or more than 3 decimals) |
+| `INFO` | A fact, not a value: a beam conversion's verdict, caveats and layout |
 
 The status bar shows the selected field's id and range, whether it is **SHARED** (other weapons or objects use the same record), whether its effect is unverified in game, and which mod set it.
 
@@ -132,7 +157,7 @@ The details, and the HD2Runtime internals this relies on, are in [docs/how-it-wo
 ## Limitations
 
 - **Seven weapons need HD2Runtime 0.30.2.** Older Runtimes cannot tell apart the two game records behind the LAS-5 Scythe, LAS-7 Dagger, CQC-42 Machete, CQC-73 Entrenchment Tool, GP-31 Grenade Pistol, P-72 Crisper and SMG-37 Defender, so they block writes to them: the editor then shows their stats marked LOCKED. 0.30.2 resolves all seven, and they are editable (the Scythe's heat capacity and heatsinks stay read-only: its default heatsink overwrites them).
-- **Backpack-fed ammunition.** The AC-8 Autocannon, GR-8 Recoilless Rifle, FAF-14 Spear, RL-77 Airburst and StA-X3 W.A.S.P. keep their ammunition in the backpack: their own ammunition rows are shown locked (with HD2Runtime 0.30.2), because a change there does nothing.
+- **Backpack-fed ammunition.** The AC-8 Autocannon, GR-8 Recoilless Rifle, FAF-14 Spear, RL-77 Airburst and StA-X3 W.A.S.P. keep their ammunition in the backpack. With HD2Runtime 0.30.2 their own ammunition rows are shown locked; with 0.30.4 the GR-8, RL-77, Spear and W.A.S.P. own spares are real fields (used before the backpack, capped by Spare magazines) and only the AC-8's own rounds stay locked, with the Runtime's reason.
 - **F10 is HD2Runtime's.** From 0.30.2, F10 opens the HD2Runtime settings panel, so the editor no longer uses it: reset to defaults with the RESET TO DEFAULTS button.
 - **Mouse wheel.** If HD2Runtime was installed with the choice "Mouse wheel hook off" (it may avoid GameGuard crashes), the wheel does not scroll mod windows. The editor says so in its footer and in Settings; scroll with Page Up / Page Down or the scrollbars.
 - **Armor classes and the damage curve may trigger GameGuard.** Those values live in the game's own program data (game.dll), and a player reported GameGuard closing the game after changing them. The editor marks those rows GAMEGUARD RISK and warns when you stage one. A kit's piece weights are ordinary game data and are not affected.

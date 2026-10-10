@@ -1,5 +1,13 @@
 # HD2Runtime work the editor is waiting on
 
+> **Status with HD2Runtime 0.30.4 (`wip/0.30.4` at `54aeecd`, development):** R5 done (wind-up: the heat weapons'
+> firing charge and every weapon's spin-up are fields; the Sickles' "wind-up" is their firing charge, and the derived
+> `heat.warmup` names the fields that set it), R6 fully done (the GR-8, RL-77, FAF-14 and W.A.S.P. own spares are real
+> fields, every team-reload backpack's deposit is authorable with `start_amount` -1 = full; only the AC-8's own rounds
+> keep `noEffect`), R12 done (game-language fonts, `hd2.ui.unsupported`). The editor adopted all of 0.30.4 (see
+> "What 0.30.4 gives the editor" below) and the beam conversion branch (feature-detected). Open: R2, R3, R4, R8, R10,
+> R9 (Constitution duration).
+>
 > **Status with HD2Runtime 0.30.3 (`dcd996d`):** R1 done (all seven weapons resolved), R6 done (`noEffect` reasons;
 > the editor locks those rows), R7 fixed (a stray entity map row refuses only its own resource; the live culprit was
 > the LAS-12 Sai's row), R9 timed, R11 done (custom stratagem uses 0 / -1 = unlimited). Editor 0.8.4 adopted the
@@ -67,6 +75,12 @@ Request: "reload speed for support weapons but not primaries".
 
 ### R5. LAS-16 Sickle and LAS-17 Double-Edge Sickle wind-up / wind-down
 
+> **Done in HD2Runtime 0.30.4:** the Sickles' wind-up is their WeaponHeat firing charge: `heat.firing_charge`,
+> `heat.charge_gain_per_second`, `heat.charge_loss_per_second`, `heat.reset_charge_after_shot` (also the Sai, Scythe,
+> Dagger, Talon, Laser Cannon, Quasar, Rover and Laser Sentry); `windup.*` on the Maxigun, Patriot minigun, Maelstrom
+> and G-16. `heat.warmup` is derived (firing charge / gain per second) and read-only with that reason. The editor shows
+> them in a Wind-up section, the derived warm-up and cooldown after an overheat read-only with the reason.
+
 Request: "Sickle/Dickle are missing the wind-up/down".
 - `windup.wind_up_seconds` / `windup.wind_down_seconds` (WeaponWindUpComponentData +0 / +4) are defined for player
   weapons, but only the M-1000 Maxigun, the EXO-45 Patriot right gun and the TD-110 Maelstrom tank gun have a
@@ -78,6 +92,12 @@ Worth confirming first which in-game mechanic the player means (a fire-rate ramp
 it lives.
 
 ### R6. Team-reload backpack ammunition (AC-8 Autocannon, GR-8 Recoilless Rifle, FAF-14 Spear, airburst launcher)
+
+> **Done in HD2Runtime 0.30.4:** team-reload weapons reload from their own spares first, then the backpack. The GR-8,
+> RL-77, FAF-14 and StA-X3 `magazine.spare_magazines` / `starting_magazines` / `magazines_from_supply` are writable
+> (0 to 31); the five backpacks' `deposit.capacity` / `start_amount` (-1 = full) / `refill_amount` too. Only the AC-8's
+> own rounds keep `noEffect` (a nonzero spare count could underflow). The editor locks exactly the `noEffect` rows with
+> the Runtime's reason and shows the deposits under Backpack · Ammo.
 
 Request: "backpack weapons like autocannon, you cannot manually edit ammo for them like starting rounds or max spare
 rounds like in Shodan".
@@ -178,6 +198,27 @@ language's undrawable characters from `ui_fonts` advances and says so in Setting
   the spike for every caller.
 - The underbarrel weapons' fired projectile is unproven (`notExposed`: "ProjectileWeapon +0 and WeaponRounds +64
   hold the same projectile"), so their projectile cannot be swapped.
+
+## What 0.30.4 gives the editor
+
+All adopted (editor after `0a93dcc`); each checked with the Runtime's validator (`tests/catalog_report.lua`) and a
+target / export / ModBuilder round trip.
+
+| Change | Editor |
+|---|---|
+| `hd2.inspect`: values changed outside HD2Runtime, moved component tables, rebuilt entity map rows | Locked with the reason (foreign value, another mod's item data, or the Runtime's structural reason) |
+| Status effect stats (`hd2.status_effect`) | Equipment → Status Effects: duration and damage while active |
+| Game-language fonts, `hd2.ui.unsupported` | Translation check counts only characters no game font has |
+| Wind-up (`heat.firing_charge` ..., `windup.*`), derived `heat.warmup` / `heat.overheat_cooldown` | Wind-up section; derived values read-only with the reason |
+| Beam pulse (`beam.fire_mode`, `fire_rate`, `pulse_beams`, `pulse_seconds`), beam swaps | Fire mode by name; the "pulse caps the rate" note; swaps on every beam host (the Scythe's on its muzzle, shared; the Rover's read-only with the reason) |
+| Team-reload ammunition and deposits | Own spares editable with a note; deposits under Backpack · Ammo; AC-8 rounds locked |
+| Missiles (`missile.*`, `function_missile.*`) | Missile / Function Missile sections |
+| Mounted spread, EXO-55 Breakthrough shield arm | Mounted Handling rows (allow_shared where shared); the shield arm through `:shield()` |
+| Hover Pack, Breaching Hammer blast | Flight labels; Explosion · Ability |
+| Mount / mech arm / support projectile swaps, mount statuses | A Projectile · Swap row per mount (read-only with the reason where another selector owns the round) |
+| `stratagem.rearm_pool`, Railcannon targeting, Orbital Laser re-search | Choice with the Runtime's labels, read-only on the Eagles; the editor applies finite Mission uses before joining the pool and refuses unlimited uses in it (REARM_POOL_UNLIMITED); Call-in rows |
+| Fire-mode selector (`weapon_function` = `fire_mode`, max 3 modes) | Two or three modes bind the selector in the same transaction |
+| Beam conversion (feature branch, `hd2.beam_conversion`) | Beam Conversion group: verdict, caveats, layout, switch, rate / beams / pulse, per-weapon rows; settings wait for the conversion; one transaction per weapon in an export |
 
 ## What 0.30.2 gives the editor
 

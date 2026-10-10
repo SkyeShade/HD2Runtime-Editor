@@ -56,6 +56,26 @@ or the Runtime refuses it (`SELECTOR_REQUIRED`).
 - **The write:** `Layer:register` registers a transaction ensure. Its rates are the usual script choice, and its binding
   is a second choice that follows it (`mod:choice{follow}`, HD2Runtime r52): bound for every value with two or more
   rates, unbound for the others. One `set` moves both, and the ensure proves them together.
+- **Fire modes (HD2Runtime 0.30.4):** two or three fire modes on a weapon without a fire-mode selector
+  (`fire_mode.modes` descriptor `fireModeState == 'addable'`) bind `weapon_function.<first bindable input>` =
+  `fire_mode` the same way.
+
+## Fields that depend on another field (0.30.4)
+
+Every field keeps its own ensure, so two fields the Runtime checks against each other are ordered by the layer
+(`Layer:tick`, before a dirty slot adopts or steers):
+
+- **The Eagle Rearm pool.** A stratagem in the pool keeps a finite use count; the Runtime checks the row's bytes when it
+  applies (`REARM_POOL_UNLIMITED`). Joining the pool waits while the stratagem's Mission uses are being applied, and
+  unlimited uses wait while the pool is being left; the combination itself is refused at once with that code.
+  Resetting the uses takes the stratagem out of a pool the editor put it in.
+- **Beam conversions** (feature-detected: `hd2.beam_conversion`). A converted weapon's own rate, pulse, damage and
+  range are accepted only on a converted weapon (`NOT_CONVERTED`), and a conversion is never part of a plan. A setting
+  is refused while its conversion is off, waits while the conversion is being applied, and is reset when the
+  conversion is turned off. Every request carries `allow_component_swap` and `allow_unverified_effect`. The exporter
+  writes one weapon's conversion changes as one transaction ensure (`recover = true`; the conversion first), so a
+  mod never depends on the order its ensures resolve in. The conversion rows are not inspected (`hd2.inspect`): their
+  state is the conversion's own live status.
 
 ## The armory's presentation
 
