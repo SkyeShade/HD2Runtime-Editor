@@ -848,8 +848,12 @@ local function vehicle_weapon_rows(hd2,object,entry)
     local rows={}
     local carrier,mount=entry.vehicle,entry.mount
     local drone=entry.carrier=='backpack_drone'
+    -- HD2Runtime 0.30.4: a mount that holds a shield arm, not a weapon (the EXO-55 Breakthrough's left mount) is
+    -- reached through the vehicle's :shield(), never :weapon(mount)
+    local shield=entry.mountedShield==true
     local function base()
         if drone then return hd2.backpack(carrier):drone():weapon()end
+        if shield then return hd2.vehicle(carrier):shield()end
         return hd2.vehicle(carrier):weapon(mount)
     end
     for _,f in ipairs(entry.fields or{})do
@@ -859,7 +863,7 @@ local function vehicle_weapon_rows(hd2,object,entry)
             local target,section
             if t.path=='weapon'then
                 target=base
-                section=domain_label(f.semanticFieldId)
+                section=shield and'Shield'or domain_label(f.semanticFieldId)
             elseif t.path=='projectile_reference'then
                 if role==nil or role=='primary'then target=function()return base():projectile()end
                 else target=function()return base():attack(role):projectile()end end
@@ -889,6 +893,7 @@ local function vehicle_weapon_rows(hd2,object,entry)
     -- pod spawns missile entities, the Breakthrough's magazine picks its round) shows the Runtime's reason read-only;
     -- one with no projectile at all (a flamethrower) gets no row. Like the sentry swap, its target is a handle no hd2
     -- call chain builds, so the row carries the Lua that reaches it for the exporter.
+    if shield then return rows end
     local ok,src=pcall(function()return base():projectile_source()end)
     if ok and type(src)=='table'and(src.writable or src.status)then
         local f
@@ -1349,6 +1354,7 @@ function CATEGORY.vehicles(cat)
                 append(rows,part_rows(object,'vh',function(p)return vehicle_rows(cat.hd2,p,vehicle)end))
                 for _,m in ipairs(mounts)do
                     local label='Weapon · '..util.humanize(m.entry.mount or m.key)
+                    if m.entry.mountedShield then label='Shield · '..util.humanize(m.entry.mount or m.key)end
                     local slot=m.entry.slot and('slot_'..m.entry.slot)or nil
                     append(rows,part_rows(object,'vw:'..(m.entry.mount or m.key),function(p)
                         return vehicle_weapon_rows(cat.hd2,p,m.entry)end,function(row)

@@ -291,6 +291,7 @@ return {
     'Shared as %s',
     'SHARED PRESET FILES',
     'Shared value: this also changes %s',
+    'Shield · ',
     'Shotgun',
     'SHOW IN FOLDER',
     'SHOW THE ZIP',
