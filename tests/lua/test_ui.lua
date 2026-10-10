@@ -1158,6 +1158,66 @@ do
     step({'ESCAPE'})
     assert(H.app.view=='search'and H.app.gsearch.text=='','Escape clears the query first')
 end
+-- HD2Runtime 0.30.4 (where the Runtime has them): status effects as their own category, beam swaps, support weapon
+-- projectile swaps (exported through projectile_source), status choices on vehicle weapons, the Laser Sentry's beam
+do
+    local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
+    local export=require('mods/skyeshade/hd2runtime_editor/editor/export')
+    local function rows_of(key)
+        local o=H.catalog:object(key)
+        if not o then return nil end
+        H.catalog:open(o)
+        return o.rows
+    end
+    local fire=rows_of('se|fire')
+    if fire then
+        local duration,damage
+        for _,r in ipairs(fire)do
+            if r.field=='status.duration'then duration=r end
+            if r.field=='damage.standard_damage'then damage=r end
+        end
+        assert(duration and duration.editable and damage and damage.section=='Damage while active','fire: duration and damage')
+        assert(export.trace(damage.target)=='hd2.status_effect("fire"):damage()','status damage target')
+        local constitution=rows_of('se|constitution')
+        for _,r in ipairs(constitution or{})do
+            if r.field=='status.duration'then assert(r.exact,'a native value outside the range gets exact values')end
+        end
+    end
+    local trident=rows_of('pw|LAS-13 Trident')
+    local beam
+    for _,r in ipairs(trident or{})do if r.field=='attack.beam'then beam=r end end
+    if beam then
+        assert(beam.editable and beam.target_code=='hd2.weapon("LAS-13 Trident"):beam_source().target','Trident beam swap')
+        local donor
+        for _,o in ipairs(beam.options(beam))do if o.label=='LAS-98 Laser Cannon'then donor=o.value end end
+        assert(donor and catalog_module.probe(beam,donor),'a beam donor validates')
+    end
+    local eat=rows_of('sp|EAT-17 Expendable Anti-Tank')
+    local swap
+    for _,r in ipairs(eat or{})do if r.field=='attack.projectile'and r.target_code then swap=r end end
+    if swap then
+        local donor
+        for _,o in ipairs(swap.options(swap))do if o.label=='EAT-700 Expendable Napalm'then donor=o.value end end
+        if donor then
+            local text=assert(export.operation(catalog_module,{row=swap,value=donor},'x'))
+            assert(text:find('projectile_source("primary").target',1,true),'support swap exported: '..text)
+        end
+    end
+    local patriot=rows_of('ve|EXO-45 Patriot Exosuit')
+    local status
+    for _,r in ipairs(patriot or{})do if r.kind=='choice'and tostring(r.field):find('status_1_type',1,true)then status=r end end
+    local VW=require('hd2runtime/domains/vehicle_weapon_authoring')
+    if VW.weapons['A/LAS-98 Laser Sentry / weapon']then
+        assert(status,'vehicle weapons have status choices')
+        local sentry=rows_of('st|A/LAS-98 Laser Sentry')
+        local pulse,sbeam
+        for _,r in ipairs(sentry or{})do
+            if r.field=='beam.pulse_seconds'then pulse=r end
+            if r.field=='attack.beam'then sbeam=r end
+        end
+        assert(sbeam and pulse and pulse.target_code:find('beam_source().target',1,true),'Laser Sentry beam swap and pulse')
+    end
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

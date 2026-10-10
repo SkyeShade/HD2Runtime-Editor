@@ -21,7 +21,7 @@ M.GROUPS={
         {id='support_weapons',label='Support Weapons',tone='support'},
         {id='support_backpacks',label='Support Backpacks',tone='support'},
         {id='vehicles',label='Vehicles',tone='support'},{id='resupply',label='Resupply',tone='support'}}},
-    {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'}}},
+    {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'},{id='status_effects',label='Status Effects'}}},
     {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'}}},
     {id='enemies',label='ENEMIES',items={
         {id='terminids',label='Terminids'},{id='automatons',label='Automatons'},{id='illuminate',label='Illuminate'},
@@ -135,6 +135,9 @@ local function make_row(object,spec)
     -- a turret's limits are ordered (minimum below maximum, checked against the other limit's reviewed value): the
     -- layer gives them exact-value handles, never a range that would cross the other limit
     row.exact=ORDERED_LIMITS[tostring(spec.field)]or nil
+    -- a native value outside the reviewed range (the Constitution status lasts 999999 s; durations are reviewed 0 to
+    -- 100000): a slider spanning it would be refused, so exact values too (any value in range, reset back to native)
+    if type(spec.vanilla)=='number'and(min and spec.vanilla<min or max and spec.vanilla>max)then row.exact=true end
     row.loc=location(spec.descriptor,'row:'..row.key)
     if row.editable then
         local held=util.representable(row.vanilla,integer,spec.storage)
@@ -306,6 +309,31 @@ local function builds(fn)return(pcall(fn))end
 
 ------------------------------------------------------------------------------------------- player weapons --
 -- Donor projectiles: every reviewed projectile attack output (labels from its owner).
+-- Donor beams (HD2Runtime 0.30.4 beam swaps): every catalogued beam output a beam host can fire.
+local beam_options
+-- A swap reached through a Runtime source call (weapon:projectile_source() / beam_source(): {target, field, expect,
+-- writable, reason, acknowledgements}). Its target is a handle no hd2 chain builds, so the row carries the Lua of the
+-- call (code) for the exporter and the ModBuilder import. A source that is not writable shows its reason read-only.
+local function source_row(object,spec)
+    local ok,src=pcall(spec.source)
+    local common={id=spec.id,kind='reference',label=spec.label,section=spec.section,descriptor=spec.descriptor,
+        unverified=true,field=spec.field,
+        target=function()return spec.source().target end,expect=function()return spec.source().expect end,
+        options=spec.options}
+    if ok and type(src)=='table'and src.writable and src.expect then
+        common.vanilla=src.expect
+        if src.field then common.field=src.field end
+        for _,a in ipairs(src.acknowledgements or{})do if a=='allow_shared'then common.shared=true end end
+    else
+        common.editable=false
+        common.reason=tostring(ok and type(src)=='table'and src.reason or(not ok and src)or'read-only in this HD2Runtime')
+        common.vanilla='own'
+        common.labels={{value='own',label=spec.own_label or'Own'}}
+    end
+    local row=M.make_value_row(object,common)
+    row.target_code,row.expect_code=spec.code..'.target',spec.code..'.expect'
+    return row
+end
 local function projectile_options(hd2,row)
     local out={{value=M.expect(row),label='Own projectile',sub=row.object.name}}
     local A=load('attack_outputs')
@@ -317,6 +345,20 @@ local function projectile_options(hd2,row)
                 local owner=type(o.owner)=='table'and o.owner.name or'?'
                 local ok,value=pcall(hd2.attack_output,id)
                 if ok then out[#out+1]={value=value,label=tostring(owner),sub=(id:match('([^/]+)$')or id)}end
+            end
+        end
+    end
+    return out
+end
+beam_options=function(hd2,row)
+    local out={{value=M.expect(row),label='Own beam',sub=row.object.name}}
+    local A=load('attack_outputs')
+    for _,id in ipairs(util.sorted_keys(A and A.outputs or{}))do
+        local o=A.outputs[id]
+        if o.family=='beam'and o.selectableAsBeamReference~=false and o.editable~=false then
+            local ok,value=pcall(hd2.attack_output,id)
+            if ok then
+                out[#out+1]={value=value,label=tostring(type(o.owner)=='table'and o.owner.name or id),sub=(id:match('([^/]+)$')or id)}
             end
         end
     end
@@ -550,6 +592,15 @@ local function player_rows(hd2,object,entry)
             end
         end
     end
+    -- HD2Runtime 0.30.4 beam swaps: a beam weapon fires another catalogued beam (weapon:beam_source())
+    for _,f in ipairs(entry.fields or{})do
+        if f.editable and f.type=='beam_reference'and not entry.subweaponOf then
+            rows[#rows+1]=source_row(object,{id='attack.beam',label='Beam',section='Beam · Swap',descriptor=f,
+                field='attack.beam',code='hd2.weapon('..string.format('%q',name)..'):beam_source()',
+                source=function()return hd2.weapon(name):beam_source()end,
+                options=function(row)return beam_options(hd2,row)end,own_label='Own beam'})
+        end
+    end
     -- the catalogue weapon each row writes ('AR/GL-21 One-Two / underbarrel' for a sub-weapon): ModBuilder's identity
     for _,r in ipairs(rows)do r.weapon_name=name end
     return rows
@@ -610,6 +661,31 @@ local function support_rows(hd2,object,entry)
                 common.section=join(section,'Status')
                 rows[#rows+1]=make_value_row(object,common)
             end
+        end
+    end
+    -- HD2Runtime 0.30.4: its projectile swaps (projectile_source(role)), its beam swap (beam_source()) and its
+    -- overcharge explosion (its own, or another charge weapon's)
+    local base_code='hd2.support_weapon('..string.format('%q',name)..')'
+    for _,f in ipairs(entry.fields or{})do
+        local t=f.target or{}
+        if f.editable and f.type=='projectile_reference'and t.path=='attack'then
+            local role=t.attack or'primary'
+            rows[#rows+1]=source_row(object,{id='attack.projectile@'..role,label='Projectile',
+                section=join('Projectile',role_label(role),'Swap'),descriptor=f,field='attack.projectile',
+                code=base_code..':projectile_source('..string.format('%q',role)..')',
+                source=function()return hd2.support_weapon(name):projectile_source(role)end,
+                options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
+        elseif f.editable and f.type=='beam_reference'then
+            rows[#rows+1]=source_row(object,{id='attack.beam',label='Beam',section='Beam · Swap',descriptor=f,
+                field='attack.beam',code=base_code..':beam_source()',
+                source=function()return hd2.support_weapon(name):beam_source()end,
+                options=function(row)return beam_options(hd2,row)end,own_label='Own beam'})
+        elseif f.editable and f.type=='overcharge_explosion_reference'and type(f.allowedValues)=='table'then
+            local labels={}
+            for _,v in ipairs(f.allowedValues)do labels[#labels+1]={value=v,label=v==name and('Own ('..v..')')or v}end
+            rows[#rows+1]=make_value_row(object,{id=f.semanticFieldId,kind='choice',label=f.displayName or'Overcharge explosion',
+                field=f.semanticFieldId,target=function()return hd2.support_weapon(name)end,vanilla=f.currentDefault,
+                labels=labels,options=static_options(labels),descriptor=f,unverified=true,section='Charge'})
         end
     end
     -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows do nothing (its backpack holds the ammunition):
@@ -870,7 +946,9 @@ local function vehicle_weapon_rows(hd2,object,entry)
     end
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
-        if f.editable and not f.derivedReadOnly and numeric(f.type,f.currentDefault)then
+        -- a status a mount's attack or explosion applies (HD2Runtime status slots), as the primaries have it
+        local status=f.type=='status_reference'and type(f.allowedValues)=='table'
+        if f.editable and not f.derivedReadOnly and(numeric(f.type,f.currentDefault)or status)then
             local role=t.attack
             local target,section
             if t.path=='weapon'then
@@ -890,10 +968,20 @@ local function vehicle_weapon_rows(hd2,object,entry)
             end
             if target then
                 local field=t.path=='weapon'and f.semanticFieldId or strip(f.semanticFieldId,role)
-                rows[#rows+1]=make_row(object,{id=f.semanticFieldId..(role and('@'..role)or''),label=f.displayName,
-                    unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
-                    storage=(f.backing or{}).storage,field=field,target=target,shared=shared_ack(f),
-                    unverified=unverified(f),descriptor=f,section=section})
+                if status then
+                    local labels={}
+                    if f.allowNone then labels[1]={value='none',label='None'}end
+                    for _,v in ipairs(f.allowedValues)do labels[#labels+1]={value=v,label=util.humanize(v)}end
+                    rows[#rows+1]=make_value_row(object,{id=f.semanticFieldId..(role and('@'..role)or''),kind='choice',
+                        label=f.displayName,field=field,target=target,vanilla=f.currentDefault,labels=labels,
+                        options=static_options(labels),descriptor=f,shared=shared_ack(f),unverified=unverified(f),
+                        section=join(section,'Status')})
+                else
+                    rows[#rows+1]=make_row(object,{id=f.semanticFieldId..(role and('@'..role)or''),label=f.displayName,
+                        unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
+                        storage=(f.backing or{}).storage,field=field,target=target,shared=shared_ack(f),
+                        unverified=unverified(f),descriptor=f,section=section})
+                end
             end
         end
     end
@@ -1228,26 +1316,36 @@ local function sentry_swap_rows(hd2,object,name)
     local VW=load('vehicle_weapon_authoring')
     local host=VW and type(VW.weapons)=='table'and VW.weapons[name..' / weapon']
     if not host or host.stratagemHost~=name then return {}end
-    local f=(host.fields or{})[1]
-    if not f or f.type~='projectile_reference'then return {}end
-    local function source()return hd2.stratagem(name):attack('primary'):projectile_source()end
-    local ok,src=pcall(source)
-    local code='hd2.stratagem('..string.format('%q',name)..'):attack("primary"):projectile_source()'
-    local common={id='attack.projectile@stratagem',kind='reference',label='Projectile',field='attack.projectile',
-        section='Projectile · Swap',descriptor=f,unverified=true,
-        target=function()return source().target end,expect=function()return source().expect end,
-        options=function(row)return projectile_options(hd2,row)end}
-    if ok and type(src)=='table'and src.writable and src.expect then
-        common.vanilla=src.expect
-    else
-        common.editable=false
-        common.reason=tostring(ok and type(src)=='table'and src.reason or f.reason or'read-only in this HD2Runtime')
-        common.vanilla='own'
-        common.labels={{value='own',label='Own round'}}
+    local rows={}
+    local attack='hd2.stratagem('..string.format('%q',name)..'):attack("primary")'
+    local function primary()return hd2.stratagem(name):attack('primary')end
+    local beam=false
+    for _,f in ipairs(host.fields or{})do if f.type=='beam_reference'then beam=true end end
+    for _,f in ipairs(host.fields or{})do
+        if f.type=='projectile_reference'then
+            rows[#rows+1]=source_row(object,{id='attack.projectile@stratagem',label='Projectile',section='Projectile · Swap',
+                descriptor=f,field='attack.projectile',code=attack..':projectile_source()',
+                source=function()return primary():projectile_source()end,
+                options=function(row)return projectile_options(hd2,row)end,own_label='Own round'})
+        elseif f.type=='beam_reference'then
+            -- HD2Runtime 0.30.4: the Laser Sentry fires any catalogued beam
+            rows[#rows+1]=source_row(object,{id='attack.beam@stratagem',label='Beam',section='Beam · Swap',descriptor=f,
+                field='attack.beam',code=attack..':beam_source()',source=function()return primary():beam_source()end,
+                options=function(row)return beam_options(hd2,row)end,own_label='Own beam'})
+        elseif f.editable and not f.derivedReadOnly and numeric(f.type,f.currentDefault)and(f.target or{}).path=='weapon'then
+            -- the host's own record (the Laser Sentry's beam fire mode and pulse), the target its source names
+            local via=beam and':beam_source()'or':projectile_source()'
+            local row=make_row(object,{id=f.semanticFieldId..'@stratagem',label=f.displayName,unit=f.unit,
+                vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,storage=(f.backing or{}).storage,
+                field=f.semanticFieldId,target=function()
+                    local a=primary()
+                    return(beam and a:beam_source()or a:projectile_source()).target
+                end,shared=shared_ack(f),unverified=true,descriptor=f,section=domain_label(f.semanticFieldId)})
+            row.target_code=attack..via..'.target'
+            rows[#rows+1]=row
+        end
     end
-    local row=make_value_row(object,common)
-    row.target_code,row.expect_code=code..'.target',code..'.expect'
-    return {row}
+    return rows
 end
 local function stratagem_category(families,subtitles)
     return function(cat)
@@ -1402,6 +1500,38 @@ function CATEGORY.throwables(cat)
     for name,entry in pairs(T.throwables or{})do
         list[#list+1]={key='th|'..name,name=name,subtitle=entry.family or entry.category,
             build=function(object)return throwable_rows(cat.hd2,object,entry)end}
+    end
+    return sorted_objects(list)
+end
+-- Status effects (HD2Runtime 0.30.4 hd2.status_effect): each status's own definition, for every attack that applies
+-- it: how long it lasts (status.duration) and the damage row it deals while active (:damage()).
+function CATEGORY.status_effects(cat)
+    local D,why=load('status_effect_authoring')
+    if not D or type(D.statuses)~='table'then return nil,why or'this HD2Runtime has no status effect stats (HD2Runtime 0.30.4)'end
+    local hd2=cat.hd2
+    local list={}
+    for id,entry in pairs(D.statuses)do
+        local status=id
+        list[#list+1]={key='se|'..id,name=entry.name or util.humanize(id),subtitle=util.humanize(entry.family or'status'),
+            build=function(object)
+                local rows={}
+                local function add(path,section,target)
+                    local t=type(entry.targets)=='table'and entry.targets[path]
+                    if type(t)~='table'then return end
+                    for _,fid in ipairs(util.sorted_keys(t.fields or{}))do
+                        local f=t.fields[fid]
+                        if f.editable and numeric(f.type,f.currentDefault)then
+                            rows[#rows+1]=make_row(object,{id=path..':'..f.semanticFieldId,label=f.displayName,unit=f.unit,
+                                vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,storage=(f.backing or{}).storage,
+                                field=f.semanticFieldId,target=target,shared=f.shared==true,unverified=unverified(f),
+                                descriptor=f,section=section})
+                        end
+                    end
+                end
+                add('status','Status',function()return hd2.status_effect(status)end)
+                add('damage','Damage while active',function()return hd2.status_effect(status):damage()end)
+                return rows
+            end}
     end
     return sorted_objects(list)
 end
@@ -1628,7 +1758,7 @@ local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boost
     st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},
-    en={'terminids','automatons','illuminate','structures'},hd={'helldiver'},ar={'armor'}}
+    en={'terminids','automatons','illuminate','structures'},hd={'helldiver'},ar={'armor'},se={'status_effects'}}
 
 ------------------------------------------------------------------------------------------------- catalogue --
 local Catalog={};Catalog.__index=Catalog

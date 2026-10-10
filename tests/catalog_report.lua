@@ -21,6 +21,9 @@ local function test_value(row)
         if row.integer then up=math.floor(up+0.5)else up=util.round(up)end
     end
     if row.min and up<row.min then up=v end
+    -- a native value outside the reviewed range (the Constitution status's 999999 s): a value at the range's edge
+    if row.max and up>row.max then up=row.max end
+    if row.min and up<row.min then up=row.min end
     -- a field with a disable sentinel takes it or a value above 0, nothing between
     if row.disabled_value~=nil and up~=row.disabled_value and up<=0 then up=1 end
     return up

@@ -169,6 +169,10 @@ language's undrawable characters from `ui_fonts` advances and says so in Setting
 
 ### R9. Smaller
 
+- 0.30.4 status effects: `status.duration` is reviewed 0 to 100000, but the Constitution status's native duration is
+  999999 (effectively permanent), outside its own range. Editing works (the editor uses exact values there), but the
+  range should include the native value, or 999999 be a named "permanent" sentinel.
+
 - `core/shared_records` builds its whole index on first use: 60 to 130 ms in one call (a 131.8 ms frame in the
   player's log). The editor now triggers it while the mod loads; building it per resource on demand would remove
   the spike for every caller.

@@ -45,6 +45,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **Projectile swaps and terminal explosion payloads**, from a searchable donor list. With HD2Runtime 0.30.2, the
     sentries and emplacements that can fire another round have a swap too (the MG-43 and G-16 stay read-only).
   - **Statuses, on/off switches and enums.**
+  - **With HD2Runtime 0.30.4:** beam swaps (the Trident, Dagger, Laser Cannon, Meltagun and Laser Sentry fire any catalogued beam), support weapon projectile swaps, a charge weapon's overcharge explosion, status effects on vehicle and drone weapons, and a **Status Effects** category (Equipment): each status's duration and the damage it deals while active, for every attack that applies it.
 
   Every value is checked with the Runtime's own validator before it is staged. A refused value shows the Runtime's reason.
 - **The game's own icons.** Every stratagem and booster shows its own HUD icon, drawn by HD2Runtime straight from the game's own atlas, with nothing shipped (or, in builds you make yourself, extracted locally; see [Game icons](#game-icons)). SG-88 and CQC-72 have no call-in stratagem, so the game has no icon for them: they show a plain square in their category colour.
