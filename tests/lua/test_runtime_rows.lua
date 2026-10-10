@@ -1,4 +1,4 @@
--- The rows HD2Runtime 0.30.4 (and the beam conversion feature) add, each checked only where the Runtime under test
+-- The rows HD2Runtime 0.31.0 (beam conversion included) adds, each checked only where the Runtime under test
 -- publishes it: sections, labels, locks and acknowledgements. Returns one line per check that ran.
 local hd2=require('hd2runtime/api/hd2')
 local catalog=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
@@ -15,7 +15,7 @@ end
 local function find(list,fn)for _,r in ipairs(list or{})do if fn(r)then return r end end end
 local function has(module)return(pcall(require,'hd2runtime/domains/'..module))end
 
--- beam swaps (0.30.4): the LAS-5 Scythe's beam is swapped on its muzzle (allow_shared), the Rover's is read-only
+-- beam swaps (0.31.0): the LAS-5 Scythe's beam is swapped on its muzzle (allow_shared), the Rover's is read-only
 local A=has('attack_outputs')and require('hd2runtime/domains/attack_outputs')
 if A and type(A.beamHosts)=='table'and A.beamHosts['player_weapon:LAS-5 Scythe']then
     local swap=find(rows('pw|LAS-5 Scythe'),function(r)return r.field=='attack.beam'end)
@@ -32,13 +32,13 @@ if mode then
     check(pulse and pulse.note and pulse.note:find('caps the fire rate',1,true),'the pulse limits the rate')
     out[#out+1]='beam fire mode ok'
 end
--- missiles (0.30.4)
+-- missiles (0.31.0)
 local missile=find(rows('sp|StA-X3 W.A.S.P. Launcher'),function(r)return r.field=='function_missile.acceleration'end)
 if missile then
     check(missile.section=='Function Missile','missile section: '..missile.section)
     out[#out+1]='missiles ok'
 end
--- team-reload weapons (0.30.4): own spares editable with a note; the AC-8's own rounds stay locked
+-- team-reload weapons (0.31.0): own spares editable with a note; the AC-8's own rounds stay locked
 local spares=find(rows('sp|GR-8 Recoilless Rifle'),function(r)return r.field=='magazine.spare_magazines'end)
 if spares and spares.editable then
     check(spares.note,'own spares explained')
@@ -49,7 +49,7 @@ if spares and spares.editable then
     check(rounds and not rounds.editable,'AC-8 own rounds locked')
     out[#out+1]='team reload ok'
 end
--- the rearm pool (0.30.4): read-only on the Eagles with the Runtime's reason, labelled options elsewhere
+-- the rearm pool (0.31.0): read-only on the Eagles with the Runtime's reason, labelled options elsewhere
 local pool=find(rows('st|Eagle 500kg Bomb'),function(r)return r.field=='stratagem.rearm_pool'end)
 if pool then
     check(not pool.editable and pool.reason,'Eagle rearm pool read-only')
@@ -57,7 +57,7 @@ if pool then
     check(other.editable and catalog.text(other,49):find('Eagle Rearm',1,true),'rearm pool labels')
     out[#out+1]='rearm pool ok'
 end
--- derived heat values (0.30.4) shown read-only, naming the fields to edit
+-- derived heat values (0.31.0) shown read-only, naming the fields to edit
 local warmup=find(rows('pw|LAS-16 Sickle'),function(r)return r.field=='heat.warmup'end)
 if warmup then
     check(not warmup.editable and warmup.section=='Wind-up'and warmup.reason~='','derived warm-up')

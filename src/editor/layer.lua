@@ -368,7 +368,7 @@ function Layer:register(row,handle)
     -- rates that fill an empty slot of a weapon without a rate selector: one transaction with the selector binding,
     -- which follows the rates choice (HD2Runtime r51 mod:choice{follow}): bound for every value with two or more rates,
     -- unbound for the others
-    -- (0.30.4: likewise two or three fire modes on a weapon without a fire-mode selector bind the fire-mode selector)
+    -- (0.31.0: likewise two or three fire modes on a weapon without a fire-mode selector bind the fire-mode selector)
     local binding
     if row.kind=='rates'or row.kind=='modes'then
         for _,value in ipairs(handle.values or{})do binding=binding or catalog_module.rate_binding(row,value)end
@@ -650,7 +650,7 @@ local function conversion_wait(self,slot)
     return self:state(enabled)=='applying'
 end
 
--- The Eagle Rearm pool (HD2Runtime 0.30.4 stratagem.rearm_pool): a pool member keeps a finite use count, which the
+-- The Eagle Rearm pool (HD2Runtime 0.31.0 stratagem.rearm_pool): a pool member keeps a finite use count, which the
 -- Runtime checks against the row's bytes when it applies (REARM_POOL_UNLIMITED). Each field keeps its own ensure, so
 -- joining the pool waits for a finite Mission uses being applied, and unlimited uses wait for the pool being left;
 -- the combination itself is refused at once with the reason. True while the slot must wait (or just failed).

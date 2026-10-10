@@ -83,7 +83,7 @@ check(catalog.rate_binding(rates,{450,640,950})~=nil,'the Liberator needs its se
 check(catalog.rate_binding(rates,{0,700,0})==nil,'one rate needs no binding')
 check(catalog.probe(rates,{450,640,950}),'three rates pass as a transaction')
 cycle(rates,{450,640,950},'rate slots with selector binding')
--- HD2Runtime 0.30.4: a second fire mode on a weapon without a fire-mode selector binds the fire-mode selector with it
+-- HD2Runtime 0.31.0: a second fire mode on a weapon without a fire-mode selector binds the fire-mode selector with it
 local hotshot=row_of('pw|R/40-K Hot-Shot Marksman Rifle',function(r)return r.kind=='modes'end)
 if hotshot.descriptor and hotshot.descriptor.fireModeState=='addable'then
     local binding=catalog.rate_binding(hotshot,{'single','automatic'})

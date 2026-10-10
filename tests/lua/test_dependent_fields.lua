@@ -1,8 +1,8 @@
 -- Fields that depend on another field, in the override layer over the real ensure (tests/lua/sim.lua):
--- * the Eagle Rearm pool (HD2Runtime 0.30.4): a pool member keeps a finite use count (REARM_POOL_UNLIMITED), so joining
+-- * the Eagle Rearm pool (HD2Runtime 0.31.0): a pool member keeps a finite use count (REARM_POOL_UNLIMITED), so joining
 --   waits for finite Mission uses, the combination with unlimited uses is refused at once, and resetting the uses
 --   takes the stratagem out of the pool the editor put it in;
--- * beam conversions (HD2Runtime feature/beam-conversion, feature-detected): a converted weapon's own settings apply
+-- * beam conversions (HD2Runtime 0.31.0, feature-detected): a converted weapon's own settings apply
 --   only once the weapon is converted. The layer refuses a setting while the conversion is off, holds it back while
 --   the conversion is being applied, and takes it back when the conversion is turned off.
 local S=dofile(...)

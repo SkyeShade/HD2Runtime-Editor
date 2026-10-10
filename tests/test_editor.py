@@ -171,14 +171,14 @@ class EditorTests(unittest.TestCase):
         for line in ('calldown code ok', 'mission uses ok', 'boolean ok', 'status ok', 'projectile swap ok',
                      'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'direct first edit ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'skipped steer settled again ok', 'disable sentinel ok', 'helldiver fields ok', 'armor stats ok', 'armor perks ok', 'mod code takeover ok', 'base value is a reset ok', 'turret limits ok'):
             self.assertIn(line, result)
-        # HD2Runtime 0.30.4: a weapon without a fire-mode selector binds it with its second mode (when the Runtime
+        # HD2Runtime 0.31.0: a weapon without a fire-mode selector binds it with its second mode (when the Runtime
         # under test offers the binding)
         capabilities = lua_host.RUNTIME / 'sdk' / 'WeaponFireModeCapabilities.json'
         if capabilities.is_file() and '"addable"' in capabilities.read_text(encoding='utf-8'):
             self.assertIn('fire modes with selector binding ok', result)
 
     def test_runtime_0_30_4_rows(self):
-        # each check runs only where the Runtime under test publishes the field (0.30.3, 0.30.4, beam conversion)
+        # each check runs only where the Runtime under test publishes the field (0.30.3, 0.31.0)
         result = lua_host.run('local f=assert(loadfile(%s)) return f()' % lua_host._lua_string(
             (LUA / 'test_runtime_rows.lua').as_posix()))
         self.assertIn('beam conversion ok', result)
@@ -188,7 +188,7 @@ class EditorTests(unittest.TestCase):
                 self.assertIn(line, result)
 
     def test_dependent_fields_follow_what_they_need(self):
-        # the rearm pool and the mission uses (HD2Runtime 0.30.4); beam conversion settings and their conversion
+        # the rearm pool and the mission uses (HD2Runtime 0.31.0); beam conversion settings and their conversion
         result = lua_host.run('local f=assert(loadfile(%s)) return f(%s)' % (
             lua_host._lua_string((LUA / 'test_dependent_fields.lua').as_posix()),
             lua_host._lua_string((LUA / 'sim.lua').as_posix())))

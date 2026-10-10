@@ -81,11 +81,11 @@ local DOMAIN_LABELS={weapon='Weapon',magazine='Ammo & Magazine',rounds='Ammo & M
     targeting='Targeting',stratagem='Call-in',eagle='Eagle',orbital='Orbital Strike',minefield='Minefield',
     booster='Booster',throwable='Throwable',attachment='Magazine',jump='Jump Pack',hover='Hover Pack',
     warp='Warp Pack',recharge='Recharge',drone='Drone',payload='Hellpod',windup='Wind-up',
-    -- HD2Runtime 0.30.4: the W.A.S.P., Spear, Commando, P-33 and P-92 missiles' own SeekingMissile records
+    -- HD2Runtime 0.31.0: the W.A.S.P., Spear, Commando, P-33 and P-92 missiles' own SeekingMissile records
     missile='Missile',function_missile='Function Missile',deposit='Ammo'}
 -- A backpack field's own group (the Runtime's uiGroup): its section name.
 local UI_GROUPS={backpack_ammo='Ammo',drone_magazines='Drone Magazines'}
--- The firing charge members of a heat weapon are its wind-up (HD2Runtime 0.30.4, research/windup-controls): shown with
+-- The firing charge members of a heat weapon are its wind-up (HD2Runtime 0.31.0, research/windup-controls): shown with
 -- the spin-up fields under "Wind-up", where a player looking for the Sickle's wind-up finds them.
 local WIND_UP={['heat.firing_charge']=true,['heat.charge_gain_per_second']=true,['heat.charge_loss_per_second']=true,
     ['heat.reset_charge_after_shot']=true}
@@ -121,11 +121,11 @@ end
 -- Fields the Runtime checks against another field (HD2Runtime player_weapon_writes TURRET_PAIRS).
 local ORDERED_LIMITS={['turret.yaw_min']=true,['turret.yaw_max']=true,['turret.pitch_min']=true,['turret.pitch_max']=true}
 local make_value_row
--- The beam fire mode (HD2Runtime 0.30.4, BeamWeapon +100, a typed enum published as an integer 4 to 6): the game's
+-- The beam fire mode (HD2Runtime 0.31.0, BeamWeapon +100, a typed enum published as an integer 4 to 6): the game's
 -- three beam kinds by name.
 local BEAM_MODES={{value=4,label='Continuous (4)'},{value=5,label='Charged blast, 40-K (5)'},
     {value=6,label='Pulsed, Trident (6)'}}
--- The pulse length limits the beam fire rate (HD2Runtime 0.30.4 docs "beam.pulse_seconds limits beam.fire_rate"): a
+-- The pulse length limits the beam fire rate (HD2Runtime 0.31.0 docs "beam.pulse_seconds limits beam.fire_rate"): a
 -- new pulse starts only in the update after the previous one ended.
 local PULSE_NOTE='Pulsed beams (mode 6): the pulse length caps the fire rate (600 rpm needs at most 0.067 s, 900 rpm 0.033 s)'
 local function beam_note(spec)
@@ -241,7 +241,7 @@ function M.filled(list)
 end
 -- The selector binding {field, expect, value} a value needs written with it: more than one filled rate slot on a
 -- weapon whose rate-of-fire selector is not bound yet (fire_rate_modes().state 'addable'), or more than one fire mode
--- on a weapon whose fire-mode selector is not bound yet (HD2Runtime 0.30.4: fire_mode.modes descriptor fireModeState
+-- on a weapon whose fire-mode selector is not bound yet (HD2Runtime 0.31.0: fire_mode.modes descriptor fireModeState
 -- 'addable', bound on its first free input); nil otherwise.
 function M.rate_binding(row,value)
     if row.kind=='modes'then
@@ -355,7 +355,7 @@ local function builds(fn)return(pcall(fn))end
 
 ------------------------------------------------------------------------------------------- player weapons --
 -- Donor projectiles: every reviewed projectile attack output (labels from its owner).
--- Donor beams (HD2Runtime 0.30.4 beam swaps): every catalogued beam output a beam host can fire.
+-- Donor beams (HD2Runtime 0.31.0 beam swaps): every catalogued beam output a beam host can fire.
 local beam_options
 -- A swap reached through a Runtime source call (weapon:projectile_source() / beam_source(): {target, field, expect,
 -- writable, reason, acknowledgements}). Its target is a handle no hd2 chain builds, so the row carries the Lua of the
@@ -477,7 +477,7 @@ local function info_row(object,spec)
         reason=spec.reason,target=spec.target,descriptor=spec.descriptor,info=spec.info,note=spec.note})
 end
 M.info_row=info_row
--- Derived heat values (HD2Runtime 0.30.4 heat.warmup, heat.overheat_cooldown) and the section that shows them.
+-- Derived heat values (HD2Runtime 0.31.0 heat.warmup, heat.overheat_cooldown) and the section that shows them.
 local DERIVED_HEAT={['heat.warmup']='Wind-up',['heat.overheat_cooldown']='Heat'}
 -- The armory's presentation of a weapon (presentation only: menus read it when they build an item view):
 -- the displayed armor penetration (one label) and the displayed traits (an ordered list of up to five), which share
@@ -649,7 +649,7 @@ local function player_rows(hd2,object,entry)
             end
         end
     end
-    -- HD2Runtime 0.30.4 beam swaps: a beam weapon fires another catalogued beam (weapon:beam_source()). The source
+    -- HD2Runtime 0.31.0 beam swaps: a beam weapon fires another catalogued beam (weapon:beam_source()). The source
     -- decides, not the field: the LAS-5 Scythe's own member is dormant (read-only), and its beam is swapped on the
     -- default muzzle's delta row (shared by every weapon that defaults to that muzzle)
     for _,f in ipairs(entry.fields or{})do
@@ -662,7 +662,7 @@ local function player_rows(hd2,object,entry)
             rows[#rows+1]=row
         end
     end
-    -- HD2Runtime 0.30.4 (the LAS-99 Quasar report): the warm-up and the cooldown after an overheat are no members of
+    -- HD2Runtime 0.31.0 (the LAS-99 Quasar report): the warm-up and the cooldown after an overheat are no members of
     -- their own. Shown as read-only notes that name the fields to edit, where a player looks for them.
     for _,f in ipairs(entry.fields or{})do
         local id=f.semanticFieldId
@@ -736,7 +736,7 @@ local function support_rows(hd2,object,entry)
             end
         end
     end
-    -- HD2Runtime 0.30.4: its projectile swaps (projectile_source(role)), its beam swap (beam_source()) and its
+    -- HD2Runtime 0.31.0: its projectile swaps (projectile_source(role)), its beam swap (beam_source()) and its
     -- overcharge explosion (its own, or another charge weapon's)
     local base_code='hd2.support_weapon('..string.format('%q',name)..')'
     for _,f in ipairs(entry.fields or{})do
@@ -761,7 +761,7 @@ local function support_rows(hd2,object,entry)
                 labels=labels,options=static_options(labels),descriptor=f,unverified=true,section='Charge'})
         end
     end
-    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect (0.30.4: only the
+    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect (0.31.0: only the
     -- AC-8's own rounds; the GR-8, RL-77, FAF-14 and StA-X3 own spares are real fields now) are shown locked with the
     -- Runtime's reason, so nobody edits a value the game ignores
     for _,r in ipairs(rows)do
@@ -772,7 +772,7 @@ local function support_rows(hd2,object,entry)
             r.editable,r.reason=false,'team-reload weapon, its backpack holds the ammunition (HD2Runtime: '
                 ..util.plain(tostring(why),160)..')'
         elseif d and type(d.teamReload)=='table'and d.teamReload.ownSpares==true and not r.note then
-            -- HD2Runtime 0.30.4: its own spares are used first, then the backpack; spawn and resupply are capped by
+            -- HD2Runtime 0.31.0: its own spares are used first, then the backpack; spawn and resupply are capped by
             -- the spare maximum (0 natively)
             r.note=r.field=='magazine.spare_magazines'
                 and'Most own spares (0 natively); the reload uses them before the backpack'
@@ -785,7 +785,7 @@ end
 ------------------------------------------------------------------------------------------------ stratagems --
 local PATH_LABELS={stratagem='Call-in',eagle_rearm='Eagle Rearm',deployed_entity='Deployed Entity',shield='Shield',
     turret='Turret',targeting='Targeting',minefield='Minefield',weapon='Mounted Weapon'}
--- Read-only choices shown locked with the Runtime's reason (HD2Runtime 0.30.4: the Eagles' rearm pool)
+-- Read-only choices shown locked with the Runtime's reason (HD2Runtime 0.31.0: the Eagles' rearm pool)
 local READ_ONLY_CHOICES={['stratagem.rearm_pool']=true}
 -- A mounted weapon's field section: 'Mounted Weapon', or 'Mounted Weapon · Heat' (Wind-up, Beam, Handling ...)
 local function mounted_section(id)
@@ -863,7 +863,7 @@ local function stratagem_rows(hd2,object,entry)
             end
             local target=stratagem_target(hd2,name,t)
             if target then
-                -- HD2Runtime 0.30.4 stratagem.rearm_pool: joining the Eagle Rearm pool needs a finite use count (the
+                -- HD2Runtime 0.31.0 stratagem.rearm_pool: joining the Eagle Rearm pool needs a finite use count (the
                 -- Runtime refuses REARM_POOL_UNLIMITED); read-only on the Eagles, with the Runtime's reason
                 local note=f.semanticFieldId=='stratagem.rearm_pool'and f.editable
                     and'Eagle Rearm pool: Mission uses become charges and must be a number, not unlimited'or nil
@@ -891,7 +891,7 @@ local function stratagem_rows(hd2,object,entry)
             end
         end
     end
-    -- HD2Runtime 0.30.4: the rearm pool and the mission uses depend on each other (a pool member keeps a finite use
+    -- HD2Runtime 0.31.0: the rearm pool and the mission uses depend on each other (a pool member keeps a finite use
     -- count, REARM_POOL_UNLIMITED): the layer orders their ensures (editor/layer.lua rearm_wait)
     local uses,pool
     for _,r in ipairs(rows)do
@@ -989,7 +989,7 @@ local function dormant_notice(f)
         if type(n)=='table'and n.kind=='dormant'then return n.text or'the game does not read it on this item'end
     end
 end
--- Hover Pack height (HD2Runtime 0.30.4, docs/backpack-authoring.md "How high the Hover Pack flies"): gravity keeps
+-- Hover Pack height (HD2Runtime 0.31.0, docs/backpack-authoring.md "How high the Hover Pack flies"): gravity keeps
 -- acting while hovering, so the lift is what makes the pack climb; the duration is the climb window, not the hover time.
 local HOVER_LABELS={['hover.vertical_acceleration_low_speed']='Lift (climbs when above 9.82)',
     ['hover.vertical_acceleration_high_speed']='Lift at high climb speed',
@@ -1050,7 +1050,7 @@ local function vehicle_weapon_rows(hd2,object,entry)
     local rows={}
     local carrier,mount=entry.vehicle,entry.mount
     local drone=entry.carrier=='backpack_drone'
-    -- HD2Runtime 0.30.4: a mount that holds a shield arm, not a weapon (the EXO-55 Breakthrough's left mount) is
+    -- HD2Runtime 0.31.0: a mount that holds a shield arm, not a weapon (the EXO-55 Breakthrough's left mount) is
     -- reached through the vehicle's :shield(), never :weapon(mount)
     local shield=entry.mountedShield==true
     local function base()
@@ -1108,7 +1108,7 @@ local function vehicle_weapon_rows(hd2,object,entry)
     -- one with no projectile at all (a flamethrower) gets no row. Like the sentry swap, its target is a handle no hd2
     -- call chain builds, so the row carries the Lua that reaches it for the exporter.
     if shield then return rows end
-    -- HD2Runtime 0.30.4 beam swaps on a mounted beam host (the Rover's laser: read-only with the Runtime's reason)
+    -- HD2Runtime 0.31.0 beam swaps on a mounted beam host (the Rover's laser: read-only with the Runtime's reason)
     for _,f in ipairs(entry.fields or{})do
         if f.type=='beam_reference'then
             local code=drone and('hd2.backpack('..string.format('%q',carrier)..'):drone():weapon():beam_source()')
@@ -1283,13 +1283,13 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
 end
 
 ------------------------------------------------------------------------------------------- beam conversion --
--- HD2Runtime beam conversion (feature/beam-conversion; docs/beam-conversion.md), feature-detected: a projectile weapon
+-- HD2Runtime beam conversion (0.31.0; docs/beam-conversion.md), feature-detected: a projectile weapon
 -- made to fire LAS-13 Trident pulses, through hd2.beam_conversion(name). Rows of a "Beam Conversion" group on the
 -- weapon: the verdict and caveats (a refused weapon shows only its reason), the layout and its multiplayer rule, the
 -- enable toggle, its own rate / beams / pulse and the interim per-weapon damage, AP and range rows. Every request needs
 -- allow_component_swap and allow_unverified_effect. Not a plan operation: the layer writes each field as its own
 -- ensure (settings only once the conversion is on, editor/layer.lua), and the exporter writes one transaction per
--- weapon (editor/export.lua). Without the API (HD2Runtime 0.30.3, 0.30.4) a weapon gets no such rows.
+-- weapon (editor/export.lua). Without the API (HD2Runtime 0.30.3 and older) a weapon gets no such rows.
 local CONVERSION_VERDICTS={supported='Supported',supported_with_caveats='Supported with caveats',refused='Refused',
     out_of_scope='Out of scope'}
 local conversion_index
@@ -1551,7 +1551,7 @@ local function sentry_swap_rows(hd2,object,name)
                 source=function()return primary():projectile_source()end,
                 options=function(row)return projectile_options(hd2,row)end,own_label='Own round'})
         elseif f.type=='beam_reference'then
-            -- HD2Runtime 0.30.4: the Laser Sentry fires any catalogued beam
+            -- HD2Runtime 0.31.0: the Laser Sentry fires any catalogued beam
             rows[#rows+1]=source_row(object,{id='attack.beam@stratagem',label='Beam',section='Beam · Swap',descriptor=f,
                 field='attack.beam',code=attack..':beam_source()',source=function()return primary():beam_source()end,
                 options=function(row)return beam_options(hd2,row)end,own_label='Own beam'})
@@ -1727,14 +1727,14 @@ function CATEGORY.throwables(cat)
     end
     return sorted_objects(list)
 end
--- Status effects (HD2Runtime 0.30.4 hd2.status_effect): each status's own definition, for every attack that applies
+-- Status effects (HD2Runtime 0.31.0 hd2.status_effect): each status's own definition, for every attack that applies
 -- it: how long it lasts (status.duration) and the damage row it deals while active (:damage()).
 function CATEGORY.status_effects(cat)
     local D,why=load('status_effect_authoring')
     -- (an older HD2Runtime has no such module: say which version adds it, not the loader's search path)
     if not D or type(D.statuses)~='table'then
         if why and not tostring(why):find('not found',1,true)then return nil,why end
-        return nil,'this HD2Runtime has no status effect stats (HD2Runtime 0.30.4)'
+        return nil,'this HD2Runtime has no status effect stats (HD2Runtime 0.31.0)'
     end
     local hd2=cat.hd2
     local list={}
@@ -2027,7 +2027,7 @@ function Catalog:objects(category)
     return list,self.errors[category]
 end
 function Catalog:count(category)return#(self:objects(category))end
--- Values another mod owns (HD2Runtime 0.30.4+: hd2.inspect). A mod outside HD2Runtime (a data-file mod, or one that
+-- Values another mod owns (HD2Runtime 0.31.0+: hd2.inspect). A mod outside HD2Runtime (a data-file mod, or one that
 -- writes game memory itself, such as one rebuilding a weapon's components) owns a value HD2Runtime refuses to write;
 -- its row is locked with that reason instead of failing when it is edited. Values another HD2Runtime mod holds stay
 -- editable (the editor takes such an operation over). Once per object, read only, in the background: one request per

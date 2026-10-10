@@ -609,7 +609,7 @@ do
     assert(warned,'Settings says the language cannot be drawn')
     H.app.language_cache=nil
 end
--- HD2Runtime 0.30.4+ (issue #8): the game's own fonts draw Chinese in any game language; only characters no game font
+-- HD2Runtime 0.31.0+ (issue #8): the game's own fonts draw Chinese in any game language; only characters no game font
 -- has count (hd2.ui.unsupported), in one call for the whole file
 do
     local before=package.loaded['mods/skyeshade/hd2runtime']
@@ -1158,7 +1158,7 @@ do
     step({'ESCAPE'})
     assert(H.app.view=='search'and H.app.gsearch.text=='','Escape clears the query first')
 end
--- HD2Runtime 0.30.4 (where the Runtime has them): status effects as their own category, beam swaps, support weapon
+-- HD2Runtime 0.31.0 (where the Runtime has them): status effects as their own category, beam swaps, support weapon
 -- projectile swaps (exported through projectile_source), status choices on vehicle weapons, the Laser Sentry's beam
 do
     local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')

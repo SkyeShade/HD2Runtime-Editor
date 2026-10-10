@@ -119,7 +119,7 @@ local active,applying,errors=layer:counts()
 check(active==0 and applying==0 and errors==0,'nothing active after reset all')
 out[#out+1]='reset all ok'
 
--- 7. Values another mod owns (HD2Runtime 0.30.4 hd2.inspect): the rows hd2.inspect reports foreign or changed are
+-- 7. Values another mod owns (HD2Runtime 0.31.0 hd2.inspect): the rows hd2.inspect reports foreign or changed are
 -- locked with the reason, one request per target; the others stay editable; an older Runtime changes nothing.
 do
     local object=assert(cat:object('pw|AR-23 Liberator'))

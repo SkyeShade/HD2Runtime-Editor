@@ -100,13 +100,13 @@ local function list_files(folder)
     return out
 end
 
--- The characters of a translation map the overlay can never draw (the game then shows '?'). HD2Runtime 0.30.4+ draws
+-- The characters of a translation map the overlay can never draw (the game then shows '?'). HD2Runtime 0.31.0+ draws
 -- Chinese, Japanese, Korean and Russian in the game's own language fonts, in any game language, loading the font a
 -- text needs (hd2.ui.unsupported: only characters no game font has, Greek for one, count). An older HD2Runtime draws
 -- with FS Sinclair only (ASCII, Latin-1, the call-in arrows, a few punctuation marks). Returns how many distinct
 -- characters, and up to three of them.
 local glyphs
--- 'game_fonts' (HD2Runtime 0.30.4+: hd2.ui.unsupported) or 'latin' (FS Sinclair only).
+-- 'game_fonts' (HD2Runtime 0.31.0+: hd2.ui.unsupported) or 'latin' (FS Sinclair only).
 function M.drawing()
     local ok,hd2=pcall(require,'mods/skyeshade/hd2runtime')
     if ok and type(hd2)=='table'and type(hd2.ui)=='table'and type(hd2.ui.unsupported)=='function'then

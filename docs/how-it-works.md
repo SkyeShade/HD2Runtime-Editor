@@ -56,11 +56,11 @@ or the Runtime refuses it (`SELECTOR_REQUIRED`).
 - **The write:** `Layer:register` registers a transaction ensure. Its rates are the usual script choice, and its binding
   is a second choice that follows it (`mod:choice{follow}`, HD2Runtime r52): bound for every value with two or more
   rates, unbound for the others. One `set` moves both, and the ensure proves them together.
-- **Fire modes (HD2Runtime 0.30.4):** two or three fire modes on a weapon without a fire-mode selector
+- **Fire modes (HD2Runtime 0.31.0):** two or three fire modes on a weapon without a fire-mode selector
   (`fire_mode.modes` descriptor `fireModeState == 'addable'`) bind `weapon_function.<first bindable input>` =
   `fire_mode` the same way.
 
-## Fields that depend on another field (0.30.4)
+## Fields that depend on another field (0.31.0)
 
 Every field keeps its own ensure, so two fields the Runtime checks against each other are ordered by the layer
 (`Layer:tick`, before a dirty slot adopts or steers):

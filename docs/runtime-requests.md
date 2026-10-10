@@ -1,11 +1,11 @@
 # HD2Runtime work the editor is waiting on
 
-> **Status with HD2Runtime 0.30.4 (`wip/0.30.4` at `54aeecd`, development):** R5 done (wind-up: the heat weapons'
+> **Status with HD2Runtime 0.31.0 (release candidate; developed as 0.31.0):** R5 done (wind-up: the heat weapons'
 > firing charge and every weapon's spin-up are fields; the Sickles' "wind-up" is their firing charge, and the derived
 > `heat.warmup` names the fields that set it), R6 fully done (the GR-8, RL-77, FAF-14 and W.A.S.P. own spares are real
 > fields, every team-reload backpack's deposit is authorable with `start_amount` -1 = full; only the AC-8's own rounds
-> keep `noEffect`), R12 done (game-language fonts, `hd2.ui.unsupported`). The editor adopted all of 0.30.4 (see
-> "What 0.30.4 gives the editor" below) and the beam conversion branch (feature-detected). Open: R2, R3, R4, R8, R10,
+> keep `noEffect`), R12 done (game-language fonts, `hd2.ui.unsupported`). The editor adopted all of 0.31.0 (see
+> "What 0.31.0 gives the editor" below), beam conversion included (feature-detected). Open: R2, R3, R4, R8, R10,
 > R9 (Constitution duration).
 >
 > **Status with HD2Runtime 0.30.3 (`dcd996d`):** R1 done (all seven weapons resolved), R6 done (`noEffect` reasons;
@@ -75,7 +75,7 @@ Request: "reload speed for support weapons but not primaries".
 
 ### R5. LAS-16 Sickle and LAS-17 Double-Edge Sickle wind-up / wind-down
 
-> **Done in HD2Runtime 0.30.4:** the Sickles' wind-up is their WeaponHeat firing charge: `heat.firing_charge`,
+> **Done in HD2Runtime 0.31.0:** the Sickles' wind-up is their WeaponHeat firing charge: `heat.firing_charge`,
 > `heat.charge_gain_per_second`, `heat.charge_loss_per_second`, `heat.reset_charge_after_shot` (also the Sai, Scythe,
 > Dagger, Talon, Laser Cannon, Quasar, Rover and Laser Sentry); `windup.*` on the Maxigun, Patriot minigun, Maelstrom
 > and G-16. `heat.warmup` is derived (firing charge / gain per second) and read-only with that reason. The editor shows
@@ -93,7 +93,7 @@ it lives.
 
 ### R6. Team-reload backpack ammunition (AC-8 Autocannon, GR-8 Recoilless Rifle, FAF-14 Spear, airburst launcher)
 
-> **Done in HD2Runtime 0.30.4:** team-reload weapons reload from their own spares first, then the backpack. The GR-8,
+> **Done in HD2Runtime 0.31.0:** team-reload weapons reload from their own spares first, then the backpack. The GR-8,
 > RL-77, FAF-14 and StA-X3 `magazine.spare_magazines` / `starting_magazines` / `magazines_from_supply` are writable
 > (0 to 31); the five backpacks' `deposit.capacity` / `start_amount` (-1 = full) / `refill_amount` too. Only the AC-8's
 > own rounds keep `noEffect` (a nonzero spare count could underflow). The editor locks exactly the `noEffect` rows with
@@ -171,7 +171,7 @@ as Unlimited.
 
 ### R12. Chinese (and other non-Latin) text in mod windows
 
-> **Done in HD2Runtime 0.30.4 (development, issue #8):** mod windows draw Chinese, Japanese, Korean and Russian in the
+> **Done in HD2Runtime 0.31.0 (issue #8):** mod windows draw Chinese, Japanese, Korean and Russian in the
 > game's own language fonts, in any game language (the Runtime loads the font package a text needs); the Runtime's
 > panels too. `hd2.ui.unsupported(text)` counts only characters no game font has; the editor uses it (i18n.undrawable)
 > and keeps the FS Sinclair count for older Runtimes.
@@ -189,7 +189,7 @@ language's undrawable characters from `ui_fonts` advances and says so in Setting
 
 ### R9. Smaller
 
-- 0.30.4 status effects: `status.duration` is reviewed 0 to 100000, but the Constitution status's native duration is
+- 0.31.0 status effects: `status.duration` is reviewed 0 to 100000, but the Constitution status's native duration is
   999999 (effectively permanent), outside its own range. Editing works (the editor uses exact values there), but the
   range should include the native value, or 999999 be a named "permanent" sentinel.
 
@@ -199,7 +199,7 @@ language's undrawable characters from `ui_fonts` advances and says so in Setting
 - The underbarrel weapons' fired projectile is unproven (`notExposed`: "ProjectileWeapon +0 and WeaponRounds +64
   hold the same projectile"), so their projectile cannot be swapped.
 
-## What 0.30.4 gives the editor
+## What 0.31.0 gives the editor
 
 All adopted (editor after `0a93dcc`); each checked with the Runtime's validator (`tests/catalog_report.lua`) and a
 target / export / ModBuilder round trip.
