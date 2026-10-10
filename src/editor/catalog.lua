@@ -789,16 +789,29 @@ local function vehicle_rows(hd2,object,entry)
     end
     return rows
 end
+-- A field the Runtime marks dormant on this item ({kind='dormant', text}: the Hover Pack never reads the launch thrust)
+local function dormant_notice(f)
+    for _,n in ipairs(type(f.notices)=='table'and f.notices or{})do
+        if type(n)=='table'and n.kind=='dormant'then return n.text or'the game does not read it on this item'end
+    end
+end
 local function backpack_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    -- the Hover Pack shares the jump packs' JumppackComponent: its jump.* sustain and air-control members drive the
+    -- hover flight too, so they are "Flight" there, not a "Jump Pack" section on a pack that cannot jump
+    local hovers=false
+    for _,f in ipairs(entry.fields or{})do
+        if domain_of(f.semanticFieldId)=='hover'then hovers=true break end
+    end
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
         if f.editable and numeric(f.type,f.currentDefault)then
             local target,section
             if t.path=='backpack'then
                 target=function()return hd2.backpack(name)end
-                section=f.uiGroup or domain_label(f.semanticFieldId)
+                section=f.uiGroup or(hovers and domain_of(f.semanticFieldId)=='jump'and'Flight')
+                    or domain_label(f.semanticFieldId)
             elseif t.path=='linked'then
                 local linked=t.linked
                 if linked=='drone'then target=function()return hd2.backpack(name):drone()end
@@ -818,6 +831,12 @@ local function backpack_rows(hd2,object,entry)
                     storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=shared_ack(f),
                     unverified=unverified(f),descriptor=f,section=section,
                     group=t.path=='damage_zone'and'Damage Zones'or nil})
+                -- shown locked with the Runtime's reason, so nobody edits a value the game ignores
+                local why=dormant_notice(f)
+                if why then
+                    rows[#rows].editable,rows[#rows].reason=false,'no effect on this pack (HD2Runtime: '
+                        ..util.plain(tostring(why),120)..')'
+                end
             end
         end
     end
