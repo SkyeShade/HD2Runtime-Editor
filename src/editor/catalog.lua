@@ -163,7 +163,8 @@ local function make_row(object,spec)
         min=min,max=max,integer=integer,storage=spec.storage,field=spec.field,target=spec.target,
         shared=spec.shared==true,unverified=spec.unverified==true,descriptor=spec.descriptor,
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
-            allow_unverified_reference=spec.unverified_reference==true or nil},
+            allow_unverified_reference=spec.unverified_reference==true or nil,
+            allow_component_swap=spec.component_swap==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group,
         note=spec.note or beam_note(spec),disabled_value=spec.disabled_value,info=spec.info}
     -- a turret's limits are ordered (minimum below maximum, checked against the other limit's reviewed value): the
@@ -194,7 +195,8 @@ make_value_row=function(object,spec)
         held_vanilla=spec.vanilla,field=spec.field,target=spec.target,expect=spec.expect,shared=spec.shared==true,
         unverified=spec.unverified==true,descriptor=spec.descriptor,info=spec.info,
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
-            allow_unverified_reference=spec.unverified_reference==true or nil},
+            allow_unverified_reference=spec.unverified_reference==true or nil,
+            allow_component_swap=spec.component_swap==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.field,options=spec.options,labels=spec.labels,
         min=spec.min,max=spec.max,integer=spec.kind=='uses'or nil,directions=spec.directions,
         min_length=spec.min_length,max_length=spec.max_length,unlimited=spec.unlimited,group=spec.group,
@@ -1280,6 +1282,103 @@ local function enemy_rows(hd2,object,entry,schema,structure_ack)
     return rows
 end
 
+------------------------------------------------------------------------------------------- beam conversion --
+-- HD2Runtime beam conversion (feature/beam-conversion; docs/beam-conversion.md), feature-detected: a projectile weapon
+-- made to fire LAS-13 Trident pulses, through hd2.beam_conversion(name). Rows of a "Beam Conversion" group on the
+-- weapon: the verdict and caveats (a refused weapon shows only its reason), the layout and its multiplayer rule, the
+-- enable toggle, its own rate / beams / pulse and the interim per-weapon damage, AP and range rows. Every request needs
+-- allow_component_swap and allow_unverified_effect. Not a plan operation: the layer writes each field as its own
+-- ensure (settings only once the conversion is on, editor/layer.lua), and the exporter writes one transaction per
+-- weapon (editor/export.lua). Without the API (HD2Runtime 0.30.3, 0.30.4) a weapon gets no such rows.
+local CONVERSION_VERDICTS={supported='Supported',supported_with_caveats='Supported with caveats',refused='Refused',
+    out_of_scope='Out of scope'}
+local conversion_index
+local function conversion_entry(name)
+    if conversion_index==nil then
+        local C=load('beam_conversion')
+        conversion_index=false
+        if C and type(C.weapons)=='table'and type(C.fields)=='table'then
+            conversion_index={module=C,by_name={}}
+            for _,w in ipairs(C.weapons)do if type(w)=='table'and w.name then conversion_index.by_name[w.name]=w end end
+        end
+    end
+    return conversion_index and conversion_index.by_name[name],conversion_index and conversion_index.module
+end
+M.conversion_entry=conversion_entry
+local CONVERSION_GROUP='Beam Conversion'
+local function beam_conversion_rows(cat,object,name)
+    if type(cat.real_hd2)~='table'or type(cat.real_hd2.beam_conversion)~='function'then return {}end
+    local w,C=conversion_entry(name)
+    -- not a projectile weapon, or already a beam: nothing to convert, nothing to show
+    if not w or w.verdict=='out_of_scope'then return {}end
+    local hd2=cat.hd2
+    local target=function()return hd2.beam_conversion(name)end
+    local rows={}
+    local section=CONVERSION_GROUP
+    local function info(id,label,text,reason)
+        rows[#rows+1]=info_row(object,{id='bc:'..id,label=label,text=text,reason=reason,section=section,
+            field='beam_conversion.'..(id:match('^[%a_]+')or'info'),
+            group=CONVERSION_GROUP,info=true,target=target})
+    end
+    local verdict=(CONVERSION_VERDICTS[w.verdict]or util.humanize(tostring(w.verdict)))
+        ..(w.layout and(' · '..w.layout..' layout')or'')
+    info('verdict','Verdict',verdict,(w.reasonCode and(w.reasonCode..': ')or'')..tostring(w.reason or''))
+    if not w.supported then return rows end
+    for i,c in ipairs(type(w.caveats)=='table'and w.caveats or{})do
+        info('caveat:'..i,'Caveat: '..util.humanize(tostring(c.code or i):lower()),'Caveat',tostring(c.text or c.code))
+    end
+    local add=w.layout=='add'
+    info('layout','Layout',add and'Add: identical lobbies only'or'Swap: solo only, then restart',
+        add and('Add layout: the weapon keeps its projectile component (type 0) and gains a beam. With other players '
+            ..'only when every member runs HD2Runtime holding the identical conversion; a player without it sees '
+            ..'bullets where you see beams.')
+        or('Swap layout: the projectile component is swapped for a beam. Solo only (refused with other players: a '
+            ..'remote weapon of this type would crash the game). Restart the game after using it.'))
+    info('unequip','Before changing it','Unequip first','Writes wait until no instance of this weapon exists on this '
+        ..'machine (ship preview, armory, loadouts, pickups, other players\' weapons): equip another weapon, keep the '
+        ..'armory closed, change it, wait until it applies, then equip it.')
+    local enabled
+    local settings={}
+    for _,f in ipairs(C.fields)do
+        local common={id='bc:'..tostring(f.id),label=f.displayName,unit=f.unit,field=f.id,target=target,
+            component_swap=true,unverified=true,group=CONVERSION_GROUP}
+        local row
+        if f.type=='boolean'then
+            common.kind,common.vanilla,common.labels='choice',f.default==true,bool_labels()
+            common.options=static_options(common.labels)
+            common.section=section
+            common.note=add and'Solo, or a lobby where everyone has the identical conversion; unequip the weapon first'
+                or'Solo only; unequip the weapon first; restart the game after using it'
+            row=make_value_row(object,common)
+            enabled=enabled or row
+        elseif type(f.default)=='number'then
+            common.vanilla,common.min,common.max,common.type,common.storage=f.default,f.min,f.max,f.type,f.storage
+            if f.perWeapon then
+                common.section=join(CONVERSION_GROUP,'Per-weapon rows (interim, max 6)')
+                common.note='Interim: one of 6 borrowed rows (solo, this game build); turn the conversion on first'
+            else
+                common.section=join(CONVERSION_GROUP,'Rate and pulse')
+                common.note=f.id=='beam.pulse_seconds'
+                    and'Caps the fire rate: 600 rpm needs at most 0.067 s, 900 rpm 0.033 s (a pulse starts after the last one ended)'
+                    or f.id=='beam.fire_rate'and'Turn the conversion on first; without a pulse change the pulse is fitted to the rate'
+                    or'Turn the conversion on first'
+            end
+            row=make_row(object,common)
+            settings[#settings+1]=row
+        end
+        if row then
+            -- one descriptor per field for every weapon: identity by the row's own key, not by the shared table
+            row.descriptor,row.no_inspect,row.conversion=f,true,name
+            rows[#rows+1]=row
+        end
+    end
+    if enabled then
+        enabled.conversion_rows=settings
+        for _,r in ipairs(settings)do r.conversion_enabled=enabled end
+    end
+    return rows
+end
+
 ------------------------------------------------------------------------------------------------ families --
 -- Each category: list = function(cat) -> {{key, name, subtitle, build = function(object) -> rows}}.
 local CATEGORY={}
@@ -1416,6 +1515,7 @@ local function player_category(slot)
                                 end,function(row)row.group='Underbarrel Weapon'end))
                             end
                         end
+                        append(rows,beam_conversion_rows(cat,object,name))
                         for _,m in ipairs(weapon_attachments(name))do
                             local label=util.plain((m.entry.name or m.id):gsub('%s+',' '),60)
                             append(rows,part_rows(object,'mag:'..m.id,function(proxy)
@@ -1518,6 +1618,7 @@ function CATEGORY.support_weapons(cat)
                 local rows={}
                 if stratagem then append(rows,part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end))end
                 append(rows,part_rows(object,'sw',function(p)return support_rows(cat.hd2,p,weapon)end))
+                append(rows,beam_conversion_rows(cat,object,name))
                 if backpack then
                     append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack)end,
                         function(row)if not row.group then row.section=join('Backpack',row.section)end end))
@@ -1945,7 +2046,8 @@ function Catalog:check_owners(object)
     object.owners_checked=true
     local groups,order={},{}
     for _,row in ipairs(object.rows or{})do
-        if row.editable and type(row.target)=='function'and type(row.field)=='string'then
+        -- (a beam conversion has its own live status, not a reviewed value: not inspected)
+        if row.editable and not row.no_inspect and type(row.target)=='function'and type(row.field)=='string'then
             local ok,target=pcall(row.target)
             local okx,expect=pcall(M.expect,row)
             if ok and type(target)=='table'and okx and expect~=nil then

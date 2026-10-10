@@ -1,4 +1,4 @@
--- The rows HD2Runtime 0.30.4 adds, each checked only where the Runtime under test
+-- The rows HD2Runtime 0.30.4 (and the beam conversion feature) add, each checked only where the Runtime under test
 -- publishes it: sections, labels, locks and acknowledgements. Returns one line per check that ran.
 local hd2=require('hd2runtime/api/hd2')
 local catalog=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
@@ -68,5 +68,21 @@ local heat=find(rows('st|A/LAS-98 Laser Sentry'),function(r)return r.field=='hea
 if heat then
     check(heat.section=='Mounted Weapon · Heat','sentry heat section: '..heat.section)
     out[#out+1]='mounted sections ok'
+end
+-- beam conversion (feature branch): present only with the API
+local bc=find(rows('pw|AR-23 Liberator'),function(r)return r.conversion~=nil end)
+if type(hd2.beam_conversion)=='function'and has('beam_conversion')then
+    check(bc and bc.group=='Beam Conversion','conversion rows on the Liberator')
+    local refused=rows('pw|DBS-2 Double Freedom')
+    local verdict=find(refused,function(r)return r.key:find('bc:verdict',1,true)end)
+    check(verdict and not verdict.editable and verdict.reason:find('ROUNDS_NO_BEAM_RELOAD',1,true),'refused verdict')
+    check(not find(refused,function(r)return r.conversion and r.editable end),'a refused weapon has no conversion fields')
+    check(not find(rows('pw|LAS-13 Trident'),function(r)return r.group=='Beam Conversion'end),'out of scope: none')
+    local per=find(rows('pw|AR-23 Liberator'),function(r)return r.key:find('bc:damage.standard_damage',1,true)end)
+    check(per and per.section:find('interim, max 6',1,true)and per.acks.allow_component_swap,'per-weapon rows')
+    out[#out+1]='beam conversion ok'
+else
+    check(not bc,'no conversion rows without the API')
+    out[#out+1]='no beam conversion ok'
 end
 return table.concat(out,'\n')

@@ -307,6 +307,42 @@ function M.operation(catalog_module,entry,id)
     return text
 end
 
+-- One weapon's beam conversion changes {{row, value}, ...} as one transaction (HD2Runtime beam conversion: never a
+-- plan operation; its settings are accepted only with the conversion in the same request or on a converted weapon, so
+-- beam_conversion.enabled goes first). allow_component_swap and allow_unverified_effect, as the validator asks.
+function M.conversion_operation(catalog_module,list,id)
+    local ok,text=pcall(function()
+        table.sort(list,function(a,b)
+            local ea,eb=a.row.conversion_rows~=nil,b.row.conversion_rows~=nil
+            if ea~=eb then return ea end
+            return tostring(a.row.key)<tostring(b.row.key)
+        end)
+        local first=list[1].row
+        local target=first.target_code or M.trace(first.target)
+        local acks={allow_component_swap=true,allow_unverified_effect=true}
+        local lines={}
+        for _,entry in ipairs(list)do
+            local row,value=entry.row,entry.value
+            local okp,result=catalog_module.probe(row,value)
+            if okp and type(result)=='table'then for k,on in pairs(result)do if on then acks[k]=true end end end
+            local expect=row.expect_code or(row.expect and M.trace(row.expect))or literal(row.vanilla)
+            lines[#lines+1]='            {field='..literal(row.field)..',expect='..expect..',value='
+                ..M.value_code(catalog_module,row,value,target)..'},  -- '..row.label..'\n'
+        end
+        local names={}
+        for k in pairs(acks)do names[#names+1]=k end
+        table.sort(names)
+        local flags=''
+        for _,k in ipairs(names)do flags=flags..'\n        '..k..'=true,'end
+        return '-- '..first.object.name..': beam conversion (one transaction, never a plan; unequip the weapon first)\n'
+            ..'add(function() return hd2.ensure({\n    recover=true,\n    transaction={\n        id='..literal(id)..',\n'
+            ..'        target='..target..',\n        changes={\n'..table.concat(lines)..'        },'..flags
+            ..'\n    }\n}) end)\n'
+    end)
+    if not ok then return nil,tostring(text)end
+    return text
+end
+
 -- The addon source for the chosen changes, and the changes left out (with why).
 function M.addon(catalog_module,entries,meta)
     local parts={'-- '..meta.name..' '..meta.version..': exported from HD2R Editor ('..#entries..' changes).\n',
@@ -315,9 +351,29 @@ function M.addon(catalog_module,entries,meta)
         "    else print('["..meta.name:gsub("'","").."] operation skipped: '..tostring(operation)) end\nend\n\n"}
     local skipped={}
     local prefix='hd2r-'..M.murmur64(meta.resource):sub(1,8)..'-'
+    -- a weapon's beam conversion changes: one transaction, written where its first change is
+    local conversions,written={},{}
+    for _,entry in ipairs(entries)do
+        local name=entry.row and entry.row.conversion
+        if name then
+            conversions[name]=conversions[name]or{}
+            table.insert(conversions[name],entry)
+        end
+    end
     for i,entry in ipairs(entries)do
-        local text,why=M.operation(catalog_module,entry,prefix..i)
-        if text then parts[#parts+1]=text..'\n'else skipped[#skipped+1]={entry=entry,why=why}end
+        local name=entry.row and entry.row.conversion
+        local text,why
+        if name then
+            if not written[name]then
+                written[name]=true
+                text,why=M.conversion_operation(catalog_module,conversions[name],prefix..i)
+                if not text then for _,e in ipairs(conversions[name])do skipped[#skipped+1]={entry=e,why=why}end end
+            end
+        else
+            text,why=M.operation(catalog_module,entry,prefix..i)
+            if not text then skipped[#skipped+1]={entry=entry,why=why}end
+        end
+        if text then parts[#parts+1]=text..'\n'end
     end
     parts[#parts+1]='return operations\n'
     return table.concat(parts),skipped

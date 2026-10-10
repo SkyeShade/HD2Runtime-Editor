@@ -1419,7 +1419,7 @@ function App:draw_fields(y0,h)
             if unit then cv:text(unit,x+FX.unit,cy,{size=SZ.tiny,colour=C.faint,max=56})end
             -- source badge
             local bxr=x+lw+FX.badge_right
-            if not row.editable then chip(cv,L('LOCKED'),bxr,cy,C.faint,C.line,'right')
+            if not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
             elseif state=='error'then chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
             elseif source=='pending'then chip(cv,L('PENDING'),bxr,cy,C.pending,C.pending_soft,'right')
             elseif state=='applying'then chip(cv,L('APPLYING'),bxr,cy,C.gold,C.gold_soft,'right')
@@ -1452,7 +1452,8 @@ function App:draw_status(y,h)
             return
         end
         if not row.editable then
-            cv:text(L('Locked: ')..tostring(row.reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
+            -- (an information row, such as a beam conversion's verdict or caveat, is not a lock)
+            cv:text((row.info and L('Note: ')or L('Locked: '))..tostring(row.reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
             return
         end
         local range

@@ -224,14 +224,20 @@ local function slot_for(self,row)
     end
     return slot
 end
--- Mission uses back to unlimited (their reset) take the stratagem out of the Eagle Rearm pool the editor put it in
--- (REARM_POOL_UNLIMITED).
+-- Turning a beam conversion off (or back to the weapon as shipped) takes its settings back too: they apply to a
+-- converted weapon only (editor/catalog.lua conversion_rows). Mission uses back to unlimited (their reset) take the
+-- stratagem out of the Eagle Rearm pool the editor put it in (REARM_POOL_UNLIMITED).
 local function release_dependents(self,row,value,from_reset)
     if from_reset and row.pool_row and value=='unlimited'then
         local s=self.slots[row.pool_row.loc]
         if s and s.user and(s.target==catalog_module.EAGLE_REARM or s.target=='eagle_rearm')then
             self:reset(row.pool_row)
         end
+    end
+    if not row.conversion_rows or value==true then return end
+    for _,r in ipairs(row.conversion_rows)do
+        local s=self.slots[r.loc]
+        if s and(s.user or s.error)then self:reset(r)end
     end
 end
 -- Ask for the user's value on a field. False and why when the value cannot be held exactly.
@@ -629,6 +635,21 @@ local function step_perks(self)
     self:changed()
 end
 
+-- Beam conversions (HD2Runtime beam conversion, docs/beam-conversion.md): a converted weapon's own rate, pulse, damage
+-- and range are accepted only once the weapon is converted (NOT_CONVERTED otherwise), and a conversion is never part
+-- of a plan. Each field keeps its own ensure; a setting the user changes waits while its conversion is still being
+-- applied, and is refused at once when the conversion is not on. True while the slot must wait (or just failed).
+local function conversion_wait(self,slot)
+    local enabled=slot.row.conversion_enabled
+    if not enabled then return false end
+    local value=self:value(enabled)
+    if value~=true then
+        fail(self,slot,'turn "'..tostring(enabled.label)..'" on first: its settings apply to a converted weapon only')
+        return true
+    end
+    return self:state(enabled)=='applying'
+end
+
 -- The Eagle Rearm pool (HD2Runtime 0.30.4 stratagem.rearm_pool): a pool member keeps a finite use count, which the
 -- Runtime checks against the row's bytes when it applies (REARM_POOL_UNLIMITED). Each field keeps its own ensure, so
 -- joining the pool waits for a finite Mission uses being applied, and unlimited uses wait for the pool being left;
@@ -718,9 +739,9 @@ function Layer:tick(dt)
                 end
             end
         elseif(slot.phase=='hold'or slot.phase=='idle')and slot.dirty
-            and rearm_wait(self,slot)then
-            -- a field that depends on another waits for it (or was refused): the rearm pool and the mission uses for
-            -- each other
+            and((slot.user and conversion_wait(self,slot))or rearm_wait(self,slot))then
+            -- a field that depends on another waits for it (or was refused): a beam conversion setting for its
+            -- conversion, the rearm pool and the mission uses for each other
         elseif slot.phase=='hold'or slot.phase=='idle'then
             if slot.dirty then
                 slot.dirty=false
