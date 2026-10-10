@@ -1086,16 +1086,35 @@ do
         local mg=swap_of('A/MG-43 Machine Gun Sentry')
         assert(mg and not mg.editable and mg.reason:find('magazine',1,true),'MG-43 read-only with the reason')
     end
-    -- team-reload ammunition rows: locked, saying the backpack holds it
+    -- team-reload ammunition rows: locked, saying the backpack holds it, while the Runtime flags them noEffect
+    -- (HD2Runtime 0.30.2 to 0.31.0 rc1); editable own rounds with their note since the 0.31.0 rc2
     local S=require('hd2runtime/domains/support_weapon_authoring')
-    local flagged
-    for _,f in ipairs((S.weapons['AC-8 Autocannon']or{}).fields or{})do if f.noEffect then flagged=true end end
-    if flagged then
+    local flagged,own
+    for _,f in ipairs((S.weapons['AC-8 Autocannon']or{}).fields or{})do
+        if f.noEffect then flagged=true end
+        if f.semanticFieldId=='rounds.spare_rounds'and type(f.teamReload)=='table'and f.teamReload.ownSpares then
+            own=true end
+    end
+    if flagged or own then
         local o=H.catalog:object('sp|AC-8 Autocannon')
         H.catalog:open(o)
-        local spare
-        for _,r in ipairs(o.rows)do if r.field=='rounds.spare_rounds'then spare=r end end
-        assert(spare and not spare.editable and spare.reason:find('backpack',1,true),'AC-8 spare rounds locked')
+        local spare,start
+        for _,r in ipairs(o.rows)do
+            if r.field=='rounds.spare_rounds'then spare=r end
+            if r.field=='rounds.starting_rounds'then start=r end
+        end
+        if flagged then
+            assert(spare and not spare.editable and spare.reason:find('backpack',1,true),'AC-8 spare rounds locked')
+        else
+            assert(spare and spare.editable and spare.note and spare.note:find('Most own rounds',1,true),
+                'AC-8 spare rounds editable with the own-rounds note: '..tostring(spare and spare.note))
+            assert(start and start.editable and start.note:find('Spare rounds',1,true),
+                'AC-8 starting rounds capped by Spare rounds: '..tostring(start and start.note))
+            assert(spare.descriptor.max==511 and spare.descriptor.acknowledgement=='allow_unverified_effect',
+                'the Runtime range and acknowledgement')
+            local ok,why=catalog_module.probe(spare,20)
+            assert(ok,'the Runtime validator accepts 20 own rounds: '..tostring(why))
+        end
     end
     -- the wheel: footer and Settings say it is off; nothing when it works
     H_wheel={native=false,install_option='hook_off',

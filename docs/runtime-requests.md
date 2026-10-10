@@ -3,8 +3,8 @@
 > **Status with HD2Runtime 0.31.0 (release candidate; developed as 0.31.0):** R5 done (wind-up: the heat weapons'
 > firing charge and every weapon's spin-up are fields; the Sickles' "wind-up" is their firing charge, and the derived
 > `heat.warmup` names the fields that set it), R6 fully done (the GR-8, RL-77, FAF-14 and W.A.S.P. own spares are real
-> fields, every team-reload backpack's deposit is authorable with `start_amount` -1 = full; only the AC-8's own rounds
-> keep `noEffect`), R12 done (game-language fonts, `hd2.ui.unsupported`). The editor adopted all of 0.31.0 (see
+> fields, every team-reload backpack's deposit is authorable with `start_amount` -1 = full; since the release
+> candidate 2 the AC-8's own rounds are real fields too, 0 to 511), R12 done (game-language fonts, `hd2.ui.unsupported`). The editor adopted all of 0.31.0 (see
 > "What 0.31.0 gives the editor" below), beam conversion included (feature-detected). Open: R2, R3, R4, R8, R10,
 > R9 (Constitution duration).
 >
@@ -95,9 +95,11 @@ it lives.
 
 > **Done in HD2Runtime 0.31.0:** team-reload weapons reload from their own spares first, then the backpack. The GR-8,
 > RL-77, FAF-14 and StA-X3 `magazine.spare_magazines` / `starting_magazines` / `magazines_from_supply` are writable
-> (0 to 31); the five backpacks' `deposit.capacity` / `start_amount` (-1 = full) / `refill_amount` too. Only the AC-8's
-> own rounds keep `noEffect` (a nonzero spare count could underflow). The editor locks exactly the `noEffect` rows with
-> the Runtime's reason and shows the deposits under Backpack · Ammo.
+> (0 to 31); the five backpacks' `deposit.capacity` / `start_amount` (-1 = full) / `refill_amount` too. The AC-8's own
+> `rounds.spare_rounds` / `starting_rounds` / `rounds_from_supply` are real fields since the 0.31.0 release candidate 2
+> (0 to 511; rc1 kept them `noEffect` because a count below 5 "could underflow", which the Runtime's research then
+> showed is harmless: the game clamps it to 0 the same frame). The editor locks only rows the Runtime still flags
+> `noEffect`, notes the own-spare rows (Spare magazines / Spare rounds) and shows the deposits under Backpack · Ammo.
 
 Request: "backpack weapons like autocannon, you cannot manually edit ammo for them like starting rounds or max spare
 rounds like in Shodan".
@@ -211,7 +213,7 @@ target / export / ModBuilder round trip.
 | Game-language fonts, `hd2.ui.unsupported` | Translation check counts only characters no game font has |
 | Wind-up (`heat.firing_charge` ..., `windup.*`), derived `heat.warmup` / `heat.overheat_cooldown` | Wind-up section; derived values read-only with the reason |
 | Beam pulse (`beam.fire_mode`, `fire_rate`, `pulse_beams`, `pulse_seconds`), beam swaps | Fire mode by name; the "pulse caps the rate" note; swaps on every beam host (the Scythe's on its muzzle, shared; the Rover's read-only with the reason) |
-| Team-reload ammunition and deposits | Own spares editable with a note; deposits under Backpack · Ammo; AC-8 rounds locked |
+| Team-reload ammunition and deposits | Own spares (the AC-8's own rounds included) editable with a note; deposits under Backpack · Ammo |
 | Missiles (`missile.*`, `function_missile.*`) | Missile / Function Missile sections |
 | Mounted spread, EXO-55 Breakthrough shield arm | Mounted Handling rows (allow_shared where shared); the shield arm through `:shield()` |
 | Hover Pack, Breaching Hammer blast | Flight labels; Explosion · Ability |

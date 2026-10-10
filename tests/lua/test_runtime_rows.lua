@@ -38,7 +38,8 @@ if missile then
     check(missile.section=='Function Missile','missile section: '..missile.section)
     out[#out+1]='missiles ok'
 end
--- team-reload weapons (0.31.0): own spares editable with a note; the AC-8's own rounds stay locked
+-- team-reload weapons (0.31.0): own spares editable with a note; the AC-8's own rounds locked while the Runtime flags
+-- them noEffect (0.31.0 rc1), editable with their own-rounds note since the rc2 (teamReload.ownSpares)
 local spares=find(rows('sp|GR-8 Recoilless Rifle'),function(r)return r.field=='magazine.spare_magazines'end)
 if spares and spares.editable then
     check(spares.note,'own spares explained')
@@ -46,8 +47,18 @@ if spares and spares.editable then
     check(start and start.min==-1 and start.section=='Backpack · Ammo','deposit -1 = full, its section: '
         ..tostring(start and start.section))
     local rounds=find(rows('sp|AC-8 Autocannon'),function(r)return r.field=='rounds.spare_rounds'end)
-    check(rounds and not rounds.editable,'AC-8 own rounds locked')
-    out[#out+1]='team reload ok'
+    local own=rounds and type(rounds.descriptor)=='table'and type(rounds.descriptor.teamReload)=='table'
+        and rounds.descriptor.teamReload.ownSpares==true
+    if own then
+        check(rounds.editable and rounds.note and rounds.note:find('5-round clip',1,true),'AC-8 own rounds editable: '
+            ..tostring(rounds.note))
+        check(rounds.acks and rounds.acks.allow_unverified_effect or rounds.unverified,
+            'AC-8 own rounds carry allow_unverified_effect')
+        out[#out+1]='team reload ok (AC-8 own rounds editable)'
+    else
+        check(rounds and not rounds.editable,'AC-8 own rounds locked')
+        out[#out+1]='team reload ok'
+    end
 end
 -- the rearm pool (0.31.0): read-only on the Eagles with the Runtime's reason, labelled options elsewhere
 local pool=find(rows('st|Eagle 500kg Bomb'),function(r)return r.field=='stratagem.rearm_pool'end)

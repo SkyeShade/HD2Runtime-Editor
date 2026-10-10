@@ -680,6 +680,11 @@ local function player_rows(hd2,object,entry)
 end
 
 ------------------------------------------------------------------------------------------- support weapons --
+-- The maximum rows of a team-reload weapon's own ammunition (HD2Runtime 0.31.0 teamReload.ownSpares)
+local TEAM_RELOAD_NOTES={
+    ['magazine.spare_magazines']='Most own spares (0 natively); the reload uses them before the backpack',
+    ['rounds.spare_rounds']='Most own rounds (0 natively); each reload takes a 5-round clip from them before the '
+        ..'backpack (multiples of 5 recommended)'}
 local function support_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
@@ -761,9 +766,9 @@ local function support_rows(hd2,object,entry)
                 labels=labels,options=static_options(labels),descriptor=f,unverified=true,section='Charge'})
         end
     end
-    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect (0.31.0: only the
-    -- AC-8's own rounds; the GR-8, RL-77, FAF-14 and StA-X3 own spares are real fields now) are shown locked with the
-    -- Runtime's reason, so nobody edits a value the game ignores
+    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect are shown locked with
+    -- the Runtime's reason, so nobody edits a value the game ignores (0.31.0: none are left; the GR-8, RL-77, FAF-14
+    -- and StA-X3 own spares and, since the 0.31.0 rc2, the AC-8's own rounds are real fields)
     for _,r in ipairs(rows)do
         local d=type(r.descriptor)=='table'and r.descriptor
         -- (the reason itself in the domain, {reason} in the SDK JSON)
@@ -773,10 +778,10 @@ local function support_rows(hd2,object,entry)
                 ..util.plain(tostring(why),160)..')'
         elseif d and type(d.teamReload)=='table'and d.teamReload.ownSpares==true and not r.note then
             -- HD2Runtime 0.31.0: its own spares are used first, then the backpack; spawn and resupply are capped by
-            -- the spare maximum (0 natively)
-            r.note=r.field=='magazine.spare_magazines'
-                and'Most own spares (0 natively); the reload uses them before the backpack'
-                or'Capped by Spare magazines (0 natively); the reload uses own spares before the backpack'
+            -- the spare maximum (0 natively). The AC-8 counts rounds (a reload takes a 5-round clip)
+            r.note=TEAM_RELOAD_NOTES[r.field]or(tostring(r.field):find('^rounds%.')
+                and'Capped by Spare rounds (0 natively); the reload uses own rounds before the backpack'
+                or'Capped by Spare magazines (0 natively); the reload uses own spares before the backpack')
         end
     end
     return rows
