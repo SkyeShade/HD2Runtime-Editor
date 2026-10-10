@@ -224,6 +224,16 @@ local function slot_for(self,row)
     end
     return slot
 end
+-- Mission uses back to unlimited (their reset) take the stratagem out of the Eagle Rearm pool the editor put it in
+-- (REARM_POOL_UNLIMITED).
+local function release_dependents(self,row,value,from_reset)
+    if from_reset and row.pool_row and value=='unlimited'then
+        local s=self.slots[row.pool_row.loc]
+        if s and s.user and(s.target==catalog_module.EAGLE_REARM or s.target=='eagle_rearm')then
+            self:reset(row.pool_row)
+        end
+    end
+end
 -- Ask for the user's value on a field. False and why when the value cannot be held exactly.
 function Layer:set(row,value)
     local held=hold(row,value)
@@ -255,10 +265,12 @@ function Layer:set(row,value)
     if util.same(held,hold(row,(self:base(row))))then
         local slot=self.slots[row.loc]
         if slot and(slot.user or slot.error)then self:reset(row)end
+        release_dependents(self,row,held)
         return true
     end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
+    release_dependents(self,row,held)
     self:changed()
     return true
 end
@@ -270,6 +282,7 @@ function Layer:reset(row)
     slot.user,slot.error=false,nil
     slot.target=hold(slot.row,base)
     slot.dirty=true
+    release_dependents(self,slot.row,slot.target,true)
     self:changed()
     return true
 end
@@ -616,6 +629,31 @@ local function step_perks(self)
     self:changed()
 end
 
+-- The Eagle Rearm pool (HD2Runtime 0.30.4 stratagem.rearm_pool): a pool member keeps a finite use count, which the
+-- Runtime checks against the row's bytes when it applies (REARM_POOL_UNLIMITED). Each field keeps its own ensure, so
+-- joining the pool waits for a finite Mission uses being applied, and unlimited uses wait for the pool being left;
+-- the combination itself is refused at once with the reason. True while the slot must wait (or just failed).
+local function in_pool(value)return value==catalog_module.EAGLE_REARM or value=='eagle_rearm'end
+local function rearm_wait(self,slot)
+    local row=slot.row
+    if row.uses_row and in_pool(slot.target)then
+        if self:value(row.uses_row)=='unlimited'then
+            fail(self,slot,'REARM_POOL_UNLIMITED: in the Eagle Rearm pool its Mission uses are charges: set "'
+                ..tostring(row.uses_row.label)..'" to a number first')
+            return true
+        end
+        return self:state(row.uses_row)=='applying'
+    elseif row.pool_row and slot.target=='unlimited'then
+        if in_pool((self:value(row.pool_row)))then
+            fail(self,slot,'REARM_POOL_UNLIMITED: a stratagem in the Eagle Rearm pool keeps a finite use count: take it '
+                ..'out of the pool ("'..tostring(row.pool_row.label)..'") first')
+            return true
+        end
+        return self:state(row.pool_row)=='applying'
+    end
+    return false
+end
+
 -- Drives every field one update further. Cheap when nothing changes.
 function Layer:tick(dt)
     self.clock=(self.clock or 0)+(dt or 0)
@@ -679,6 +717,10 @@ function Layer:tick(dt)
                     fail(self,slot,'the Runtime did not confirm this change within '..GIVE_UP..' s ('..watch_state(w)..')')
                 end
             end
+        elseif(slot.phase=='hold'or slot.phase=='idle')and slot.dirty
+            and rearm_wait(self,slot)then
+            -- a field that depends on another waits for it (or was refused): the rearm pool and the mission uses for
+            -- each other
         elseif slot.phase=='hold'or slot.phase=='idle'then
             if slot.dirty then
                 slot.dirty=false

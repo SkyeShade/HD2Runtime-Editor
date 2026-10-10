@@ -177,6 +177,24 @@ class EditorTests(unittest.TestCase):
         if capabilities.is_file() and '"addable"' in capabilities.read_text(encoding='utf-8'):
             self.assertIn('fire modes with selector binding ok', result)
 
+    def test_runtime_0_30_4_rows(self):
+        # each check runs only where the Runtime under test publishes the field (0.30.3, 0.30.4, beam conversion)
+        result = lua_host.run('local f=assert(loadfile(%s)) return f()' % lua_host._lua_string(
+            (LUA / 'test_runtime_rows.lua').as_posix()))
+        if (lua_host.RUNTIME / 'domains' / 'status_effect_writes.lua').is_file():
+            for line in ('beam swaps ok', 'beam fire mode ok', 'team reload ok', 'derived heat ok',
+                         'mounted sections ok'):
+                self.assertIn(line, result)
+
+    def test_dependent_fields_follow_what_they_need(self):
+        # the rearm pool and the mission uses (HD2Runtime 0.30.4)
+        result = lua_host.run('local f=assert(loadfile(%s)) return f(%s)' % (
+            lua_host._lua_string((LUA / 'test_dependent_fields.lua').as_posix()),
+            lua_host._lua_string((LUA / 'sim.lua').as_posix())))
+        if (lua_host.RUNTIME / 'docs' / 'stratagem-uses.md').is_file() and 'rearm_pool' in (
+                lua_host.RUNTIME / 'docs' / 'stratagem-uses.md').read_text(encoding='utf-8'):
+            self.assertIn('rearm pool order ok', result)
+
     def test_window_frames_stay_inside_overlay_limits(self):
         result = lua_file('test_ui.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                           'harness': (LUA / 'ui_harness.lua').as_posix()})

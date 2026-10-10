@@ -80,7 +80,11 @@ local DOMAIN_LABELS={weapon='Weapon',magazine='Ammo & Magazine',rounds='Ammo & M
     function_ammo='Functions',entity='Health & Armor',zone='Damage Zones',shield='Shield',turret='Turret',
     targeting='Targeting',stratagem='Call-in',eagle='Eagle',orbital='Orbital Strike',minefield='Minefield',
     booster='Booster',throwable='Throwable',attachment='Magazine',jump='Jump Pack',hover='Hover Pack',
-    warp='Warp Pack',recharge='Recharge',drone='Drone',payload='Hellpod',windup='Wind-up'}
+    warp='Warp Pack',recharge='Recharge',drone='Drone',payload='Hellpod',windup='Wind-up',
+    -- HD2Runtime 0.30.4: the W.A.S.P., Spear, Commando, P-33 and P-92 missiles' own SeekingMissile records
+    missile='Missile',function_missile='Function Missile',deposit='Ammo'}
+-- A backpack field's own group (the Runtime's uiGroup): its section name.
+local UI_GROUPS={backpack_ammo='Ammo',drone_magazines='Drone Magazines'}
 -- The firing charge members of a heat weapon are its wind-up (HD2Runtime 0.30.4, research/windup-controls): shown with
 -- the spin-up fields under "Wind-up", where a player looking for the Sickle's wind-up finds them.
 local WIND_UP={['heat.firing_charge']=true,['heat.charge_gain_per_second']=true,['heat.charge_loss_per_second']=true,
@@ -116,7 +120,37 @@ end
 -- nothing between the two is valid.
 -- Fields the Runtime checks against another field (HD2Runtime player_weapon_writes TURRET_PAIRS).
 local ORDERED_LIMITS={['turret.yaw_min']=true,['turret.yaw_max']=true,['turret.pitch_min']=true,['turret.pitch_max']=true}
+local make_value_row
+-- The beam fire mode (HD2Runtime 0.30.4, BeamWeapon +100, a typed enum published as an integer 4 to 6): the game's
+-- three beam kinds by name.
+local BEAM_MODES={{value=4,label='Continuous (4)'},{value=5,label='Charged blast, 40-K (5)'},
+    {value=6,label='Pulsed, Trident (6)'}}
+-- The pulse length limits the beam fire rate (HD2Runtime 0.30.4 docs "beam.pulse_seconds limits beam.fire_rate"): a
+-- new pulse starts only in the update after the previous one ended.
+local PULSE_NOTE='Pulsed beams (mode 6): the pulse length caps the fire rate (600 rpm needs at most 0.067 s, 900 rpm 0.033 s)'
+local function beam_note(spec)
+    local d=type(spec.descriptor)=='table'and spec.descriptor or{}
+    local p=type(d.beamPulse)=='table'and d.beamPulse
+    if p and p.limitsFireRate==false then return nil end
+    if spec.field=='beam.pulse_seconds'or spec.field=='beam.fire_rate'then return PULSE_NOTE end
+    return nil
+end
 local function make_row(object,spec)
+    if spec.field=='beam.fire_mode'and type(spec.vanilla)=='number'and(spec.unit=='enum'or spec.min==4)then
+        local labels={}
+        for _,m in ipairs(BEAM_MODES)do
+            if(not spec.min or m.value>=spec.min)and(not spec.max or m.value<=spec.max)then labels[#labels+1]=m end
+        end
+        local copy={}
+        for k,v in pairs(spec)do copy[k]=v end
+        copy.kind,copy.labels,copy.unit='choice',labels,nil
+        copy.options=function()
+            local out={}
+            for i,item in ipairs(labels)do out[i]={value=item.value,label=item.label}end
+            return out
+        end
+        return make_value_row(object,copy)
+    end
     local integer=spec.type=='integer'or(spec.type~='number'and INTEGER_STORAGE[spec.storage or'']~=nil)
     local min,max=spec.min,spec.max
     local limits=STORAGE_LIMITS[spec.storage or'']
@@ -131,7 +165,7 @@ local function make_row(object,spec)
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
             allow_unverified_reference=spec.unverified_reference==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group,
-        note=spec.note,disabled_value=spec.disabled_value}
+        note=spec.note or beam_note(spec),disabled_value=spec.disabled_value,info=spec.info}
     -- a turret's limits are ordered (minimum below maximum, checked against the other limit's reviewed value): the
     -- layer gives them exact-value handles, never a range that would cross the other limit
     row.exact=ORDERED_LIMITS[tostring(spec.field)]or nil
@@ -154,11 +188,11 @@ M.make_row=make_row
 -- expect = function() -> the request's expect (references; default the vanilla value), options = function(row) ->
 -- {{value, label, sub}} (choices and references), labels = {{value, label}} (display names), min / max (uses),
 -- directions / min_length / max_length (codes).
-local function make_value_row(object,spec)
+make_value_row=function(object,spec)
     local row={key=object.key..'|'..spec.id,object=object,section=spec.section or'Fields',kind=spec.kind,
         label=util.plain(spec.label or util.humanize(spec.field),60),unit=spec.unit,vanilla=spec.vanilla,
         held_vanilla=spec.vanilla,field=spec.field,target=spec.target,expect=spec.expect,shared=spec.shared==true,
-        unverified=spec.unverified==true,descriptor=spec.descriptor,
+        unverified=spec.unverified==true,descriptor=spec.descriptor,info=spec.info,
         acks={allow_shared=spec.shared==true or nil,allow_unverified_effect=spec.unverified==true or nil,
             allow_unverified_reference=spec.unverified_reference==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.field,options=spec.options,labels=spec.labels,
@@ -432,6 +466,17 @@ local function static_options(labels)
         return out
     end
 end
+-- A read-only row that only shows a fact (a derived value, a verdict, a caveat): its text in the value box and the
+-- reason in the status line. spec: {id, label, field, section, group, reason, text, target, descriptor, info, note}.
+local function info_row(object,spec)
+    local labels={{value='info',label=spec.text or'-'}}
+    return make_value_row(object,{id=spec.id,kind='choice',label=spec.label,field=spec.field or'info',section=spec.section,
+        group=spec.group,vanilla='info',labels=labels,options=static_options(labels),editable=false,
+        reason=spec.reason,target=spec.target,descriptor=spec.descriptor,info=spec.info,note=spec.note})
+end
+M.info_row=info_row
+-- Derived heat values (HD2Runtime 0.30.4 heat.warmup, heat.overheat_cooldown) and the section that shows them.
+local DERIVED_HEAT={['heat.warmup']='Wind-up',['heat.overheat_cooldown']='Heat'}
 -- The armory's presentation of a weapon (presentation only: menus read it when they build an item view):
 -- the displayed armor penetration (one label) and the displayed traits (an ordered list of up to five), which share
 -- the weapon's five label slots (the layer edits one of them at a time).
@@ -602,13 +647,29 @@ local function player_rows(hd2,object,entry)
             end
         end
     end
-    -- HD2Runtime 0.30.4 beam swaps: a beam weapon fires another catalogued beam (weapon:beam_source())
+    -- HD2Runtime 0.30.4 beam swaps: a beam weapon fires another catalogued beam (weapon:beam_source()). The source
+    -- decides, not the field: the LAS-5 Scythe's own member is dormant (read-only), and its beam is swapped on the
+    -- default muzzle's delta row (shared by every weapon that defaults to that muzzle)
     for _,f in ipairs(entry.fields or{})do
-        if f.editable and f.type=='beam_reference'and not entry.subweaponOf then
-            rows[#rows+1]=source_row(object,{id='attack.beam',label='Beam',section='Beam · Swap',descriptor=f,
+        if f.type=='beam_reference'and not entry.subweaponOf then
+            local row=source_row(object,{id='attack.beam',label='Beam',section='Beam · Swap',descriptor=f,
                 field='attack.beam',code='hd2.weapon('..string.format('%q',name)..'):beam_source()',
                 source=function()return hd2.weapon(name):beam_source()end,
                 options=function(row)return beam_options(hd2,row)end,own_label='Own beam'})
+            if entry.ordinaryWritesBlocked==true and row.editable then row.editable,row.reason=false,BLOCKED_REASON end
+            rows[#rows+1]=row
+        end
+    end
+    -- HD2Runtime 0.30.4 (the LAS-99 Quasar report): the warm-up and the cooldown after an overheat are no members of
+    -- their own. Shown as read-only notes that name the fields to edit, where a player looks for them.
+    for _,f in ipairs(entry.fields or{})do
+        local id=f.semanticFieldId
+        local section=DERIVED_HEAT[tostring(id)]
+        if section and not f.editable and f.reason and not f.deprecated then
+            rows[#rows+1]=info_row(object,{id=id..'@derived',label=f.displayName or util.humanize(id),field=id,
+                section=section,reason=f.reason,descriptor=f,
+                text=type(f.currentDefault)=='number'and(util.format(f.currentDefault)..' (derived)')or'derived',
+                target=function()return hd2.weapon(name)end})
         end
     end
     -- the catalogue weapon each row writes ('AR/GL-21 One-Two / underbarrel' for a sub-weapon): ModBuilder's identity
@@ -698,15 +759,22 @@ local function support_rows(hd2,object,entry)
                 labels=labels,options=static_options(labels),descriptor=f,unverified=true,section='Charge'})
         end
     end
-    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows do nothing (its backpack holds the ammunition):
-    -- shown locked with the reason, so nobody edits a value the game ignores
+    -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect (0.30.4: only the
+    -- AC-8's own rounds; the GR-8, RL-77, FAF-14 and StA-X3 own spares are real fields now) are shown locked with the
+    -- Runtime's reason, so nobody edits a value the game ignores
     for _,r in ipairs(rows)do
         local d=type(r.descriptor)=='table'and r.descriptor
         -- (the reason itself in the domain, {reason} in the SDK JSON)
         local why=d and(type(d.noEffect)=='table'and d.noEffect.reason or d.noEffect)
         if why and r.editable then
-            r.editable,r.reason=false,'no effect: the backpack holds this weapon\'s ammunition (HD2Runtime: '
-                ..util.plain(tostring(why),120)..')'
+            r.editable,r.reason=false,'team-reload weapon, its backpack holds the ammunition (HD2Runtime: '
+                ..util.plain(tostring(why),160)..')'
+        elseif d and type(d.teamReload)=='table'and d.teamReload.ownSpares==true and not r.note then
+            -- HD2Runtime 0.30.4: its own spares are used first, then the backpack; spawn and resupply are capped by
+            -- the spare maximum (0 natively)
+            r.note=r.field=='magazine.spare_magazines'
+                and'Most own spares (0 natively); the reload uses them before the backpack'
+                or'Capped by Spare magazines (0 natively); the reload uses own spares before the backpack'
         end
     end
     return rows
@@ -715,6 +783,14 @@ end
 ------------------------------------------------------------------------------------------------ stratagems --
 local PATH_LABELS={stratagem='Call-in',eagle_rearm='Eagle Rearm',deployed_entity='Deployed Entity',shield='Shield',
     turret='Turret',targeting='Targeting',minefield='Minefield',weapon='Mounted Weapon'}
+-- Read-only choices shown locked with the Runtime's reason (HD2Runtime 0.30.4: the Eagles' rearm pool)
+local READ_ONLY_CHOICES={['stratagem.rearm_pool']=true}
+-- A mounted weapon's field section: 'Mounted Weapon', or 'Mounted Weapon · Heat' (Wind-up, Beam, Handling ...)
+local function mounted_section(id)
+    local label=domain_label(id)
+    if label=='Weapon'then return 'Mounted Weapon'end
+    return join('Mounted Weapon',label)
+end
 local function stratagem_target(hd2,name,t)
     local path=t.path
     if path=='stratagem'then return function()return hd2.stratagem(name)end end
@@ -748,6 +824,13 @@ end
 local function stratagem_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    -- in the Eagle Rearm pool (the Eagles): its uses are charges, never unlimited (REARM_POOL_UNLIMITED)
+    local pooled=false
+    for _,f in ipairs(entry.fields or{})do
+        if f.semanticFieldId=='stratagem.rearm_pool'and(f.currentDefault==49 or f.currentDefault=='eagle_rearm')then
+            pooled=true
+        end
+    end
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
         if f.editable and f.type=='calldown_code'and type(f.currentDefault)=='table'then
@@ -762,30 +845,39 @@ local function stratagem_rows(hd2,object,entry)
             for _,tr in ipairs(f.transitions or{})do allowed[tr]=true end
             local vanilla=f.currentDefault
             local unlimited=vanilla=='unlimited'or allowed.finite_to_unlimited==true
+            if pooled and vanilla~='unlimited'then unlimited=false end
             rows[#rows+1]=make_value_row(object,{id=f.instanceKey or'stratagem.max_uses',kind='uses',
                 label=f.displayName or'Mission uses',field=f.semanticFieldId,target=stratagem_target(hd2,name,t),
                 vanilla=vanilla,descriptor=f,section='Call-in',min=f.min or 1,max=f.max or 100,unlimited=unlimited,
                 unverified=unverified(f),
                 labels={{value='unlimited',label='Unlimited'}}})
-        elseif f.editable and f.type=='enum'and type(f.allowedValues)=='table'then
+        elseif f.type=='enum'and type(f.allowedValues)=='table'and(f.editable or READ_ONLY_CHOICES[f.semanticFieldId])then
+            -- (an option's own label first: the rearm pool's 'Own cooldown (mission uses)')
             local labels={}
             for _,v in ipairs(f.allowedValues)do
-                if type(v)=='table'then labels[#labels+1]={value=v.value,label=util.humanize(v.name or tostring(v.value))}
+                if type(v)=='table'then
+                    labels[#labels+1]={value=v.value,label=v.label or util.humanize(v.name or tostring(v.value))}
                 else labels[#labels+1]={value=v,label=tostring(v)}end
             end
             local target=stratagem_target(hd2,name,t)
             if target then
+                -- HD2Runtime 0.30.4 stratagem.rearm_pool: joining the Eagle Rearm pool needs a finite use count (the
+                -- Runtime refuses REARM_POOL_UNLIMITED); read-only on the Eagles, with the Runtime's reason
+                local note=f.semanticFieldId=='stratagem.rearm_pool'and f.editable
+                    and'Eagle Rearm pool: Mission uses become charges and must be a number, not unlimited'or nil
                 rows[#rows+1]=make_value_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.path)),
                     kind='choice',label=f.displayName,field=f.semanticFieldId,target=target,vanilla=f.currentDefault,
                     descriptor=f,section=PATH_LABELS[t.path]or util.humanize(t.path or''),labels=labels,
-                    options=static_options(labels),shared=shared_ack(f),unverified=unverified(f)})
+                    options=static_options(labels),shared=shared_ack(f),unverified=unverified(f),note=note,
+                    editable=f.editable==true,reason=not f.editable and tostring(f.reason or'read-only')or nil})
             end
         elseif f.editable and numeric(f.type,f.currentDefault)then
             local target=stratagem_target(hd2,name,t)
             if target then
                 local section=PATH_LABELS[t.path]
                 local group
-                if t.path=='damage_zone'then section=util.humanize(t.zone or'');group='Damage Zones'
+                if t.path=='weapon'then section=mounted_section(f.semanticFieldId)
+                elseif t.path=='damage_zone'then section=util.humanize(t.zone or'');group='Damage Zones'
                 elseif t.path=='attack'then
                     section=join(t.weapon=='mine'and'Mine'or(t.weapon and'Mounted Weapon')or'Attack',
                         util.humanize(t.attack or''),DOMAIN_LABELS[domain_of(f.semanticFieldId)])
@@ -797,8 +889,17 @@ local function stratagem_rows(hd2,object,entry)
             end
         end
     end
+    -- HD2Runtime 0.30.4: the rearm pool and the mission uses depend on each other (a pool member keeps a finite use
+    -- count, REARM_POOL_UNLIMITED): the layer orders their ensures (editor/layer.lua rearm_wait)
+    local uses,pool
+    for _,r in ipairs(rows)do
+        if r.editable and r.field=='stratagem.max_uses'then uses=r end
+        if r.editable and r.field=='stratagem.rearm_pool'then pool=r end
+    end
+    if uses and pool then pool.uses_row,uses.pool_row=uses,pool end
     return rows
 end
+M.EAGLE_REARM=49
 
 ----------------------------------------------------------------------------------------- vehicles, backpacks --
 -- A mounted weapon's readable name: its display name, made unique with a short id when several share it.
@@ -907,7 +1008,8 @@ local function backpack_rows(hd2,object,entry)
             local target,section
             if t.path=='backpack'then
                 target=function()return hd2.backpack(name)end
-                section=f.uiGroup or(hovers and domain_of(f.semanticFieldId)=='jump'and'Flight')
+                section=(f.uiGroup and(UI_GROUPS[f.uiGroup]or util.humanize(f.uiGroup)))
+                    or(hovers and domain_of(f.semanticFieldId)=='jump'and'Flight')
                     or domain_label(f.semanticFieldId)
             elseif t.path=='linked'then
                 local linked=t.linked
@@ -1004,6 +1106,17 @@ local function vehicle_weapon_rows(hd2,object,entry)
     -- one with no projectile at all (a flamethrower) gets no row. Like the sentry swap, its target is a handle no hd2
     -- call chain builds, so the row carries the Lua that reaches it for the exporter.
     if shield then return rows end
+    -- HD2Runtime 0.30.4 beam swaps on a mounted beam host (the Rover's laser: read-only with the Runtime's reason)
+    for _,f in ipairs(entry.fields or{})do
+        if f.type=='beam_reference'then
+            local code=drone and('hd2.backpack('..string.format('%q',carrier)..'):drone():weapon():beam_source()')
+                or('hd2.vehicle('..string.format('%q',carrier)..'):weapon('..string.format('%q',mount)..'):beam_source()')
+            rows[#rows+1]=source_row(object,{id='attack.beam@mount',label='Beam',section='Beam · Swap',descriptor=f,
+                field='attack.beam',code=code,source=function()return base():beam_source()end,
+                options=function(row)return beam_options(hd2,row)end,own_label='Own beam'})
+            break
+        end
+    end
     local ok,src=pcall(function()return base():projectile_source()end)
     if ok and type(src)=='table'and(src.writable or src.status)then
         local f
@@ -1350,7 +1463,7 @@ local function sentry_swap_rows(hd2,object,name)
                 field=f.semanticFieldId,target=function()
                     local a=primary()
                     return(beam and a:beam_source()or a:projectile_source()).target
-                end,shared=shared_ack(f),unverified=true,descriptor=f,section=domain_label(f.semanticFieldId)})
+                end,shared=shared_ack(f),unverified=true,descriptor=f,section=mounted_section(f.semanticFieldId)})
             row.target_code=attack..via..'.target'
             rows[#rows+1]=row
         end
@@ -1517,7 +1630,11 @@ end
 -- it: how long it lasts (status.duration) and the damage row it deals while active (:damage()).
 function CATEGORY.status_effects(cat)
     local D,why=load('status_effect_authoring')
-    if not D or type(D.statuses)~='table'then return nil,why or'this HD2Runtime has no status effect stats (HD2Runtime 0.30.4)'end
+    -- (an older HD2Runtime has no such module: say which version adds it, not the loader's search path)
+    if not D or type(D.statuses)~='table'then
+        if why and not tostring(why):find('not found',1,true)then return nil,why end
+        return nil,'this HD2Runtime has no status effect stats (HD2Runtime 0.30.4)'
+    end
     local hd2=cat.hd2
     local list={}
     for id,entry in pairs(D.statuses)do
@@ -1849,10 +1966,18 @@ function Catalog:check_owners(object)
                 if row and(f.state=='foreign'or f.state=='changed')then
                     row.editable=false
                     row.foreign=true
-                    row.reason=f.state=='foreign'
-                        and('changed by another mod (not HD2Runtime)'..(f.value~=nil and(': it is '..tostring(f.value))or'')
-                            ..'; HD2Runtime leaves it as it is')
-                        or('another mod (not HD2Runtime) changed the data of this item; HD2Runtime leaves it as it is')
+                    -- foreign: a value (or a whole component table another mod moved: no value then); changed with
+                    -- owner unknown: the item's entity map row another mod rebuilt; changed otherwise: a structural
+                    -- part (a link, a slot) is not as reviewed, in the Runtime's own words
+                    if f.state=='foreign'then
+                        row.reason='changed by another mod (not HD2Runtime)'..(f.value~=nil and(': it is '..tostring(f.value))
+                            or'')..'; HD2Runtime leaves it as it is'
+                    elseif f.owner=='unknown'then
+                        row.reason='another mod (not HD2Runtime) changed the data of this item; HD2Runtime leaves it as it is'
+                    else
+                        row.reason='its game data is not as HD2Runtime reviewed it'..(f.reason and(' ('
+                            ..util.plain(tostring(f.reason),160)..')')or'')
+                    end
                 end
             end
         end})
