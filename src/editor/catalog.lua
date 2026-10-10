@@ -80,10 +80,15 @@ local DOMAIN_LABELS={weapon='Weapon',magazine='Ammo & Magazine',rounds='Ammo & M
     function_ammo='Functions',entity='Health & Armor',zone='Damage Zones',shield='Shield',turret='Turret',
     targeting='Targeting',stratagem='Call-in',eagle='Eagle',orbital='Orbital Strike',minefield='Minefield',
     booster='Booster',throwable='Throwable',attachment='Magazine',jump='Jump Pack',hover='Hover Pack',
-    warp='Warp Pack',recharge='Recharge',drone='Drone',payload='Hellpod'}
+    warp='Warp Pack',recharge='Recharge',drone='Drone',payload='Hellpod',windup='Wind-up'}
+-- The firing charge members of a heat weapon are its wind-up (HD2Runtime 0.30.4, research/windup-controls): shown with
+-- the spin-up fields under "Wind-up", where a player looking for the Sickle's wind-up finds them.
+local WIND_UP={['heat.firing_charge']=true,['heat.charge_gain_per_second']=true,['heat.charge_loss_per_second']=true,
+    ['heat.reset_charge_after_shot']=true}
 local HANDLING={recoil=true,spread=true,sway=true,ergonomics=true,reticle=true,aim=true,zoom=true}
 local function domain_of(id)return tostring(id):match('^([^%.]+)')or'other'end
 local function domain_label(id)
+    if WIND_UP[tostring(id)]then return 'Wind-up'end
     local domain=domain_of(id)
     if domain=='weapon'then
         local name=tostring(id):match('^weapon%.(.+)$')or''
@@ -795,6 +800,12 @@ local function dormant_notice(f)
         if type(n)=='table'and n.kind=='dormant'then return n.text or'the game does not read it on this item'end
     end
 end
+-- Hover Pack height (HD2Runtime 0.30.4, docs/backpack-authoring.md "How high the Hover Pack flies"): gravity keeps
+-- acting while hovering, so the lift is what makes the pack climb; the duration is the climb window, not the hover time.
+local HOVER_LABELS={['hover.vertical_acceleration_low_speed']='Lift (climbs when above 9.82)',
+    ['hover.vertical_acceleration_high_speed']='Lift at high climb speed',
+    ['hover.vertical_speed_range_end']='Lift fade speed',['hover.max_vertical_speed']='Max climb speed (cap only)',
+    ['hover.duration']='Climb window (seconds in the air)'}
 local function backpack_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
@@ -827,7 +838,8 @@ local function backpack_rows(hd2,object,entry)
             end
             if target then
                 rows[#rows+1]=make_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.path)),
-                    label=f.displayName,unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
+                    label=HOVER_LABELS[f.semanticFieldId]or f.displayName,unit=f.unit,vanilla=f.currentDefault,
+                    min=f.min,max=f.max,type=f.type,
                     storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=shared_ack(f),
                     unverified=unverified(f),descriptor=f,section=section,
                     group=t.path=='damage_zone'and'Damage Zones'or nil})
