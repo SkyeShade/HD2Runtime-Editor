@@ -11,6 +11,7 @@ local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local pickers=require('mods/skyeshade/hd2runtime_editor/editor/ui/pickers')
 local views=require('mods/skyeshade/hd2runtime_editor/editor/ui/views')
 local export_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/export_view')
+local search_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/search_view')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 local preset_files=require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
@@ -20,7 +21,7 @@ local C,SZ=theme.colour,theme.size
 local M={}
 local App={};App.__index=App
 
-local VIEWS={{id='browse',label='BROWSE'},{id='changes',label='CHANGES'},{id='export',label='EXPORT'},{id='mods',label='MODS'},
+local VIEWS={{id='browse',label='BROWSE'},{id='search',label='SEARCH'},{id='changes',label='CHANGES'},{id='export',label='EXPORT'},{id='mods',label='MODS'},
     {id='custom',label='CUSTOM'},{id='presets',label='PRESETS'},{id='logs',label='LOGS'},{id='settings',label='SETTINGS'}}
 local CAT_W,OBJ_W=224,334
 local PRESETS_W=470
@@ -716,6 +717,8 @@ function App:handle_keys(f)
     end
     -- Escape closes the window (inside a dialog, a typed value, the search or a name it cancels that first)
     if k.ESCAPE then
+        -- the search box: Escape clears a query first
+        if self.view=='search'and self:search_escape()then return end
         if self.view=='custom'and((self.custom_field or 0)>0 or self.custom_edit)then
             self.custom_edit,self.custom_field=nil,0
             return
@@ -744,6 +747,7 @@ function App:handle_keys(f)
         return
     end
     if self.view=='browse'then self:handle_browse_keys(f)
+    elseif self.view=='search'then self:handle_search_keys(f)
     elseif self.view=='changes'then self:handle_changes_keys(f)
     elseif self.view=='mods'then self:handle_mods_keys(f)
     elseif self.view=='custom'then self:handle_custom_keys(f)
@@ -939,6 +943,7 @@ function App:frame(d,dt)
     if self.rater then typing=true end
     if self.view=='custom'and(self.custom_field or 0)>0 then typing=true end
     if self:export_typing()then typing,letters=true,true end
+    if self.view=='search'then typing,letters=true,true end
     local f=self.input:poll(dt or 0,{typing=typing,letters=letters,mouse=self.ctx.mouse})
     self.frame_input=f
     self:handle_keys(f)
@@ -1003,8 +1008,8 @@ function App:draw_header()
     local x=60
     x=x+cv:text('HD2R',x,h/2,{size=SZ.title,font='title',colour=C.text})
     cv:text('EDITOR',x+8,h/2,{size=SZ.title,font='title',colour=C.gold})
-    -- tabs
-    local tx=300
+    -- tabs (from just after the title, so every tab and the status chips fit)
+    local tx=212
     for _,v in ipairs(VIEWS)do
         local label=L(v.label)
         local n=0
@@ -1514,6 +1519,7 @@ function App:draw_footer(y,h)
     if self.edit then hint=L('Type a number   Backspace erase   Tab / ↑↓ confirm   Del cancel')
     elseif self.search and self.search.active then hint=L('Type to filter   Backspace erase   Tab done   Del clear')
     elseif self.rename then hint=L('Type a name   Tab save   Del cancel')
+    elseif self.view=='search'then hint=L('Type to search   ↑↓ select   Enter open   Backspace erase   Del clear')
     elseif self.view=='browse'and self.focus=='fields'then
         hint=L('F8 close   ←→ adjust (Shift x10, Ctrl ÷10)   digits type a value   Del revert   F9 apply')
     else hint=L('F8 close   ↑↓ select   ←→ panes   Tab next pane   Shift+Tab next tab   F9 apply') end
@@ -2213,6 +2219,7 @@ function App:draw()
         self:draw_categories(body_y,body_h)
         self:draw_objects(body_y,body_h)
         self:draw_fields(body_y,body_h)
+    elseif self.view=='search'then self:draw_search(body_y,body_h)
     elseif self.view=='changes'then self:draw_changes(body_y,body_h)
     elseif self.view=='mods'then self:draw_mods(body_y,body_h)
     elseif self.view=='custom'then self:draw_custom(body_y,body_h)
@@ -2233,5 +2240,6 @@ end
 
 views.install(App)
 export_view.install(App)
+search_view.install(App)
 
 return M

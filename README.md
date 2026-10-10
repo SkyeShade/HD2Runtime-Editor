@@ -28,6 +28,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - A backpack that comes with a support weapon is never shown on its own.
   - A weapon's attachments sit inside it: its magazines, muzzles, optics and underbarrels, each with its stat modifiers (sway, recoil, climb, spread, ergonomics). An attachment is shared by every weapon that can mount it.
   - A two-mode weapon holds its underbarrel weapon (the One-Two's grenade launcher, the Arbitrator's shotgun, the Stoker's flamer): its own rounds, resupply, magazine, fire rate and spread.
+- **Search everything.** The SEARCH tab finds any weapon, stratagem, sentry, vehicle, backpack, booster, armor or enemy by name, and from three letters any field (for example "liberator fire rate" or "spare rounds"), with its current value. Every word must match, in any order; Enter opens the result in BROWSE.
 - **Weapon groups.** Primary and Secondary have a filter under the search box with the armory's groups (Assault
   Rifle, Marksman Rifle, Submachine Gun, Shotgun, Explosive, Energy-Based, Special; Pistol, Melee, Special).
 - **Your Helldiver and their armor.**

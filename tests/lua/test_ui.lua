@@ -79,6 +79,8 @@ step({},nil,'06_applied')
 assert(H.sim.value(rof)==1300,'1300 written: '..tostring(H.sim.value(rof)))
 assert(H.layer:state(rof)=='active','fire rate active')
 -- Changes tab: the two applied editor values, never the mods' own
+step({'TAB'},{down={'SHIFT'}})
+assert(H.app.view=='search','Shift+Tab: the search tab after browse')
 step({'TAB'},{down={'SHIFT'}},'30_changes')
 assert(H.app.view=='changes','changes view')
 local changes=H.app:changes()
@@ -166,8 +168,8 @@ step({'RIGHT'})
 assert(H.app.view=='browse'and H.app:focused_row().key=='st|Eagle 500kg Bomb|'..H.app:focused_row().key:match('|([^|]+)$'),
     'jumped to the eagle cooldown')
 assert(H.app:focused_row().field=='stratagem.cooldown','focused the cooldown row')
--- Presets: save the current values (Browse -> Changes -> Mods -> Custom -> Presets)
-for _=1,4 do step({'TAB'},{down={'SHIFT'}})end
+-- Presets: save the current values (Browse -> Search -> Changes -> Export -> Mods -> Custom -> Presets)
+for _=1,5 do step({'TAB'},{down={'SHIFT'}})end
 assert(H.app.view=='custom','custom view')
 step({'TAB'},{down={'SHIFT'}},'08_presets')
 assert(H.app.view=='presets','presets view')
@@ -772,7 +774,7 @@ do
     for i,item in ipairs(H.app.categories)do if item.id=='structures'then H.app:select_category(i)end end
     step({})
     assert((H.app.cat_scroll or 0)>0,'scrolled to the last category')
-    for _,view in ipairs({'browse','changes','export','mods','custom','presets','logs','settings'})do
+    for _,view in ipairs({'browse','search','changes','export','mods','custom','presets','logs','settings'})do
         H.app:set_view(view)
         step({},nil,view=='browse'and'51_scale_browse'or nil)
     end
@@ -1114,6 +1116,47 @@ do
     H_wheel=nil
     H.app.wheel_checked=nil
     assert(H.app.hotkey_refusal_fn('F10',false,false,false):find('HD2Runtime',1,true),'F10 is HD2Runtime\'s')
+end
+-- SEARCH: typing finds objects in every category (a weapon, a sentry, a vehicle) and, from three letters, fields;
+-- Enter opens the object in BROWSE, or goes to the field; Escape clears the query first
+do
+    H.app:set_view('search')
+    local function type_text(text)
+        for ch in text:gmatch('.')do step({ch==' 'and'SPACE'or ch:upper()})end
+    end
+    type_text('sentry')
+    local results=H.app:search_results(H.app.gsearch.text)
+    local sentry,vehicle
+    for _,r in ipairs(results)do
+        if r.kind=='object'and r.label=='A/MG-43 Machine Gun Sentry'then sentry=r end
+    end
+    assert(sentry,'a sentry is found by "sentry": '..#results..' results')
+    step({},nil,'64_search_objects')
+    step({'DELETE'})
+    type_text('maelstrom')
+    results=H.app:search_results(H.app.gsearch.text)
+    for _,r in ipairs(results)do if r.kind=='object'and r.label=='TD-110 Maelstrom'then vehicle=r end end
+    assert(vehicle and results[1]==vehicle,'the vehicle is the first result')
+    step({'ENTER'})
+    assert(H.app.view=='browse'and H.app:object()==vehicle.object,'Enter opens it in BROWSE')
+    -- fields: every word, any order
+    H.catalog:index_step(100000)
+    H.app:set_view('search')
+    step({'DELETE'})
+    type_text('liberator fire rate')
+    results=H.app:search_results(H.app.gsearch.text)
+    local field
+    for _,r in ipairs(results)do
+        if r.kind=='field'and r.row.field=='weapon.fire_rate'and r.object.name=='AR-23 Liberator'then field=r end
+    end
+    assert(field,'a field is found by its object and label')
+    step({},nil,'65_search_fields')
+    for i,r in ipairs(results)do if r==field then H.app.gsearch.index=i end end
+    step({'ENTER'})
+    assert(H.app.view=='browse'and H.app:focused_row()==field.row,'Enter goes to the field')
+    H.app:set_view('search')
+    step({'ESCAPE'})
+    assert(H.app.view=='search'and H.app.gsearch.text=='','Escape clears the query first')
 end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
