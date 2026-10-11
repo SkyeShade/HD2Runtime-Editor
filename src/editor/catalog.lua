@@ -29,6 +29,9 @@ M.GROUPS={
 }
 
 local NUMERIC={number=true,integer=true}
+-- The game's network limits of a weapon's ammunition (rounds in a magazine, magazine counts).
+local NETWORK_MAX={rounds=2047,magazines=31}
+M.NETWORK_MAX=NETWORK_MAX
 local INTEGER_STORAGE={u8=true,u16=true,u32=true,u64=true,i8=true,i16=true,i32=true,i64=true}
 local STORAGE_LIMITS={u8={0,255},u16={0,65535},u32={0,4294967295},i8={-128,127},i16={-32768,32767},
     i32={-2147483648,2147483647}}
@@ -112,6 +115,32 @@ local function join(...)
     end
     return table.concat(parts,' · ')
 end
+-- A projectile's own DamageInfo is the damage of its direct hit; its explosion has rows of its own ("Explosion · ...").
+-- Labelled so, as the missiles' "Damage · Missile direct hit" (a player took the RL-77's 350 for its blast).
+local function direct_hit(role)
+    if role==nil or role==''then return 'Direct hit'end
+    return role..' direct hit'
+end
+-- A second ammunition whose projectile carries the very DamageInfo row of the weapon's main round (HD2Runtime shares
+-- one record): its direct-hit rows say so (the same bytes; editing either changes both).
+local SAME_HIT_LABELS={['RL-77 Airburst Rocket Launcher']='Cluster rocket direct hit (same row as the rocket)'}
+local function same_hit_rows(name,rows)
+    local first={}
+    for _,r in ipairs(rows)do
+        local section=tostring(r.section)
+        local base=section:gsub(' · Status$','')
+        if base:find('^Damage · ')and r.loc then
+            local seen=first[r.loc]
+            if not seen then first[r.loc]=base
+            elseif seen~=base then
+                local role=base:match('^Damage · (.-) direct hit$')or base:gsub('^Damage · ','')
+                r.section=join('Damage',SAME_HIT_LABELS[name]
+                    or(role..' direct hit (same row as the '..(seen=='Damage · Direct hit'and'main round'
+                        or seen:gsub('^Damage · ',''))..')'),section:find(' · Status$')and'Status'or nil)
+            end
+        end
+    end
+end
 
 --------------------------------------------------------------------------------------------------- rows --
 -- One editable numeric field. spec: {id, label, unit, vanilla, min, max, type, storage, field, target, shared,
@@ -153,6 +182,14 @@ local function make_row(object,spec)
     end
     local integer=spec.type=='integer'or(spec.type~='number'and INTEGER_STORAGE[spec.storage or'']~=nil)
     local min,max=spec.min,spec.max
+    -- the most rounds and magazines the game's network state carries (11 and 5 bits): HD2Runtime 0.31.2 publishes
+    -- them as the fields' maxima; an older Runtime publishes none, so a larger value would desync. Never below the
+    -- game's own value.
+    if max==nil and integer and type(spec.vanilla)=='number'then
+        local cap=spec.field=='weapon.capacity'and NETWORK_MAX.rounds
+            or(tostring(spec.field):find('^magazine%.')and NETWORK_MAX.magazines)or nil
+        if cap and spec.vanilla<=cap then max=cap end
+    end
     local limits=STORAGE_LIMITS[spec.storage or'']
     if limits then
         min=min and math.max(min,limits[1])or limits[1]
@@ -560,7 +597,8 @@ local function player_rows(hd2,object,entry)
             if(domain=='projectile'or domain=='damage')and has_projectile then
                 target=projectile
                 field=strip(id,branch)
-                section=join(DOMAIN_LABELS[domain],role_label(branch))
+                section=domain=='damage'and join('Damage',direct_hit(role_label(branch)))
+                    or join(DOMAIN_LABELS[domain],role_label(branch))
             elseif domain=='explosion'and has_projectile and phase then
                 target=function()return projectile():terminal_action(when):explosion()end
                 field=strip(id,branch,phase)
@@ -742,6 +780,7 @@ local function support_rows(hd2,object,entry)
                 target=function()return hd2.support_weapon(name):attack(role):projectile()end
                 field=strip(id,role)
                 section=join(DOMAIN_LABELS[domain_of(field)]or'Projectile',role_text(role))
+                if domain_of(field)=='damage'then section=join('Damage',direct_hit(role_text(role)))end
                 -- HD2Runtime 0.31.1: the hit of the missile the weapon spawns (Spear, Commando, W.A.S.P.), apart from
                 -- its impact explosion
                 if f.missileHit then section=join('Damage','Missile direct hit')end
@@ -858,6 +897,8 @@ local function support_rows(hd2,object,entry)
             end
         end
     end
+    -- the RL-77's cluster rocket hits with its main rocket's own DamageInfo row: said so where it is shown again
+    same_hit_rows(name,rows)
     -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect are shown locked with
     -- the Runtime's reason, so nobody edits a value the game ignores (0.31.0: none are left; the GR-8, RL-77, FAF-14
     -- and StA-X3 own spares and, since the 0.31.0 rc2, the AC-8's own rounds are real fields)
@@ -1031,6 +1072,20 @@ function M.mounted_weapon_entry(id)
     end
     return nil
 end
+-- A vehicle's mounts by what they are (the Runtime names them by their mount node or slot only: "slot_3"): the
+-- TD-110 Maelstrom's two pods fire the MLS-4X Commando's seeking missile. Unlisted mounts keep the humanized node name.
+local MOUNT_LABELS={
+    ['TD-110 Maelstrom']={slot_2='Driver gun',slot_3='Missile pods (slot 3)',slot_4='Missile pods (slot 4)'},
+    ['TD-220 Bastion MK XVI']={attach_tank_gun='Cannon',attach_tank_gun_mg='Coaxial MG',slot_0='Cannon',
+        slot_1='Coaxial MG'}}
+local function mount_label(vehicle,mount,slot)
+    local labels=MOUNT_LABELS[vehicle]or{}
+    return labels[mount or'']or(slot~=nil and labels['slot_'..tostring(slot)])or util.humanize(mount or slot or'')
+end
+M.mount_label=mount_label
+-- Notes on a vehicle weapon's field, by the weapon (vehicle_weapon_authoring key) and field.
+local VW_NOTES={['TD-220 Bastion MK XVI / attach_tank_gun_mg']={
+    ['weapon.capacity']='Single belt, no reload: at most 2047 rounds (the game\'s network limit)'}}
 local function vehicle_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
@@ -1044,7 +1099,8 @@ local function vehicle_rows(hd2,object,entry)
             for _,id in ipairs(f.allowedValues or{})do labels[#labels+1]={value=id,label=mounted_weapon_name(id)}end
             local vanilla=f.currentDefault
             rows[#rows+1]=make_value_row(object,{id=f.instanceKey or('mount.weapon@'..tostring(slot)),kind='reference',
-                label=util.humanize(info.role or slot),field=f.semanticFieldId,descriptor=f,section='Mounted Weapons',
+                label=mount_label(name,info.role or slot,info.slot),field=f.semanticFieldId,descriptor=f,
+                section='Mounted Weapons',
                 target=function()return hd2.vehicle(name):mount(slot)end,expect=function()return vanilla end,
                 vanilla=vanilla,labels=labels,unverified_reference=true,
                 options=function()
@@ -1197,7 +1253,11 @@ local function vehicle_weapon_rows(hd2,object,entry)
         end
     end
     -- ModBuilder's identity (entityChanges: resource vehicle_weapon, entity = the weapon's catalogue name)
-    for _,r in ipairs(rows)do r.mb_resource,r.mb_entity,r.mb_where='vehicle_weapon',entry.name,''end
+    local notes=VW_NOTES[entry.name]or{}
+    for _,r in ipairs(rows)do
+        r.mb_resource,r.mb_entity,r.mb_where='vehicle_weapon',entry.name,''
+        if notes[r.field]and not r.note then r.note=notes[r.field]end
+    end
     -- Its projectile swap, as the primaries have it (HD2Runtime 0.30.x mounted projectile hosts: the EXO-45 Patriot
     -- minigun, both EXO-49 Emancipator autocannons, the EXO-51 Lumberer cannon, the FRV and GATER Oil Rig guns, the
     -- Guard Dog's gun), through the mount's projectile_source(). A mount that fires another way (the Patriot's rocket
@@ -1795,8 +1855,9 @@ function CATEGORY.vehicles(cat)
                 if stratagem then append(rows,part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end))end
                 append(rows,part_rows(object,'vh',function(p)return vehicle_rows(cat.hd2,p,vehicle)end))
                 for _,m in ipairs(mounts)do
-                    local label='Weapon · '..util.humanize(m.entry.mount or m.key)
-                    if m.entry.mountedShield then label='Shield · '..util.humanize(m.entry.mount or m.key)end
+                    local what=mount_label(name,m.entry.mount or m.key,m.entry.slot)
+                    local label='Weapon · '..what
+                    if m.entry.mountedShield then label='Shield · '..what end
                     local slot=m.entry.slot and('slot_'..m.entry.slot)or nil
                     append(rows,part_rows(object,'vw:'..(m.entry.mount or m.key),function(p)
                         return vehicle_weapon_rows(cat.hd2,p,m.entry)end,function(row)

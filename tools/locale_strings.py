@@ -27,7 +27,8 @@ LITERAL = r"'((?:[^'\\]|\\.)*)'"
 SHOWN_KEYS = ('label', 'section', 'group', 'subtitle', 'detail', 'note', 'own_label', 'sub')
 # tables of the catalogue whose values are labels or notes (key -> text)
 LABEL_TABLES = ('PRESET_ACTIONS', 'FILE_ACTIONS', 'WEAPON_GROUPS', 'GROUP_LABELS', 'DOMAIN_LABELS', 'UI_GROUPS',
-                'PATH_LABELS', 'HOVER_LABELS', 'TEAM_RELOAD_NOTES', 'DERIVED_HEAT', 'MOUNT_LABELS', 'STATUS_SLOT_NOTE')
+                'PATH_LABELS', 'HOVER_LABELS', 'TEAM_RELOAD_NOTES', 'DERIVED_HEAT', 'MOUNT_LABELS', 'STATUS_SLOT_NOTE',
+                'SAME_HIT_LABELS', 'VW_NOTES')
 
 
 def unescape(text):

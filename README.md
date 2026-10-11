@@ -21,7 +21,8 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **One stratagem, one place.**
   - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
   - A support backpack holds its call-in, the backpack, its drone weapon (Guard Dogs) and its hellpod.
-  - A vehicle holds its call-in, the vehicle and every mounted weapon.
+  - A vehicle holds its call-in, the vehicle and every mounted weapon, named by what it is where the Runtime only
+    numbers it (the Maelstrom's driver gun and missile pods, the Bastion's cannon and coaxial MG).
   - A vehicle's mounts can hold another weapon, as in ModBuilder (the Patriot's left arm with the Emancipator's
     autocannon, for example). Once a mount is swapped, its weapon group shows the weapon it now holds, so the
     projectile and stats you edit are that weapon's. The group says which other vehicle shares those records.
@@ -63,7 +64,9 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
       Dominator, Diligence, Breaker, Peacemaker, Redeemer) swap their projectile on that ammunition (Projectile · Swap);
   - **With HD2Runtime 0.31.1:** the Peacemaker's and Redeemer's projectile and damage (their ammunition's round), the
     missile direct hit of the Spear, Commando and W.A.S.P. (Damage · Missile direct hit: most of their damage), and
-    the second ammunition's own projectile and damage (Projectile · Flak, Damage · Flak).
+    the second ammunition's own projectile and damage (Projectile · Flak, Damage · Flak direct hit). A projectile's
+    own damage is its direct hit (Damage · Direct hit), apart from its explosion (Explosion · ...); the RL-77's cluster
+    rocket says that its direct hit is the very row of the rocket's.
     - charges before cooldown (the Eagle Rearm pool; read-only on the Eagles, and joining waits for a finite Mission
       uses), the Orbital Railcannon's targeting and the Orbital Laser's re-search interval;
     - two or three fire modes on a weapon without a fire-mode selector bind the selector in the same write;

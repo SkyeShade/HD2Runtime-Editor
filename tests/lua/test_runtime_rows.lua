@@ -132,12 +132,12 @@ if has_0_31_1 then
         version,tostring(peacemaker~=nil),tostring(hit~=nil),tostring(flak~=nil)))
 end
 if peacemaker and hit and flak then
-    check(peacemaker.section=='Damage'and peacemaker.vanilla==100 and peacemaker.unverified and peacemaker.shared,
+    check(peacemaker.section=='Damage · Direct hit'and peacemaker.vanilla==100 and peacemaker.unverified and peacemaker.shared,
         'Peacemaker damage: '..tostring(peacemaker.section))
     check(hit.section:find('^Damage · Missile direct hit')and hit.unverified,'Spear direct hit: '..hit.section)
     local ac8=rows('sp|AC-8 Autocannon')
     local function section(label)return find(ac8,function(r)return r.section==label end)end
-    check(section('Projectile · Flak')and section('Damage · Flak')and section('Projectile · Flak · Swap')
+    check(section('Projectile · Flak')and section('Damage · Flak direct hit')and section('Projectile · Flak · Swap')
         and section('Explosion · Flak'),'AC-8 flak sections')
     local burst=find(ac8,function(r)return r.section=='Explosion · Flak'and r.field=='explosion.damage.standard_damage'end)
     check(burst and burst.vanilla==190 and burst.unverified,'the flak burst from the explosion catalogue')
@@ -146,10 +146,37 @@ if peacemaker and hit and flak then
     check(find(rl77,function(r)return r.section=='Explosion · Cluster Bomb'and r.field=='explosion.inner_radius'end)
         and not find(rl77,function(r)return r.section=='Explosion · Cluster Bomb'
             and r.field=='explosion.damage.standard_damage'end),'RL-77 burst rows not shown twice')
+    -- a projectile's own damage is its direct hit (a player took the RL-77's 350 for its blast); the cluster rocket's
+    -- is the very same row as the rocket's, and says so
+    local rocket=find(rl77,function(r)return r.field=='damage.standard_damage'and r.section=='Damage · Direct hit'end)
+    local cluster=find(rl77,function(r)return r.field=='damage.standard_damage'and r~=rocket end)
+    check(rocket and rocket.vanilla==350,'RL-77 rocket direct hit')
+    check(cluster and cluster.loc==rocket.loc
+        and cluster.section=='Damage · Cluster rocket direct hit (same row as the rocket)','RL-77 cluster: '
+        ..tostring(cluster and cluster.section))
     out[#out+1]='0.31.1 damage rows ok'
 else
     check(not hit and not flak,'no 0.31.1 rows without the Runtime fields')
     out[#out+1]='no 0.31.1 rows ok'
+end
+-- vehicle mounts by what they are (the Runtime names them "slot_3"), the Bastion MG's belt, the network maxima
+do
+    local VW=require('hd2runtime/domains/vehicle_weapon_authoring')
+    if VW.weapons['TD-110 Maelstrom / slot_3']and VW.weapons['TD-220 Bastion MK XVI / attach_tank_gun_mg']then
+        local groups={}
+        for _,r in ipairs(rows('ve|TD-110 Maelstrom'))do if r.group then groups[r.group]=true end end
+        check(groups['Weapon · Driver gun']and groups['Weapon · Missile pods (slot 3)']
+            and groups['Weapon · Missile pods (slot 4)']and not groups['Weapon · Slot 3'],'Maelstrom mounts named')
+        local bastion=rows('ve|TD-220 Bastion MK XVI')
+        local mg=find(bastion,function(r)return r.group=='Weapon · Coaxial MG'and r.field=='weapon.capacity'end)
+        check(find(bastion,function(r)return r.group=='Weapon · Cannon'end),'Bastion cannon named')
+        check(mg and mg.note and mg.note:find('2047',1,true),'Bastion MG belt note')
+        -- an older Runtime publishes no maximum: the editor holds the network's; HD2Runtime 0.31.2+ publishes its own
+        check(mg.max and mg.max<=2047,'Bastion MG capacity max: '..tostring(mg.max))
+        local mags=find(bastion,function(r)return r.group=='Weapon · Coaxial MG'and r.field=='magazine.magazines_from_supply'end)
+        check(not mags or(mags.max and mags.max<=31),'magazine count max: '..tostring(mags and mags.max))
+        out[#out+1]='vehicle mounts ok'
+    end
 end
 -- the localisation template's catalogue part: every object name, section, group and field label it shows, once
 do
