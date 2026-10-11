@@ -35,6 +35,20 @@ assert(donor,'a projectile donor')
 local rates=row_of('pw|AR-23 Liberator',function(r)return r.kind=='rates'end)
 local entries={{row=rof,value=1300},{row=code,value={'up','down','up','down'}},{row=swap,value=donor},
     {row=rates,value={450,640,950}}}
+-- HD2Runtime 0.31.2: two statuses on the GL-15 Evictor's blast (slot 2 listed first): one transaction, in slot order
+local slots={}
+do
+    local o=assert(cat:object('pw|GL-15 Evictor'));cat:open(o)
+    for _,r in ipairs(o.rows)do
+        local s=r.status_slot
+        if s and r.field:find('^explosion%.')and s.n<=2 then slots[s.kind..s.n]=r end
+    end
+end
+local evictor=slots.type2~=nil
+if evictor then
+    for _,e in ipairs({{row=slots.type2,value='gas_confusion'},{row=slots.strength2,value=100},
+        {row=slots.type1,value='gas'},{row=slots.strength1,value=100}})do entries[#entries+1]=e end
+end
 local result=export.build(catalog_module,entries,{name='Test Export',version='1.2.3',description='Made in a test.',
     author='Skye Tester',image=args.image,minimum='0.30.0-dev',editor_version='test'})
 assert(#result.skipped==0,'skipped: '..tostring(result.skipped[1]and result.skipped[1].why))
@@ -47,7 +61,26 @@ out[#out+1]='guid2 '..result.guid
 package.preload['mods/skyeshade/hd2runtime']=package.preload['mods/skyeshade/hd2runtime']or function()return hd2 end
 local fn=assert(loadstring(result.source,'@exported'))
 local ops=fn()
-assert(#ops==4,'four operations: '..#ops)
+assert(#ops==(evictor and 5 or 4),'operations: '..#ops)
+if evictor then
+    local a=result.source:find('explosion.damage.status_1_type',1,true)
+    local b=result.source:find('explosion.damage.status_2_type',1,true)
+    local t=result.source:find('status slots (one transaction',1,true)
+    assert(t and a and b and t<a and a<b,'the Evictor statuses in one transaction, slot 1 first')
+    assert(result.source:find('{field="explosion.damage.status_2_type"',1,true)
+        and not result.source:find('\n        field="explosion.damage.status_2_type"',1,true),'never a patch of its own')
+    -- the Runtime's own packing rule accepts that write set on an empty row, and refuses slot 2 alone
+    local slots_module=require('hd2runtime/core/status_slots')
+    local empty=string.rep('\0',80)
+    local packing=slots_module.new()
+    slots_module.note(packing,'row',empty,2,44,'status 2')
+    slots_module.note(packing,'row',empty,1,42,'status 1')
+    assert(pcall(slots_module.verify,packing),'slot 1 and slot 2 together')
+    packing=slots_module.new()
+    slots_module.note(packing,'row',empty,2,44,'status 2')
+    assert(not pcall(slots_module.verify,packing),'slot 2 alone refused')
+    out[#out+1]='status slots one transaction ok'
+end
 for _=1,60 do S.tick(0.1)end
 for i,op in ipairs(ops)do
     assert(op.status~='rejected'and op.status~='blocked',('operation %d %s: %s'):format(i,tostring(op.id),tostring(op.error)))

@@ -2394,6 +2394,59 @@ function Catalog:check_owners(object)
         end})
     end
 end
+-- Status slots (HD2Runtime 0.31.2: every empty slot of a damage row, up to 4; older Runtimes offer the first empty
+-- one): a row's slots stay packed from slot 1 (the Runtime refuses a gap, STATUS_SLOT_GAP). Each slot's status and
+-- strength are shown together, in slot order, as "Status 1", "Status 1 strength", "Status 2" ... under the row's
+-- "· Status" section, and linked so the window and the layer keep the order: row.status_slot = {n, kind = 'type' |
+-- 'strength', prev = the status row of slot n-1, later = every row of the slots after n, strength = a status row's
+-- own strength row}. The rows of one damage row
+-- are those of one object part (group), one section and one field prefix ('damage.', 'explosion.damage.').
+local function status_slots(rows)
+    local groups,first={},{}
+    for i,r in ipairs(rows)do
+        local prefix,n,what=tostring(r.field):match('^(.-)status_(%d)_(%a+)$')
+        if prefix and(what=='type'or what=='strength')and(what=='strength'or r.kind=='choice')then
+            local base=tostring(r.section):gsub(' · Status$','')
+            local key=tostring(r.group)..'\0'..base..'\0'..prefix
+            local g=groups[key]
+            if not g then g={base=base,slots={},rows={}};groups[key]=g;first[i]=g end
+            n=tonumber(n)
+            g.slots[n]=g.slots[n]or{}
+            if not g.slots[n][what]then
+                g.slots[n][what]=r
+                g.rows[#g.rows+1]=r
+                r.status_slot={n=n,kind=what,group=g}
+            end
+        end
+    end
+    if next(groups)==nil then return rows end
+    for _,g in pairs(groups)do
+        table.sort(g.rows,function(a,b)
+            local x,y=a.status_slot,b.status_slot
+            if x.n~=y.n then return x.n<y.n end
+            return x.kind=='type'and y.kind~='type'
+        end)
+        for _,r in ipairs(g.rows)do
+            local s=r.status_slot
+            r.section=join(g.base,'Status')
+            r.label=s.kind=='type'and('Status '..s.n)or('Status '..s.n..' strength')
+            s.prev=g.slots[s.n-1]and g.slots[s.n-1].type or nil
+            if s.kind=='type'then s.strength=g.slots[s.n].strength end
+            s.later={}
+            for _,o in ipairs(g.rows)do if o.status_slot.n>s.n then s.later[#s.later+1]=o end end
+            s.group=nil
+        end
+    end
+    -- each damage row's slot rows together, where its first one was
+    local out,placed={},{}
+    for i,r in ipairs(rows)do
+        local g=first[i]
+        if g then for _,x in ipairs(g.rows)do out[#out+1]=x;placed[x]=true end end
+        if not placed[r]then out[#out+1]=r end
+    end
+    return out
+end
+M.status_slots=status_slots
 -- An object's rows and sections (built once): object.rows, object.sections = {{label, rows}}.
 function Catalog:open(object)
     if object.rows then return object end
@@ -2402,6 +2455,7 @@ function Catalog:open(object)
         object.rows,object.sections,object.error={},{},tostring(rows)
         return object
     end
+    rows=status_slots(rows)
     object.rows,object.sections={},{}
     local by_label={}
     for _,row in ipairs(rows)do

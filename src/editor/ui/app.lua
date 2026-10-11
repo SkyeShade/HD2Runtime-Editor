@@ -381,6 +381,59 @@ function App:shared_names(row,limit)
     for i=1,math.min(limit,#names)do shown[i]=names[i]end
     return table.concat(shown,', ')..(#names>limit and(' (+'..(#names-limit)..')')or''),#names
 end
+-- Status slots fill in order (HD2Runtime STATUS_SLOT_GAP; editor/catalog.lua status_slots): slot n takes a status or a
+-- strength only once slot n-1 holds a status, staged or applied, and a slot is emptied only once the slots after it
+-- are. Whether a status row holds a status, as the window shows it (a pending value first).
+function App:holds_status(row)
+    local value=self:row_view(row)
+    return value~=nil and value~='none'
+end
+-- Why a status slot row cannot take `value` now (nil when it can). Going back to the game's value never needs the
+-- slot before it, and emptying a slot that way takes the editor's applied later slots with it (editor/layer.lua).
+function App:slot_refusal(row,value)
+    local s=row.status_slot
+    if not s then return nil end
+    local reset=util.same(value,row.vanilla)
+    if not reset and s.prev and not self:holds_status(s.prev)then
+        return Lf('pick "%s" first: the status slots fill in order, from slot 1',L(s.prev.label))
+    end
+    if s.kind=='type'and value=='none'then
+        for _,r in ipairs(s.later or{})do
+            if r.status_slot.kind=='type'then
+                local later,source=self:row_view(r)
+                if later~=nil and later~='none'and not(reset and source=='editor')then
+                    return Lf('empty "%s" first: a status slot can be emptied only when the slots after it are empty',
+                        L(r.label))
+                end
+            end
+        end
+    end
+    return nil
+end
+-- Why a status slot row is greyed out now: the slot before it holds no status and this one holds nothing to take
+-- back (a pending or applied value stays editable, so it can be reset).
+function App:slot_block(row)
+    local s=row.status_slot
+    if not(s and s.prev)or self:holds_status(s.prev)then return nil end
+    local _,source=self:row_view(row)
+    if source=='pending'or source=='editor'then return nil end
+    return Lf('pick "%s" first: the status slots fill in order, from slot 1',L(s.prev.label))
+end
+-- Rows in the order their values can be staged: status slots by slot number (presets, imports).
+local function slot_order(list,row_of)
+    local index={}
+    for i,x in ipairs(list)do index[x]=i end
+    local out={}
+    for i,x in ipairs(list)do out[i]=x end
+    table.sort(out,function(a,b)
+        local x,y=row_of(a).status_slot,row_of(b).status_slot
+        local p,q=x and x.n or 0,y and y.n or 0
+        if p~=q then return p<q end
+        return index[a]<index[b]
+    end)
+    return out
+end
+App.slot_order=slot_order
 function App:stage(row,value)
     if not row.editable then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error);return false end
     local staged=self:stage_value(row,value)
@@ -398,6 +451,8 @@ function App:stage(row,value)
     return staged
 end
 function App:stage_value(row,value)
+    local refused=self:slot_refusal(row,value)
+    if refused then self:toast(Lf('%s: %s',L(row.label),refused),C.error);return false end
     if row.kind then
         if self.ctx.choices==false then
             self:toast(Lf('Editing %s needs HD2Runtime r50 (script choices)',L(row.label)),C.error);return false
@@ -438,20 +493,32 @@ function App:stage_value(row,value)
     return true
 end
 function App:unstage(row)
-    if self.pending[row.key]then self.pending[row.key]=nil;self.pending_n=self.pending_n-1;return true end
+    if self.pending[row.key]then
+        self.pending[row.key]=nil;self.pending_n=self.pending_n-1
+        -- a status slot left empty takes the pending values of the slots after it along (they would leave a gap)
+        local s=row.status_slot
+        if s and s.kind=='type'and not self:holds_status(row)then
+            for _,r in ipairs(s.later or{})do self:unstage(r)end
+        end
+        return true
+    end
     return false
 end
 function App:stage_map(map)
     local missing=0
-    for key,stored in pairs(map)do
+    local staged={}
+    for _,key in ipairs(util.sorted_keys(map))do
+        local stored=map[key]
         if App.is_custom_key(key)then
             -- a custom stratagem tune applies at once (the Runtime has no pending step for it)
             if self:apply_custom_value(key,stored)then self.layer:touch(key)else missing=missing+1 end
         else
             local row,value=self:decode_value(key,stored)
-            if row and value~=nil then self:stage(row,value)else missing=missing+1 end
+            if row and value~=nil then staged[#staged+1]={row=row,value=value}else missing=missing+1 end
         end
     end
+    -- (status slot 1 before slot 2: the slots fill in order)
+    for _,item in ipairs(slot_order(staged,function(x)return x.row end))do self:stage(item.row,item.value)end
     return missing
 end
 function App:apply()
@@ -535,6 +602,8 @@ function App:begin_edit(row,text,fresh)
         if row then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error)end
         return
     end
+    local blocked=self:slot_block(row)
+    if blocked then self:toast(Lf('%s: %s',L(row.label),blocked),C.error);return end
     if row.kind=='code'then return self:open_code(row)end
     if row.kind=='modes'then return self:open_modes(row)end
     if row.kind=='rates'then return self:open_rates(row)end
@@ -1404,7 +1473,9 @@ function App:draw_fields(y0,h)
             elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
             local cy=y+rh/2
             local indent=(item.depth or 0)*20
-            cv:text(L(row.label),x+FX.label+indent,cy,{size=SZ.label,colour=row.editable and(selected and C.text or C.dim)or C.faint,
+            -- (a status slot whose earlier slot is empty is greyed out until that one holds a status)
+            local open=row.editable and not self:slot_block(row)
+            cv:text(L(row.label),x+FX.label+indent,cy,{size=SZ.label,colour=open and(selected and C.text or C.dim)or C.faint,
                 max=FX.default_right-FX.label-90-indent})
             cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
             -- value box
@@ -1425,7 +1496,7 @@ function App:draw_fields(y0,h)
                 if self.edit.fresh and text~=''then cv:rect(bx+bw-12-tw,y+7,tw+4,rh-14,C.gold_soft,4)end
                 if math.floor(self.time*2.2)%2==0 then cv:rect(bx+bw-8,y+8,2,rh-16,C.gold,6)end
             else
-                cv:text(self:text(row,value),bx+bw-10,cy,{size=SZ.label,colour=row.editable and colour or C.faint,
+                cv:text(self:text(row,value),bx+bw-10,cy,{size=SZ.label,colour=open and colour or C.faint,
                     align='right',max=bw-16})
             end
             local unit=util.unit(row.unit)
@@ -1433,6 +1504,7 @@ function App:draw_fields(y0,h)
             -- source badge
             local bxr=x+lw+FX.badge_right
             if not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
+            elseif not open then chip(cv,L('IN ORDER'),bxr,cy,C.faint,C.line,'right')
             elseif state=='error'then chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
             elseif source=='pending'then chip(cv,L('PENDING'),bxr,cy,C.pending,C.pending_soft,'right')
             elseif state=='applying'then chip(cv,L('APPLYING'),bxr,cy,C.gold,C.gold_soft,'right')
@@ -1468,6 +1540,11 @@ function App:draw_status(y,h)
             -- (an information row, such as a beam conversion's verdict or caveat, is not a lock)
             local reason=L(tostring(row.reason))
             cv:text(row.info and Lf('Note: %s',reason)or Lf('Locked: %s',reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
+            return
+        end
+        local blocked=self:slot_block(row)
+        if blocked then
+            cv:text(Lf('Locked for now: %s',blocked),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
             return
         end
         local range
@@ -1868,10 +1945,13 @@ end
 -- Stages the chosen edits like any other change (Apply writes them).
 function App:mb_stage(open,name)
     local n,failed=0,0
+    local chosen={}
     for _,it in ipairs(open.items)do
-        if it.selected and it.row and not it.why then
-            if self:stage_value(it.row,it.value)then n=n+1 else failed=failed+1 end
-        end
+        if it.selected and it.row and not it.why then chosen[#chosen+1]=it end
+    end
+    -- (status slot 1 before slot 2: the slots fill in order)
+    for _,it in ipairs(slot_order(chosen,function(x)return x.row end))do
+        if self:stage_value(it.row,it.value)then n=n+1 else failed=failed+1 end
     end
     if n==0 and failed==0 then self:toast(L('Nothing chosen to stage'),C.dim);return end
     self:toast(Lf('Staged %d values from %s. Press Apply.',n,name)..(failed>0 and(' '..Lf('%d refused',failed))or''),

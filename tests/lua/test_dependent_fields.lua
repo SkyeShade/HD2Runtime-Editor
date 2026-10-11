@@ -54,6 +54,61 @@ do
     end
 end
 
+-- status slots (HD2Runtime 0.31.2): slot 2 waits for slot 1, alone it is refused, and a reset clears slot 2 first
+do
+    local object=assert(cat:object('pw|GL-15 Evictor'))
+    cat:open(object)
+    local slot={}
+    for _,r in ipairs(object.rows)do
+        local s=r.status_slot
+        if s and r.field:find('^explosion%.')then slot[s.n]=slot[s.n]or{};slot[s.n][s.kind]=r end
+    end
+    if slot[2]and slot[2].type then
+        local one,two=slot[1].type,slot[2].type
+        local strength1,strength2=slot[1].strength,slot[2].strength
+        local function busy(row)
+            local s=layer:slot_of(row)
+            return s and(s.phase=='adopt'or s.phase=='steer')
+        end
+        -- 1. slot 2 alone: refused at once with the reason
+        assert(layer:set(two,'gas_confusion'))
+        run(5)
+        local state,why=layer:state(two)
+        check(state=='error'and tostring(why):find('STATUS_SLOT_GAP',1,true),'slot 2 alone refused: '..tostring(state)
+            ..' '..tostring(why))
+        -- 2. both slots (set in the "wrong" order): slot 2 and its strength wait until slot 1 is applied
+        assert(layer:set(two,'gas_confusion'))
+        assert(layer:set(strength2,100))
+        assert(layer:set(one,'gas'))
+        assert(layer:set(strength1,100))
+        local waited=false
+        for _=1,200 do
+            run(1)
+            if layer:state(one)=='applying'then
+                waited=true
+                check(not busy(two)and not busy(strength2),'slot 2 waits for slot 1')
+            end
+        end
+        check(waited and layer:state(one)=='active'and layer:state(two)=='active'and layer:state(strength2)=='active',
+            'both slots applied: '..layer:state(one)..' '..layer:state(two)..' '..layer:state(strength2))
+        out[#out+1]='status slot order ok'
+        -- 3. resetting slot 1 resets slot 2 too; slot 1 is cleared only once slot 2 no longer holds a status
+        layer:reset(one)
+        local s2=layer:slot_of(two)
+        check(s2 and not s2.user,'slot 2 reset with slot 1')
+        local cleared_first=true
+        for _=1,300 do
+            run(1)
+            if layer:state(two)=='applying'and busy(one)then cleared_first=false end
+        end
+        check(cleared_first,'slot 2 cleared before slot 1')
+        for _,r in ipairs({one,two,strength1,strength2})do
+            check(layer:state(r)=='idle','released: '..r.label..' '..layer:state(r)..' '..tostring((select(2,layer:state(r)))))
+        end
+        out[#out+1]='status slot reset ok'
+    end
+end
+
 if type(hd2.beam_conversion)~='function'or not catalog.conversion_entry('LAS-16 Sickle')then
     out[#out+1]='no beam conversion in this HD2Runtime'
     return table.concat(out,'\n')

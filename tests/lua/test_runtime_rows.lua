@@ -200,15 +200,55 @@ do
         out[#out+1]='zone names ok'
     end
 end
+-- status slots: each slot's status and strength together, in slot order, linked to their neighbours; every slot the
+-- Runtime publishes (HD2Runtime 0.31.2: up to 4 on every damage row; older ones the first empty slot)
+do
+    local evictor=rows('pw|GL-15 Evictor')
+    local slots={}
+    for _,r in ipairs(evictor or{})do
+        if r.status_slot and r.field:find('^explosion%.')then slots[#slots+1]=r end
+    end
+    if#slots>0 then
+        local section=slots[1].section
+        check(section:find(' · Status$'),'status slots in the Status section: '..section)
+        for i,r in ipairs(slots)do
+            local n,kind=math.floor((i+1)/2),i%2==1 and'type'or'strength'
+            check(r.section==section and r.status_slot.n==n and r.status_slot.kind==kind,'slot order: '..r.key)
+            check(r.label==(kind=='type'and('Status '..n)or('Status '..n..' strength')),'slot label: '..r.label)
+            check(n==1 and r.status_slot.prev==nil or r.status_slot.prev==slots[2*n-3],'slot link: '..r.key)
+        end
+        -- the rows of one section follow each other on the page
+        local o=cat:object('pw|GL-15 Evictor')
+        for _,s in ipairs(o.sections)do
+            if s.label==section then
+                for i,r in ipairs(slots)do check(s.rows[i]==r,'section rows in slot order')end
+            end
+        end
+        if#slots>=4 then
+            -- a second attached status is not live-tested: allow_unverified_effect even on a direct-hit row
+            local hit
+            for _,r in ipairs(evictor)do if r.field=='damage.status_2_type'then hit=r end end
+            check(hit and hit.acks.allow_unverified_effect and hit.status_slot.n==2,'direct hit slot 2 acknowledgement')
+            local ok=catalog.probe(slots[3],'gas_confusion')
+            check(ok,'slot 2 takes gas_confusion')
+            out[#out+1]='status slots ok ('..#slots/2 ..' on the Evictor blast)'
+        else
+            out[#out+1]='status slot ok (first empty slot only)'
+        end
+    end
+end
 -- catalogue explosions on the page of what sets them off: the RL-77's bomblets (spawned by both its rockets' bursts)
 -- and the Hellbombs' detonation (HD2Runtime 0.31.1+ hd2.explosion; the NUX-223 has no stratagem data of its own)
 do
     local E=has('explosion_catalogue')and require('hd2runtime/domains/explosion_catalogue')
     local all=E and type(hd2.explosion)=='function'and E.explosions or{}
-    if all['support_weapon/rl77_airburst_rocket_launcher/function_expiry/shrapnel_expiry']then
+    local bomblets=all['support_weapon/rl77_airburst_rocket_launcher/function_expiry/shrapnel_expiry']
+    if bomblets then
         local rl77=rows('sp|RL-77 Airburst Rocket Launcher')
+        -- (named by the Runtime's owner-neutral alias, HD2Runtime 0.31.2; shrapnel before it)
+        local section=bomblets.aliases and'Explosion · Bomblets'or'Explosion · Shrapnel'
         local function bomblet(field)
-            return find(rl77,function(r)return r.section=='Explosion · Bomblets'and r.field==field end)
+            return find(rl77,function(r)return r.section==section and r.field==field end)
         end
         local damage,outer=bomblet('explosion.damage.standard_damage'),bomblet('explosion.outer_radius')
         check(damage and damage.vanilla==500 and damage.shared and damage.unverified and damage.acks.allow_shared,

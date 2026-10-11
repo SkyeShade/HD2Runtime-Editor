@@ -78,6 +78,11 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     spawn (the RL-77's bomblets, Explosion · Bomblets, from both its rockets; the EAT-700's napalm shrapnel), and the
     Hellbombs' detonation (Explosion · Detonation) on the B-100 Portable Hellbomb and on a NUX-223 Hellbomb entry under
     Mission. Both Hellbombs and some mission objectives share that damage row.
+  - **Status slots** (up to 4 per damage row with HD2Runtime 0.31.2, the first empty one before): each slot's status
+    and strength sit together, in order (Status 1, Status 1 strength, Status 2 ...). The slots fill in order: slot 2
+    stays greyed out until slot 1 holds a status (staged or applied), and a slot is emptied only once the slots after
+    it are (resetting slot 1 resets the later ones you set). The editor applies them in that order, and an exported mod
+    writes one damage row's statuses as one transaction (the GL-15 Evictor's blast with Gas and Gas Confusion).
   - **Beam conversion** (HD2Runtime 0.31.0, `hd2.beam_conversion`; absent on older Runtimes): a projectile weapon's
     Beam Conversion group shows the verdict and caveats (a refused weapon only its reason), the layout and its
     multiplayer rule, the switch, its own rate, beams and pulse, and the interim per-weapon damage, AP and range rows

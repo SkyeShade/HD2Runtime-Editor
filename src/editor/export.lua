@@ -343,6 +343,70 @@ function M.conversion_operation(catalog_module,list,id)
     return text
 end
 
+-- One damage row's status slot changes {{row, value}, ...} as one transaction, in slot order (HD2Runtime 0.31.2: the
+-- slots stay packed from slot 1, judged on the row as the whole write leaves it). Slot 1 and slot 2 of an empty row
+-- (the GL-15 Evictor's blast with gas and gas_confusion) must go in together: as two operations, the second slot would
+-- be refused (STATUS_SLOT_GAP) whenever it applied first. Acknowledgements as the validator asks for each change.
+function M.status_operation(catalog_module,list,id)
+    local ok,text=pcall(function()
+        table.sort(list,function(a,b)
+            local x,y=a.row.status_slot,b.row.status_slot
+            if x.n~=y.n then return x.n<y.n end
+            if x.kind~=y.kind then return x.kind=='type'end
+            return tostring(a.row.key)<tostring(b.row.key)
+        end)
+        local first=list[1].row
+        local target=first.target_code or M.trace(first.target)
+        local acks={}
+        local lines={}
+        for _,entry in ipairs(list)do
+            local row,value=entry.row,entry.value
+            local okp,result=catalog_module.probe(row,value)
+            if okp and type(result)=='table'then for k,on in pairs(result)do if on then acks[k]=true end end end
+            local expect=row.expect_code or(row.expect and M.trace(row.expect))or literal(row.vanilla)
+            lines[#lines+1]='            {field='..literal(row.field)..',expect='..expect..',value='
+                ..M.value_code(catalog_module,row,value,target)..'},  -- '..row.label..'\n'
+        end
+        local names={}
+        for k in pairs(acks)do names[#names+1]=k end
+        table.sort(names)
+        local flags=''
+        for _,k in ipairs(names)do flags=flags..'\n        '..k..'=true,'end
+        local section=tostring(first.section):gsub(' · Status$','')
+        return '-- '..first.object.name..': '..section..', status slots (one transaction: they fill in order)\n'
+            ..'add(function() return hd2.ensure({\n    transaction={\n        id='..literal(id)..',\n'
+            ..'        target='..target..',\n        changes={\n'..table.concat(lines)..'        },'..flags
+            ..'\n    }\n}) end)\n'
+    end)
+    if not ok then return nil,tostring(text)end
+    return text
+end
+
+-- The status slot changes of one damage row (same target), by the first entry of each such group of two or more.
+local function status_groups(entries)
+    local by_target,first={},{}
+    for i,entry in ipairs(entries)do
+        local row=entry.row
+        if row and row.status_slot and not row.conversion and not row.controller then
+            local ok,code=pcall(function()return row.target_code or M.trace(row.target)end)
+            if ok and type(code)=='string'then
+                local key=tostring(row.object and row.object.key)..'|'..code
+                local group=by_target[key]
+                if not group then group={index=i,list={}};by_target[key]=group end
+                group.list[#group.list+1]=entry
+            end
+        end
+    end
+    local member={}
+    for _,group in pairs(by_target)do
+        if#group.list>1 then
+            first[group.index]=group.list
+            for _,entry in ipairs(group.list)do member[entry]=true end
+        end
+    end
+    return first,member
+end
+
 -- The addon source for the chosen changes, and the changes left out (with why).
 function M.addon(catalog_module,entries,meta)
     local parts={'-- '..meta.name..' '..meta.version..': exported from HD2R Editor ('..#entries..' changes).\n',
@@ -360,10 +424,18 @@ function M.addon(catalog_module,entries,meta)
             table.insert(conversions[name],entry)
         end
     end
+    -- a damage row's status slots: one transaction, written where its first change is
+    local slot_groups,in_group=status_groups(entries)
     for i,entry in ipairs(entries)do
         local name=entry.row and entry.row.conversion
         local text,why
-        if name then
+        if slot_groups[i]then
+            local list=slot_groups[i]
+            text,why=M.status_operation(catalog_module,list,prefix..i)
+            if not text then for _,e in ipairs(list)do skipped[#skipped+1]={entry=e,why=why}end end
+        elseif in_group[entry]then
+            -- (written with its group's first change)
+        elseif name then
             if not written[name]then
                 written[name]=true
                 text,why=M.conversion_operation(catalog_module,conversions[name],prefix..i)

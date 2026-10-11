@@ -1297,6 +1297,41 @@ do
     i18n.set({},'English')
     step({},nil,'65_back_to_english')
 end
+-- status slots fill in order (HD2Runtime 0.31.2): slot 2 is greyed out until slot 1 holds a status (staged or applied),
+-- emptying slot 1 while slot 2 is staged is refused, unstaging slot 1 drops slot 2, a preset stages both
+do
+    local o=H.catalog:object('pw|GL-15 Evictor');H.catalog:open(o)
+    local s={}
+    for _,r in ipairs(o.rows)do
+        if r.status_slot and r.field:find('^explosion%.')then s[r.status_slot.kind..r.status_slot.n]=r end
+    end
+    if s.type2 then
+        H.app:discard()
+        assert(H.app:slot_block(s.type2)and H.app:slot_block(s.strength2)and not H.app:slot_block(s.type1),
+            'slot 2 greyed out while slot 1 is empty')
+        assert(not H.app:stage(s.type2,'gas_confusion')and not H.app:stage(s.strength2,50),'slot 2 refused first')
+        H.app:reveal(s.type2)
+        local d=step({},nil,'66_status_slot_in_order')
+        local chip,line=false,false
+        for _,item in ipairs(d.items)do
+            if item.k=='t'and item.s=='IN ORDER'then chip=true end
+            if item.k=='t'and tostring(item.s):find('Status 1',1,true)and tostring(item.s):find('fill in order',1,true)then
+                line=true
+            end
+        end
+        assert(chip and line,'the window says why slot 2 waits')
+        assert(H.app:stage(s.type1,'gas'),'slot 1 staged')
+        assert(not H.app:slot_block(s.type2),'slot 2 open once slot 1 is staged')
+        assert(H.app:stage(s.type2,'gas_confusion'),'slot 2 staged')
+        step({},nil,'67_status_slots_staged')
+        assert(not H.app:stage(s.type1,'none'),'emptying slot 1 refused while slot 2 is staged')
+        H.app:unstage(s.type1)
+        assert(not H.app.pending[s.type2.key],'slot 2 dropped with slot 1')
+        assert(H.app:stage_map({[s.type2.key]='gas_confusion',[s.type1.key]='gas'})==0
+            and H.app.pending[s.type1.key]and H.app.pending[s.type2.key],'a preset stages both slots')
+        H.app:discard()
+    end
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

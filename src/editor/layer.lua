@@ -230,6 +230,17 @@ end
 -- converted weapon only (editor/catalog.lua conversion_rows). Mission uses back to unlimited (their reset) take the
 -- stratagem out of the Eagle Rearm pool the editor put it in (REARM_POOL_UNLIMITED).
 local function release_dependents(self,row,value,from_reset)
+    -- a status slot back to its base takes its own strength and the editor's later slots of the same damage row with
+    -- it (they cannot stay behind an empty slot: STATUS_SLOT_GAP); status_wait clears them first
+    local s=row.status_slot
+    if from_reset and s and s.kind=='type'and(value==nil or value=='none')then
+        local rows={s.strength}
+        for _,r in ipairs(s.later or{})do rows[#rows+1]=r end
+        for _,r in ipairs(rows)do
+            local other=self.slots[r.loc]
+            if other and(other.user or other.error)then self:reset(r)end
+        end
+    end
     if from_reset and row.pool_row and value=='unlimited'then
         local s=self.slots[row.pool_row.loc]
         if s and s.user and(s.target==catalog_module.EAGLE_REARM or s.target=='eagle_rearm')then
@@ -680,6 +691,43 @@ local function rearm_wait(self,slot)
     return false
 end
 
+-- Status slots (HD2Runtime 0.31.2, core/status_slots.lua): a damage row's statuses stay packed from slot 1, judged on
+-- the live row when each write applies, and here every field is an ensure of its own. So a slot's status or strength
+-- waits for the slot before it to be applied, and a slot is cleared only once the slots after it no longer hold a
+-- status (resetting a slot resets the editor's later ones, release_dependents). An order that cannot come about is
+-- refused at once with the reason. True while the slot must wait (or just failed).
+local function has_status(value)return value~=nil and value~='none'end
+-- The status the field's bytes hold as far as the editor knows: the held value of its ensure, else its base.
+local function live_status(self,row)
+    local slot=self.slots[row.loc]
+    if slot and slot.watch then return has_status(slot.held)end
+    return has_status((self:base(row)))
+end
+local function status_wait(self,slot)
+    local s=slot.row.status_slot
+    if not s or slot.target==nil then return false end
+    -- (nothing to write: the bytes already hold the target)
+    local now=slot.watch and slot.held or self:base(slot.row)
+    if util.same(hold(slot.row,now),slot.target)then return false end
+    if s.kind=='type'and not has_status(slot.target)then
+        -- clearing: every later slot empty first
+        for _,r in ipairs(s.later or{})do
+            if r.status_slot.kind=='type'and has_status((self:value(r)))then
+                fail(self,slot,'STATUS_SLOT_GAP: clear "'..tostring(r.label)..'" first: a status slot is emptied only '
+                    ..'when the slots after it are empty')
+                return true
+            end
+        end
+        for _,r in ipairs(s.later or{})do if self:state(r)=='applying'then return true end end
+        return false
+    end
+    if not s.prev or live_status(self,s.prev)then return false end
+    if has_status((self:value(s.prev)))and self:state(s.prev)=='applying'then return true end
+    fail(self,slot,'STATUS_SLOT_GAP: set "'..tostring(s.prev.label)..'" first: the status slots fill in order, from '
+        ..'slot 1')
+    return true
+end
+
 -- Drives every field one update further. Cheap when nothing changes.
 function Layer:tick(dt)
     self.clock=(self.clock or 0)+(dt or 0)
@@ -744,9 +792,9 @@ function Layer:tick(dt)
                 end
             end
         elseif(slot.phase=='hold'or slot.phase=='idle')and slot.dirty
-            and((slot.user and conversion_wait(self,slot))or rearm_wait(self,slot))then
+            and((slot.user and conversion_wait(self,slot))or rearm_wait(self,slot)or status_wait(self,slot))then
             -- a field that depends on another waits for it (or was refused): a beam conversion setting for its
-            -- conversion, the rearm pool and the mission uses for each other
+            -- conversion, the rearm pool and the mission uses for each other, a status slot for its neighbours
         elseif slot.phase=='hold'or slot.phase=='idle'then
             if slot.dirty then
                 slot.dirty=false

@@ -163,6 +163,8 @@ class EditorTests(unittest.TestCase):
             self.assertTrue((folder / 'project' / 'thumbnail.png').is_file())
             self.assertIn('applied ok', result)
             self.assertIn('wrapped ok', result)
+            if (lua_host.RUNTIME / 'core' / 'status_slots.lua').is_file():
+                self.assertIn('status slots one transaction ok', result)
 
     def test_interface_text_list_is_current(self):
         spec = importlib.util.spec_from_file_location('locale_strings', lua_host.PROJECT / 'tools' / 'locale_strings.py')
@@ -221,6 +223,9 @@ class EditorTests(unittest.TestCase):
             self.assertIn('0.31.1 damage rows ok', result)
         else:
             self.assertIn('no 0.31.1 rows ok', result)
+        # status slots 1 to 4 on every damage row (HD2Runtime 0.31.2 core/status_slots.lua)
+        if (lua_host.RUNTIME / 'core' / 'status_slots.lua').is_file():
+            self.assertIn('status slots ok', result)
         # catalogue explosions on the page of what sets them off (the RL-77's bomblets, both Hellbombs)
         explosions = lua_host.RUNTIME / 'domains' / 'explosion_catalogue.lua'
         text = explosions.read_text(encoding='utf-8') if explosions.is_file() else ''
@@ -243,6 +248,10 @@ class EditorTests(unittest.TestCase):
         if (lua_host.RUNTIME / 'docs' / 'stratagem-uses.md').is_file() and 'rearm_pool' in (
                 lua_host.RUNTIME / 'docs' / 'stratagem-uses.md').read_text(encoding='utf-8'):
             self.assertIn('rearm pool order ok', result)
+        # status slots (HD2Runtime 0.31.2): slot 2 waits for slot 1; a reset clears the later slot first
+        if (lua_host.RUNTIME / 'core' / 'status_slots.lua').is_file():
+            for line in ('status slot order ok', 'status slot reset ok'):
+                self.assertIn(line, result)
 
     def test_window_frames_stay_inside_overlay_limits(self):
         result = lua_file('test_ui.lua', {'sim': (LUA / 'sim.lua').as_posix(),
