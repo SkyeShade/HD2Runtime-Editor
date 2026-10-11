@@ -182,6 +182,7 @@ function M.install(App)
                     -- a pending value equal to the base resets the field when applied
                     fg,bg,label=C.pending,C.pending_soft,util.same(e.value,base)and L('PENDING RESET')or L('PENDING')
                 elseif e.state=='removing'then fg,bg,label=C.pending,C.pending_soft,L('REMOVING')
+                elseif e.state=='applying'and self:loading(e.row)then fg,bg,label={255,199,44,255},C.gold_soft,L('LOADING')
                 elseif e.state=='applying'then fg,bg,label={255,199,44,255},C.gold_soft,L('APPLYING')
                 elseif e.state=='error'or e.error then fg,bg,label=C.error,C.error_soft,L('ERROR')end
                 chip(cv,label,x+lw-112,cy,fg,bg,'right')

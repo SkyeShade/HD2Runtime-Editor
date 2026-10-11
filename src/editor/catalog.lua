@@ -248,10 +248,22 @@ M.make_value_row=make_value_row
 
 -- A row's value as the window shows it, in the player's language (its own labels first).
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+local function Lf(...)return i18n.Lf(...)end
+-- A catalogued explosion's label (hd2.explosion(name), an alias resolved), or nil.
+local function explosion_label(id)
+    local ok,E=pcall(require,'hd2runtime/domains/explosion_catalogue')
+    if not ok or type(E)~='table'or type(E.explosions)~='table'then return nil end
+    local e=E.explosions[id]or E.explosions[(E.aliases or{})[id]or'']
+    return e and e.label and tostring(e.label)or nil
+end
 function M.text(row,value)
     local L=i18n.L
     for _,item in ipairs(row.labels or{})do
         if util.same(item.value,value)then return L(item.label)end
+    end
+    -- a catalogued explosion (a payload slot's value): its catalogue label
+    if type(value)=='table'and rawget(value,'resource')=='explosion'and type(rawget(value,'explosion'))=='string'then
+        return L(explosion_label(rawget(value,'explosion'))or rawget(value,'explosion'))
     end
     if row.kind=='traits'and type(value)=='table'then
         if#value==0 then return L('None')end
@@ -341,8 +353,16 @@ function M.encode(row,value)
     if rawget(value,'resource')=='vehicle_weapon'then return nil end
     if rawget(value,'resource')=='pickup'then return {ref='pickup',id=rawget(value,'semanticId')}end
     if rawget(value,'path')=='no_explosion'then return {ref='none'}end
+    -- a catalogued explosion (hd2.explosion(name): HD2Runtime 0.31.2 payload options)
+    if rawget(value,'resource')=='explosion'and type(rawget(value,'explosion'))=='string'then
+        return {ref='explosion',id=rawget(value,'explosion')}
+    end
     local weapon,attack,phase=rawget(value,'weapon'),rawget(value,'attack'),rawget(value,'phase')
-    if weapon and phase then return {ref='terminal',weapon=weapon,attack=attack,phase=phase}end
+    if weapon and phase then
+        -- (a support weapon's own terminal explosion keeps its resource; a player weapon's is stored as before)
+        return {ref='terminal',weapon=weapon,attack=attack,phase=phase,
+            resource=rawget(value,'resource')=='support_weapon'and'support_weapon'or nil}
+    end
     if weapon and attack then return {ref='projectile',weapon=weapon,attack=attack}end
     return nil
 end
@@ -353,6 +373,11 @@ function M.decode(cat,row,stored)
         if stored.ref=='output'then return hd2.attack_output(stored.id)end
         if stored.ref=='pickup'then return hd2.pickup(stored.id)end
         if stored.ref=='none'then return row.target():no_explosion()end
+        if stored.ref=='explosion'then return hd2.explosion(stored.id)end
+        if stored.ref=='terminal'and stored.resource=='support_weapon'then
+            return hd2.support_weapon(stored.weapon):attack(stored.attack):projectile():terminal_action(stored.phase)
+                :explosion()
+        end
         if stored.ref=='terminal'then
             return hd2.weapon(stored.weapon):attack(stored.attack):projectile():terminal_action(stored.phase):explosion()
         end
@@ -451,8 +476,90 @@ beam_options=function(hd2,row)
     end
     return out
 end
--- Donor terminal explosions: none, and one player weapon terminal action per reviewed explosion type.
+-- Payload slots (terminal.explosion rows): their labels, the picker's group headers (HD2Runtime 0.31.2 payload option
+-- groups, by id) and its warning badges with a short explanation each (shown through L()).
+local PAYLOAD_LABELS={impact='Impact payload',expiry='Expiry payload',not_offered='Not offered',own='Own explosion',
+    none='None',none_sub='no terminal explosion'}
+M.PAYLOAD_LABELS=PAYLOAD_LABELS
+local PAYLOAD_GROUPS={weapon='Weapons',support_weapon='Support weapons',throwable='Throwables',orbital='Orbitals',
+    eagle='Eagles',hellbomb='Hellbombs',sentry='Sentries',mine='Mines',vehicle='Vehicles',backpack='Backpacks',
+    enemy='Enemies',other='Other'}
+M.PAYLOAD_GROUPS=PAYLOAD_GROUPS
+local PAYLOAD_WARNINGS={
+    very_large={badge='VERY LARGE',text='A very large blast: it can kill the shooter and teammates nearby'},
+    lingering_field={badge='LINGERING',text='Leaves a lingering status field; the game holds at most 4096 of them, '
+        ..'so avoid it on fast-firing weapons'},
+    fire={badge='FIRE',text='Leaves fire on the ground'},
+    shrapnel={badge='SHRAPNEL',text='Releases shrapnel or bomblets of its own'},
+    arc={badge='ARC',text='Releases an electric arc'},
+    no_damage={badge='NO DAMAGE',text='Deals no damage itself (a status field, smoke or a push)'}}
+M.PAYLOAD_WARNINGS=PAYLOAD_WARNINGS
+-- An option's damage and radius as its picker subtitle ("350 damage · 3 to 6 m").
+local function option_sub(o)
+    local parts={}
+    if type(o.damage)=='number'then
+        local text=Lf('%s damage',util.format(o.damage))
+        if type(o.durable_damage)=='number'and o.durable_damage~=o.damage then
+            text=Lf('%s damage (%s durable)',util.format(o.damage),util.format(o.durable_damage))
+        end
+        parts[#parts+1]=text
+    end
+    if type(o.outer_radius)=='number'then
+        parts[#parts+1]=type(o.inner_radius)=='number'and Lf('%s to %s m',util.format(o.inner_radius),
+            util.format(o.outer_radius))or Lf('%s m',util.format(o.outer_radius))
+    end
+    if type(o.statuses)=='table'and#o.statuses>0 then
+        parts[#parts+1]=#o.statuses==1 and Lf('1 status')or Lf('%d statuses',#o.statuses)
+    end
+    return table.concat(parts,' · ')
+end
+-- The values a payload slot takes from HD2Runtime 0.31.2 (terminal:payload_options()): its own explosion and none
+-- first, then every option in the Runtime's display order, each with its group, warnings and acknowledgements; the
+-- options the field refuses as a note. nil when the Runtime has no payload options (older Runtimes).
+local function payload_options(row)
+    local ok,o=pcall(function()
+        local t=row.target()
+        if type(t)~='table'or type(t.payload_options)~='function'then return nil end
+        return t:payload_options()
+    end)
+    if not ok or type(o)~='table'or type(o.options)~='table'then return nil end
+    local out={}
+    local function item(value,label,sub,acks)
+        out[#out+1]={value=value,label=label,sub=sub,acks=acks,checked=true,search=sub}
+        return out[#out]
+    end
+    if type(o.own)=='table'and o.own.value~=nil then
+        item(o.own.value,PAYLOAD_LABELS.own,o.own.label and tostring(o.own.label)or nil,o.own.acknowledgements).own=true
+    end
+    if type(o.none)=='table'and o.none.value~=nil then
+        item(o.none.value,PAYLOAD_LABELS.none,PAYLOAD_LABELS.none_sub,o.none.acknowledgements)
+    end
+    for _,x in ipairs(o.options)do
+        if type(x)=='table'and x.value~=nil then
+            local it=item(x.value,tostring(x.label or x.name),option_sub(x),x.acknowledgements)
+            it.group=PAYLOAD_GROUPS[x.group]or(x.group_label and tostring(x.group_label))or PAYLOAD_GROUPS.other
+            it.search=table.concat({tostring(x.owner or''),tostring(x.name or''),tostring(x.group_label or''),
+                it.group},' ')
+            it.warnings={}
+            for _,code in ipairs(type(x.warnings)=='table'and x.warnings or{})do it.warnings[#it.warnings+1]=code end
+            it.explosion=x.name
+        end
+    end
+    local note={}
+    for _,x in ipairs(type(o.excluded)=='table'and o.excluded or{})do
+        if#note<2 and type(x)=='table'then
+            note[#note+1]=Lf('Not offered: %s (%s)',tostring(x.label or x.name),util.plain(tostring(x.reason),160))
+        end
+    end
+    out.note=#note>0 and note or nil
+    return out
+end
+M.payload_options=payload_options
+-- Donor terminal explosions: with HD2Runtime 0.31.2 every payload option (payload_options above); before, none and one
+-- player weapon terminal action per reviewed explosion type.
 local function explosion_options(hd2,row)
+    local options=payload_options(row)
+    if options then return options end
     local out={}
     local okn,none=pcall(function()return row.target():no_explosion()end)
     if okn then out[1]={value=none,label='None',sub='no terminal explosion'}end
@@ -705,7 +812,7 @@ local function player_rows(hd2,object,entry)
                     local ok,vanilla=pcall(common.expect)
                     if ok then
                         common.vanilla=vanilla
-                        common.label=util.humanize(phase)..' payload'
+                        common.label=PAYLOAD_LABELS[phase]or(util.humanize(phase)..' payload')
                         common.section=join('Explosion',role_label(role),util.humanize(phase))
                         common.options=function(row)return explosion_options(hd2,row)end
                         rows[#rows+1]=make_value_row(object,common)
@@ -808,7 +915,7 @@ local function explosion_field_row(hd2,object,writes,e,eid,field,section,id_pref
     local suffix=field.id:gsub('^explosion%.',''):gsub('^damage%.','')
     local ap=suffix:match('^ap_(%a+)$')
     local label=ap and('Armor penetration: '..(ap=='direct'and'direct'or ap..' angle'))or util.humanize(suffix)
-    return make_row(object,{id=id_prefix..field.id,label=label,
+    local row=make_row(object,{id=id_prefix..field.id,label=label,
         unit=d.unit,field=field.id,target=function()return hd2.explosion(eid)end,
         shared=shared_ack(d),
         -- (no hd2.explosion edit is live-tested: a descriptor without an acknowledgement still gets one)
@@ -816,6 +923,8 @@ local function explosion_field_row(hd2,object,writes,e,eid,field,section,id_pref
         section=section,vanilla=d.currentDefault,note=EXPLOSION_NOTES[eid],
         min=d.range and d.range.min,max=d.range and d.range.max,type=d.type,
         storage=(d.backing or{}).storage})
+    row.catalogue_explosion=eid
+    return row
 end
 -- opts: {roles = {[role] = true}, section = function(role, entry, id, chained) -> section label or nil}. `rows` are
 -- the rows already on the page. Returns the new rows.
@@ -892,6 +1001,101 @@ local function support_fires(f)
         return 'attack:'..role
     end
     return nil
+end
+-- HD2Runtime 0.31.2 (docs/explosions.md "Payloads on support weapons"): a support weapon's impact and expiry payload
+-- slots, hd2.fields.terminal.explosion on attack(role):projectile():terminal_action(phase), one per projectile row an
+-- attack fires (the AC-8's HE round and its flak, the Epoch's charge levels, the SG-88's rounds feed), shown like the
+-- primaries' (editor/catalog.lua "What a payload slot sets off"): in the section of the round's explosion
+-- ("Explosion · Primary impact", "Explosion · Flak · Impact"), first in it. The rows of the explosion the slot sets off
+-- natively (by its settings record, referenceSettings) are moved into the slot's section, so they are the slot's own
+-- explosion rows; a slot whose explosion another slot already holds (the GL-21's expiry is its impact explosion) keeps
+-- a section of its own. A slot the Runtime refuses (the missiles' expiry: fieldRefusals) is shown read-only with its
+-- reason. `rows` are the support weapon's rows so far; returns the new rows.
+local function payload_section(role,phase,role_text)
+    if role=='programmable'then return join('Explosion',role_text(role),util.humanize(phase))end
+    return join('Explosion',util.humanize(role..'_'..phase))
+end
+local function payload_note(f)
+    local p=type(f.payload)=='table'and f.payload or{}
+    local notes={}
+    for _,n in ipairs(type(p.notes)=='table'and p.notes or{})do notes[#notes+1]=tostring(n)end
+    return#notes>0 and table.concat(notes,' ')or nil
+end
+local function support_payload_rows(hd2,object,entry,rows,role_text)
+    local name=entry.name
+    local out,claimed={},{}
+    local ids={}
+    -- (impact slots first: an explosion both phases set off natively, the RL-77 cluster round's, is the impact's)
+    local fields={}
+    for _,phase in ipairs({'impact','expiry'})do
+        for _,f in ipairs(entry.fields or{})do
+            local t=type(f.target)=='table'and f.target or{}
+            if f.type=='explosion_reference'and t.path=='terminal_action'and not f.deprecated and t.phase==phase then
+                fields[#fields+1]=f
+            end
+        end
+    end
+    for _,f in ipairs(fields)do
+        local t=f.target
+        do
+            local ok,row=pcall(function()
+                local role,phase=t.attack or'primary',t.phase
+                local terminal=function()return hd2.support_weapon(name):attack(role):projectile():terminal_action(phase)end
+                if not builds(terminal)then return nil end
+                local none=(type(f.currentDefault)=='table'and f.currentDefault.explosionType or 0)==0
+                local expect=function()
+                    local h=terminal()
+                    if type(h.current)=='function'then return h:current()end
+                    if none then return h:no_explosion()end
+                    return h:explosion()
+                end
+                local okv,vanilla=pcall(expect)
+                if not okv then return nil end
+                local section=payload_section(role,phase,role_text)
+                -- the rows of the explosion it sets off natively, moved into its section (once)
+                local ref=type(f.referenceSettings)=='table'and tonumber(f.referenceSettings.row)
+                local own
+                for _,r in ipairs(ref and rows or{})do
+                    if not r.group and tonumber(tostring(r.loc):match('^settings/explosion/(%d+)@'))==ref then
+                        own=tostring(r.section):gsub(' · Status$','');break
+                    end
+                end
+                if own and not claimed[own]then
+                    claimed[own],claimed[section]=true,true
+                    if own~=section then
+                        for _,r in ipairs(rows)do
+                            if r.section==own then r.section=section
+                            elseif r.section==own..' · Status'then r.section=section..' · Status'end
+                        end
+                    end
+                end
+                local row=make_value_row(object,{id=f.semanticFieldId..'@'..role,kind='reference',
+                    label=PAYLOAD_LABELS[phase],field='terminal.explosion',target=terminal,expect=expect,vanilla=vanilla,
+                    shared=shared_ack(f),unverified=true,descriptor=f,section=section,fires_scope=support_fires(f),
+                    note=payload_note(f),options=function(r)return explosion_options(hd2,r)end})
+                row.swap={kind='terminal',role=role,phase=phase}
+                if f.editable==false then
+                    row.editable,row.reason=false,tostring(f.reason or'read-only in this HD2Runtime')
+                end
+                return row
+            end)
+            if ok and row then out[#out+1]=row;ids[f.semanticFieldId]=true end
+        end
+    end
+    -- the payloads HD2Runtime does not offer, with its reason (the missiles' expiry, the W.A.S.P.'s own missile)
+    local refusals=type(entry.fieldRefusals)=='table'and entry.fieldRefusals or{}
+    for _,id in ipairs(util.sorted_keys(refusals))do
+        local role,phase=tostring(id):match('^terminal%.(.+)%.(%a+)%.explosion$')
+        if role and(phase=='impact'or phase=='expiry')and not ids[id]then
+            local ok,section=pcall(payload_section,role,phase,role_text)
+            if ok then
+                out[#out+1]=info_row(object,{id=id..'@'..role..'@refused',label=PAYLOAD_LABELS[phase],section=section,
+                    text=PAYLOAD_LABELS.not_offered,reason=util.plain(tostring(refusals[id]),300),
+                    target=function()return hd2.support_weapon(name)end})
+            end
+        end
+    end
+    return out
 end
 local function support_rows(hd2,object,entry)
     local rows={}
@@ -1037,6 +1241,8 @@ local function support_rows(hd2,object,entry)
             if chained then return join('Explosion',chain_label(e))end
             return join('Explosion',role_text('programmable'))
         end}))do rows[#rows+1]=r end
+    -- HD2Runtime 0.31.2: the impact and expiry payload slots of every projectile row an attack fires, per role and feed
+    for _,r in ipairs(support_payload_rows(hd2,object,entry,rows,role_text))do rows[#rows+1]=r end
     -- the RL-77's cluster rocket hits with its main rocket's own DamageInfo row: said so where it is shown again
     same_hit_rows(name,rows)
     -- a hint on a status slot where a player looks for it (the slot's choices are the Runtime's, unchanged)
@@ -2886,9 +3092,16 @@ function Catalog:open(object)
             local status=join(slot.section,'Status')
             for _,r in ipairs(object.rows)do
                 if r~=slot and r.field~='terminal.explosion'and r.group==slot.group and r.weapon_name==slot.weapon_name
-                    and(r.section==slot.section or r.section==status)then
-                    r.payload_from=slot
-                    slot.payload_rows[#slot.payload_rows+1]=r
+                    and(r.section==slot.section or r.section==status)and not r.info then
+                    if r.catalogue_explosion then
+                        -- (a catalogued explosion's own row, edited through hd2.explosion(name): HD2Runtime keeps
+                        -- taking it whatever the slot sets off, so it is only set aside from view, never locked)
+                        slot.payload_soft=slot.payload_soft or{}
+                        slot.payload_soft[#slot.payload_soft+1]=r
+                    else
+                        r.payload_from=slot
+                        slot.payload_rows[#slot.payload_rows+1]=r
+                    end
                 end
             end
         end
@@ -2987,6 +3200,27 @@ function Catalog:payload_explosion(key,id)
         end
         result.label=e and e.label or id.explosion
         result.rows,result.note=self:explosion_rows_of(id.explosion)
+    elseif id.weapon and id.resource=='support_weapon'then
+        -- a support weapon's own terminal explosion (HD2Runtime 0.31.2): the rows its payload slot holds, else the
+        -- catalogue's entry of the explosion that slot sets off natively
+        local page=self:object('sp|'..id.weapon)
+        local eid
+        if page then
+            self:open(page)
+            for _,s in ipairs(page.payload_slots or{})do
+                if s.swap and s.swap.role==id.attack and s.swap.phase==id.phase then
+                    for _,r in ipairs(s.payload_rows or{})do result.rows[#result.rows+1]=r end
+                    for _,r in ipairs(s.payload_soft or{})do result.rows[#result.rows+1]=r end
+                    local p=type(s.descriptor)=='table'and type(s.descriptor.payload)=='table'and s.descriptor.payload
+                    eid=p and p.current
+                end
+            end
+        end
+        result.owner,result.label=page,id.weapon
+        if#result.rows==0 then
+            if type(eid)=='string'then result.rows,result.note=self:explosion_rows_of(eid)
+            else result.note=PAYLOAD_TEXTS.unknown end
+        end
     elseif id.weapon then
         -- another weapon's terminal explosion: that weapon's own rows of it (a sub-weapon's on its host's page)
         local family=id.resource=='support_weapon'and'sp'or'pw'
@@ -3030,6 +3264,7 @@ function Catalog:payload_view(slot,value)
     view={key=key,rows={},label=x.label,owner=x.owner}
     local own={}
     for _,r in ipairs(slot.payload_rows or{})do own[r.loc]=true end
+    for _,r in ipairs(slot.payload_soft or{})do own[r.loc]=true end
     -- (the weapon's own explosion, also when another weapon's handle names the same rows)
     local all_own=#x.rows>0 and not x.note
     for _,canonical in ipairs(x.rows)do

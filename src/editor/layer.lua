@@ -210,6 +210,14 @@ function Layer:state(row)
     if slot.watch then return 'held'end
     return 'idle'
 end
+-- Whether a field being applied waits for game packages first (HD2Runtime: the ensure's status 'waiting_for_assets',
+-- a payload naming an explosion whose package loads before the write; ASSET_UNAVAILABLE after 90 s).
+function Layer:loading(row)
+    local slot=self.slots[row.loc]
+    if not slot or slot.error or not(slot.phase=='adopt'or slot.phase=='steer')then return false end
+    local w=slot.phase=='adopt'and slot.next_watch or slot.watch
+    return type(w)=='table'and w.status=='waiting_for_assets'
+end
 -- active, applying, errors, and removing (those of the applying fields being reset: slot.removing).
 function Layer:counts()
     local active,applying,errors,removing=0,0,0,0
@@ -556,6 +564,13 @@ end
 -- A field's value was refused or failed: the error (with the value asked for, the Runtime's code when it gave one and
 -- the time, for the errors list), and the field back to what it held.
 local function fail(self,slot,why,code)
+    -- a game package the value needs that did not load (a payload's explosion: HD2Runtime waits up to 90 s, then
+    -- refuses the write and the field keeps its value)
+    if code=='ASSET_UNAVAILABLE'or tostring(why):find('ASSET_UNAVAILABLE',1,true)then
+        code='ASSET_UNAVAILABLE'
+        why='ASSET_UNAVAILABLE: the game package this value needs did not load, so nothing was written ('
+            ..tostring(why):gsub('^.-ASSET_UNAVAILABLE:%s*','')..')'
+    end
     slot.error=util.plain(why or'the operation was refused',300)
     slot.failed_value,slot.failed_code,slot.failed_at=slot.target,code,self.clock or 0
     slot.dirty,slot.readopts,slot.nudged=false,nil,nil
@@ -937,7 +952,8 @@ function Layer:tick(dt)
                 slot.dirty=false
                 self:steer(slot)
             else
-                if queued(w)then slot.steer_started=(slot.steer_started or 0)+(dt or 0)end
+                -- (nor is the time its game packages take to load: HD2Runtime gives them 90 s, then refuses the write)
+                if queued(w)or w.status=='waiting_for_assets'then slot.steer_started=(slot.steer_started or 0)+(dt or 0)end
                 local waited=(self.clock or 0)-(slot.steer_started or 0)
                 local settled=w.rebinds~=nil and w.rebinds~=slot.rebinds_at
                 if waited>=STALL and not settled and not slot.stalled and not slot.nudged

@@ -27,6 +27,12 @@ local function start_spec(kind)
         -- updates while the others report 'queued'
         local exclusive=require('hd2runtime/runtime/exclusive')
         local steps=0
+        -- S.asset_wait = seconds: a write that needs game packages (a catalogued payload explosion's) waits that long
+        -- ('waiting_for_assets', as the real asset gate reports it), then goes ahead; with S.asset_fail it is refused
+        -- then (ASSET_UNAVAILABLE, the gate's reason after its timeout)
+        local packages={}
+        pcall(function()packages=require('hd2runtime/core/assets').collect(spec)end)
+        local loading=0
         function watch.cancel()
             if watch.status~='complete'and watch.status~='rejected'then watch.status='cancelled'end
             exclusive.release(watch)
@@ -35,6 +41,18 @@ local function start_spec(kind)
             if watch.status=='complete'or watch.status=='rejected'or watch.status=='cancelled'then return end
             elapsed=elapsed+dt
             if elapsed<startup then return end
+            if#packages>0 and S.asset_wait then
+                loading=loading+dt
+                if loading<S.asset_wait then watch.status='waiting_for_assets';return end
+                if S.asset_fail then
+                    watch.status='rejected'
+                    watch.error='ASSET_UNAVAILABLE: '..tostring(packages[1].label)..' requires package '
+                        ..tostring(packages[1].name)..'; still requested after 90 seconds'
+                    watch.result={status='REJECTED',code='ASSET_UNAVAILABLE',reason=watch.error}
+                    S.log[#S.log+1]=kind..' '..tostring(spec.id)..' '..watch.error
+                    return
+                end
+            end
             if S.serial then
                 if not exclusive.acquire(watch)then watch.status='queued';return end
                 steps=steps+1

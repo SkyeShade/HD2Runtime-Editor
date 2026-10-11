@@ -240,6 +240,25 @@ offers) or a catalogued one (`hd2.explosion(name)`, a mod's value).
 - **Labels.** "<explosion> · <field>": the owner weapon's name (or the catalogue's label), cut first to the same width
   on every row of the slot so the field stays readable (`App:fitted_label`). The status line's SHARED chip and
   "also changes ..." name the owner page and every other object on the same bytes.
+- **Support weapons (HD2Runtime 0.31.2).** `support_payload_rows` makes a slot of every `explosion_reference` field
+  whose target path is `terminal_action` (`hd2.support_weapon(w):attack(role):projectile():terminal_action(phase)`,
+  expect `:current()`), in `Explosion · <Role> <phase>` ("Primary impact", "Full charge impact") or, for the
+  ProgrammableAmmo feed, `Explosion · <feed> · <Phase>` ("Flak · Impact"). The rows of the explosion it sets off
+  natively (by its `referenceSettings` record) move into that section, impact slots first, each section once (the GL-21's
+  expiry, which sets off its impact explosion, keeps a section of its own). Rows edited through `hd2.explosion(name)`
+  (the flak's burst) are linked as `slot.payload_soft`: set aside from view while the slot names another explosion,
+  never locked (HD2Runtime keeps taking them). `fieldRefusals` of a `terminal.*` id (the missiles' expiry) are locked
+  rows with the Runtime's reason. A support weapon's own explosion handle is stored as `{ref='terminal',
+  resource='support_weapon', ...}`; a catalogued one as `{ref='explosion', id}` (presets, session, exports, ModBuilder
+  custom Lua).
+- **Picker.** `explosion_options` uses `terminal:payload_options()` when the Runtime has it (`catalog.payload_options`):
+  own and none first, then every option with `group` (a short header, `PAYLOAD_GROUPS`), `warnings`, `acks` and
+  `checked` (not probed when the list opens; the chosen one is validated when staged, the highlighted one for its
+  acknowledgements, `App:picker_details`); `excluded` options become the picker's note. The picker draws a header
+  before each group and searches `item.search` (owner, catalogue name, group) too. Without it, the earlier list.
+- **Packages.** `Layer:loading(row)`: the ensure of a field being applied reports `waiting_for_assets` (its package
+  loads first); the row and Changes show LOADING, and that time does not count toward the steer's give-up. A gate that
+  fails (ASSET_UNAVAILABLE) is an error with its reason; the field keeps its value.
 
 ## Mount swaps
 

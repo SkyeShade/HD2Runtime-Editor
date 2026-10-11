@@ -113,6 +113,21 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     yours; an applied one goes back to its default before the slot applies, and presets, the saved session and exports
     leave such values out). An explosion HD2Runtime does not catalogue, or one without a known package, shows a short
     note instead.
+  - **Support weapon payloads (HD2Runtime 0.31.2).** Every support weapon round HD2Runtime publishes a payload for has
+    its **Impact payload** and **Expiry payload** in Projectile, per feed (the AC-8's *Flak · Expiry payload*, the
+    Epoch's charge levels, the SG-88's rounds), working like the primaries' slots: the chosen explosion's settings
+    under the slot, the weapon's own explosion set aside while it names another one. A round's own burst catalogued
+    by HD2Runtime (the AC-8's flak) is its impact explosion: set aside from view, never locked. The missiles (Spear,
+    Commando, W.A.S.P.) offer impact only; their expiry row says why. Every write needs allow_shared and
+    allow_unverified_effect (and allow_unverified_reference for another source's explosion), as the validator asks.
+  - **The payload picker (HD2Runtime 0.31.2).** Every explosion a payload takes (138), the weapon's own and None
+    first, then by group with a header each (Weapons, Support weapons, Throwables, Orbitals, Eagles, Hellbombs,
+    Sentries, Mines, Vehicles, Backpacks, Enemies, Other). Type to search a name, owner or group. Each entry shows its
+    damage and radius and its warnings as badges (VERY LARGE, LINGERING, FIRE, SHRAPNEL, ARC, NO DAMAGE); the
+    highlighted one's warnings are explained under the list with the acknowledgements a write of it carries (+ marks
+    those it adds). The primaries' slots use it too; an older HD2Runtime keeps the earlier donor list. An explosion
+    whose game package HD2Runtime loads first shows **LOADING** on its row (and in Changes) until it is written; a
+    package that does not load within 90 s is an error (ASSET_UNAVAILABLE, with the reason) and the row keeps its value.
   - **With HD2Runtime 0.31.2:** projectile swaps on the LAS-99 Quasar and RS-422 Railgun (every donor needs
     allow_unverified_reference); the M-1000 Maxigun, GL-28 and the other hosts HD2Runtime keeps read-only show why
     where the swap would be; the Quasar's **Cooling rate while overheated** (its lockout after an overheat: 100 /
@@ -326,6 +341,7 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 - **UI:** the whole window, driven by scripted keys and clicks, including the picker, the code editor, Escape, the weapon filter, a mount swap, the Changes, Mods (with in-game options), Custom (tuning) and Settings tabs, a language switch, the traits editor and the menu sounds. With generated icons, every stratagem and booster must have one.
 - **Value fields** also cover filling the Liberator's empty rate slots (with its selector binding), the displayed traits and penetration (one at a time), and the steer watchdog.
 - **Payload slots** (`tests/lua/test_payload_explosions.lua`): the AR-2 Coyote's impact payload set to the CB-9's explosion shows that explosion's rows under the slot (the CB-9 page's keys and bytes, marked shared); switching, None, collapsing, applying, never showing an explosion twice, the R-36's own explosion rows set aside while it sets off another one (taken back first; left out of presets, the saved session and exports), and catalogued explosions (a note when one cannot be shown).
+- **Support weapon payloads** (`tests/lua/test_support_payloads.lua`, HD2Runtime 0.31.2): the APW-1's impact payload set to the G-6 Frag's explosion from the picker (groups and their headers, search by name, owner and group, warning badges and explanations, the acknowledgements it adds), the grenade's rows under the slot, LOADING while its package loads, ASSET_UNAVAILABLE in the errors list, presets and exports by the explosion's name; the AC-8 flak's expiry payload; the missiles' impact only, with the Runtime's reason. On an older HD2Runtime, the earlier donor list.
 - **Projectile swaps** (`tests/lua/test_swaps.lua`): a staged and an applied swap set the own projectile rows aside and show the donor (its stats and the link to its owner's page with HD2Runtime 0.31.2); own values are dropped, taken back first, refused with the reason, left out of presets, the saved session and exports.
 - **Helpers:** the JSON reader (sliced), the mod managers' state, the localisation file format, and the interface text list. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
 

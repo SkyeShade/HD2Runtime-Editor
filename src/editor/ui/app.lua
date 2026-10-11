@@ -313,6 +313,12 @@ function App:payload_view(slot)
     if not slot then return nil end
     return self.catalog:payload_view(slot,(self:row_view(slot)))
 end
+-- Whether a field being applied waits for a game package (a payload naming an explosion whose package HD2Runtime loads
+-- before the write): shown as LOADING.
+function App:loading(row)
+    if type(self.layer.loading)~='function'then return false end
+    return self.layer:loading(row.canonical or row)
+end
 -- The name of the explosion a payload view shows: its owner weapon's own (translated) name, else the catalogue's label.
 function App:payload_name(row)
     if row.payload_owner then return util.display_name(row.payload_owner)end
@@ -357,9 +363,11 @@ function App:payload_sections(object,sections,present,hidden)
                 views=views or{}
                 views[#views+1]={slot=slot,view=view}
                 sig=(sig and(sig..';')or'')..slot.key..'='..view.key
-                for _,r in ipairs(view.other and slot.payload_rows or{})do
-                    if self:holds_value(r)then sig=sig..','..r.key
-                    else hide=hide or{};hide[r]=true end
+                for _,list in ipairs(view.other and{slot.payload_rows or{},slot.payload_soft or{}}or{})do
+                    for _,r in ipairs(list)do
+                        if self:holds_value(r)then sig=sig..','..r.key
+                        else hide=hide or{};hide[r]=true end
+                    end
                 end
             end
         end
@@ -2035,6 +2043,7 @@ function App:draw_fields(y0,h)
             elseif not open then chip(cv,L('IN ORDER'),bxr,cy,C.faint,C.line,'right')
             elseif source=='pending'then chip(cv,L('PENDING'),bxr,cy,C.pending,C.pending_soft,'right')
             elseif state=='applying'and self.layer:removing(row)then chip(cv,L('REMOVING'),bxr,cy,C.pending,C.pending_soft,'right')
+            elseif state=='applying'and self:loading(row)then chip(cv,L('LOADING'),bxr,cy,C.gold,C.gold_soft,'right')
             elseif state=='applying'then chip(cv,L('APPLYING'),bxr,cy,C.gold,C.gold_soft,'right')
             elseif source=='editor'then chip(cv,L('EDITED'),bxr,cy,C.gold,C.gold_wash,'right')
             elseif source=='mod'then chip(cv,L('MOD'),bxr,cy,C.mod,C.mod_soft,'right')end
@@ -2062,6 +2071,12 @@ function App:draw_status(y,h)
         local x=18
         if err then
             cv:text(Lf('Error: %s',tostring(err)),x,cy,{size=SZ.small,colour=C.error,max=maxw})
+            return
+        end
+        if state=='applying'and self:loading(row)then
+            cv:text(L('Loading: the game package this value needs loads first; HD2Runtime writes it once the package is '
+                ..'resident (ASSET_UNAVAILABLE after 90 s, and the field keeps its value)'),x,cy,
+                {size=SZ.small,colour=C.gold,max=maxw})
             return
         end
         if row.link then
@@ -2095,6 +2110,7 @@ function App:draw_status(y,h)
         elseif row.kind=='uses'then
             range=row.unlimited and Lf('unlimited, or %d to %d',row.min or 1,row.max or 100)
                 or Lf('%d to %d',row.min or 1,row.max or 100)
+        elseif row.kind=='reference'and row.field=='terminal.explosion'then range=L('Enter to pick an explosion')
         elseif row.kind=='reference'then range=L('Enter to pick a donor')
         elseif row.kind then range=L('Enter to choose, ←→ to step')
         elseif row.min or row.max then

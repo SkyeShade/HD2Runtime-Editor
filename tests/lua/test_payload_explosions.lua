@@ -29,8 +29,12 @@ end
 local function slot_of(object,phase)
     for _,r in ipairs(object.payload_slots or{})do if r.swap and r.swap.phase==phase and not r.group then return r end end
 end
+-- (by its weapon's name: "CB-9 Exploding Crossbow", or the payload option "CB-9 Exploding Crossbow (impact)" of
+-- HD2Runtime 0.31.2)
 local function option(slot,label)
-    for _,o in ipairs(slot.options(slot))do if o.label==label then return o.value end end
+    for _,o in ipairs(slot.options(slot))do
+        if o.label==label or o.label==label..' (impact)'then return o.value end
+    end
 end
 -- the page as shown: its items, the views under each slot (by field), and the subsection holding a row
 local function page(object)

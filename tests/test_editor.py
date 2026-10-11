@@ -294,6 +294,19 @@ class EditorTests(unittest.TestCase):
         if (lua_host.RUNTIME / 'domains' / 'explosion_catalogue.lua').is_file():
             self.assertIn('catalogued payload ok', result)
 
+    def test_support_weapon_payloads_and_the_payload_picker(self):
+        # HD2Runtime 0.31.2: support weapon payload rows (APW-1 -> a grenade explosion, the AC-8 flak's expiry, the
+        # missiles' impact only), the grouped and searchable picker with warnings and acknowledgements, LOADING and
+        # ASSET_UNAVAILABLE; on an older Runtime the old donor list
+        result = lua_file('test_support_payloads.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                                        'harness': (LUA / 'ui_harness.lua').as_posix()})
+        if (lua_host.RUNTIME / 'api' / 'payload_options.lua').is_file():
+            for line in ('payload picker ok', 'support payload rows ok', 'loading state ok', 'asset unavailable ok',
+                         'support payload presets ok', 'flak expiry payload ok', 'missile impact only ok'):
+                self.assertIn(line, result)
+        else:
+            self.assertIn('older runtime fallback ok', result)
+
     def test_revert_all_over_300_fields(self):
         # one guarded operation at a time, as in the game: rows stay REMOVING until their base is back, nothing
         # re-applies, failed fields are reset too, and REVERT ALL works again after manual resets and failures

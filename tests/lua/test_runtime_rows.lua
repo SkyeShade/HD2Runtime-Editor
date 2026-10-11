@@ -142,14 +142,18 @@ if peacemaker and hit and flak then
     check(hit.section:find('^Damage · Missile direct hit')and hit.unverified,'Spear direct hit: '..hit.section)
     local ac8=rows('sp|AC-8 Autocannon')
     local function section(label)return find(ac8,function(r)return r.section==label end)end
+    -- (HD2Runtime 0.31.2: the burst is the flak's own impact explosion, under its payload slot)
+    local payloads=find(ac8,function(r)return r.field=='terminal.explosion'end)~=nil
+    local flak_burst=payloads and'Explosion · Flak · Impact'or'Explosion · Flak'
     check(section('Projectile · Flak')and section('Damage · Flak direct hit')and section('Projectile · Flak · Swap')
-        and section('Explosion · Flak'),'AC-8 flak sections')
-    local burst=find(ac8,function(r)return r.section=='Explosion · Flak'and r.field=='explosion.damage.standard_damage'end)
+        and section(flak_burst),'AC-8 flak sections')
+    local burst=find(ac8,function(r)return r.section==flak_burst and r.field=='explosion.damage.standard_damage'end)
     check(burst and burst.vanilla==190 and burst.unverified,'the flak burst from the explosion catalogue')
     -- the RL-77 cluster rocket's burst damage is its primary rocket's row: shown once, under the primary impact
     local rl77=rows('sp|RL-77 Airburst Rocket Launcher')
-    check(find(rl77,function(r)return r.section=='Explosion · Cluster Bomb'and r.field=='explosion.inner_radius'end)
-        and not find(rl77,function(r)return r.section=='Explosion · Cluster Bomb'
+    local cluster_burst=payloads and'Explosion · Cluster Bomb · Impact'or'Explosion · Cluster Bomb'
+    check(find(rl77,function(r)return r.section==cluster_burst and r.field=='explosion.inner_radius'end)
+        and not find(rl77,function(r)return r.section==cluster_burst
             and r.field=='explosion.damage.standard_damage'end),'RL-77 burst rows not shown twice')
     -- a projectile's own damage is its direct hit (a player took the RL-77's 350 for its blast); the cluster rocket's
     -- is the very same row as the rocket's, and says so

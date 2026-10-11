@@ -266,6 +266,11 @@ function M.value_code(catalog_module,row,value,target_code)
     if stored.ref=='output'then return 'hd2.attack_output('..literal(stored.id)..')'end
     if stored.ref=='pickup'then return 'hd2.pickup('..literal(stored.id)..')'end
     if stored.ref=='none'then return target_code..':no_explosion()'end
+    if stored.ref=='explosion'then return 'hd2.explosion('..literal(stored.id)..')'end
+    if stored.ref=='terminal'and stored.resource=='support_weapon'then
+        return 'hd2.support_weapon('..literal(stored.weapon)..'):attack('..literal(stored.attack)
+            ..'):projectile():terminal_action('..literal(stored.phase)..'):explosion()'
+    end
     if stored.ref=='terminal'then
         return 'hd2.weapon('..literal(stored.weapon)..'):attack('..literal(stored.attack)..'):projectile():terminal_action('
             ..literal(stored.phase)..'):explosion()'

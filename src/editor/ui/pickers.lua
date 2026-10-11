@@ -2,7 +2,8 @@
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The two value editors that open over the window: a searchable picker (choices, mission uses, projectile and
 -- explosion donors; any list through open_list_picker, such as a preset's icon) and a calldown code editor. Installed
--- onto the app (ui/app.lua).
+-- onto the app (ui/app.lua). Payload slots list HD2Runtime 0.31.2's payload options: a header before each group, warning
+-- badges, and the highlighted option's warnings and acknowledgements under the list.
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
@@ -68,8 +69,11 @@ function M.install(App)
         end
         local options=row.options and row.options(row)or{}
         for _,o in ipairs(options)do
-            if row.kind~='reference'or catalog_module.probe(row,o.value)then items[#items+1]=o end
+            -- (HD2Runtime's payload options are what the field takes, each with its acknowledgements: the validator
+            -- runs on the one chosen, and on the highlighted one for its acknowledgements)
+            if row.kind~='reference'or o.checked or catalog_module.probe(row,o.value)then items[#items+1]=o end
         end
+        items.note=options.note
         return items
     end
     function App:open_picker(row,filter)
@@ -79,8 +83,44 @@ function M.install(App)
         local current=self:row_view(row)
         local index=1
         for i,item in ipairs(items)do if util.same(item.value,current)then index=i end end
-        self.picker={row=row,items=items,index=index,filter=filter or'',scroll=0,current=current}
+        -- (payload options: two lines for the highlighted one's warnings and acknowledgements)
+        local details=false
+        for _,item in ipairs(items)do if item.acks or item.warnings then details=true;break end end
+        self.picker={row=row,items=items,index=index,filter=filter or'',scroll=0,current=current,note=items.note,
+            details=details}
         self:picker_filter()
+    end
+    -- What a payload option means, for the picker's lines under the list: its warnings explained, and the
+    -- acknowledgements a write of it carries (the validator's, as the layer registers it; '+' marks those this choice
+    -- adds to the field's own). Cached per item.
+    local WARNINGS=catalog_module.PAYLOAD_WARNINGS or{}
+    function App:picker_details(item)
+        if not item then return {}end
+        if item.detail_lines then return item.detail_lines end
+        local lines={}
+        local texts={}
+        for _,code in ipairs(item.warnings or{})do
+            local w=WARNINGS[code]
+            texts[#texts+1]=w and(L(w.badge)..': '..L(w.text))or tostring(code)
+        end
+        if#texts>0 then lines[#lines+1]={text=table.concat(texts,'   '),colour=C.pending}end
+        local row=self.picker and self.picker.row
+        if row and(item.acks or item.checked)then
+            local ok,acks=catalog_module.probe(row,item.value)
+            if ok and type(acks)=='table'then
+                local names={}
+                for k,on in pairs(acks)do
+                    if on then names[#names+1]=(row.acks and row.acks[k])and k or('+'..k)end
+                end
+                table.sort(names,function(a,b)return a:gsub('^%+','')<b:gsub('^%+','')end)
+                lines[#lines+1]={text=#names>0 and Lf('Acknowledgements: %s',table.concat(names,', '))
+                    or L('No acknowledgement needed'),colour=C.faint}
+            elseif not ok then
+                lines[#lines+1]={text=Lf('Refused: %s',tostring(acks)),colour=C.error}
+            end
+        end
+        item.detail_lines=lines
+        return lines
     end
     -- A picker over any list: opts = {title, subtitle, items = {{value, label, sub, icon}}, current, on_choose(value),
     -- note = {lines shown above the keys}}. An item's icon is drawn with draw_preset_icon.
@@ -104,7 +144,9 @@ function M.install(App)
         end
         for i,item in ipairs(p.items)do
             -- the English label and the one shown (translated): either matches
-            local hay=(item.label..' '..(item.sub or'')..' '..L(item.label)..' '..L(item.sub or'')):lower()
+            -- (a payload option also by its owner, catalogue name and group)
+            local hay=(item.label..' '..(item.sub or'')..' '..L(item.label)..' '..L(item.sub or'')..' '
+                ..(item.search or'')..' '..(item.group and(item.group..' '..L(item.group))or'')):lower()
             if q==''or hay:find(q,1,true)then p.shown[#p.shown+1]=i end
         end
         p.cursor=1
@@ -144,7 +186,7 @@ function M.install(App)
         local P=theme.panel
         cv:rect(0,0,P.w,P.h,C.scrim,8)
         cv:hit(-10000,-10000,20000,20000,{click=function()self.picker=nil end})
-        local w,h=680,600
+        local w,h=p.details and 780 or 680,600
         local x,y=(P.w-w)/2,(P.h-h)/2
         cv:rect(x,y,w,h,C.panel_alt,9)
         cv:frame(x,y,w,h,C.line_strong,10)
@@ -164,48 +206,99 @@ function M.install(App)
             local tw=cv:text(p.filter,x+32,fy+16,{size=SZ.label,colour=C.text,z=12,max=w-80})
             if math.floor(self.time*2)%2==0 then cv:rect(x+34+tw,fy+7,2,18,C.gold,12)end
         end
-        -- list
-        local ly,rh=fy+44,40
-        local notes=p.note and#p.note or 0
-        local rows=math.floor((y+h-56-notes*18-ly)/rh)
+        -- list: the shown items, a header before each group (payload options: Weapons, Support weapons ...)
+        local ly,rh,hh=fy+44,40,26
+        local notes=(p.note and#p.note or 0)+(p.details and 2 or 0)
+        local area=y+h-56-notes*18-ly
         local n=#p.shown
+        local lines,line_of,last={},{},nil
+        for s,i in ipairs(p.shown)do
+            local g=p.items[i].group
+            if g and g~=last then lines[#lines+1]={header=g}end
+            last=g or last
+            lines[#lines+1]={s=s}
+            line_of[s]=#lines
+        end
+        local function height(line)return line.header and hh or rh end
+        -- the first line from which every later line fits (the furthest the list scrolls)
+        local max_scroll,used=#lines,0
+        while max_scroll>0 and used+height(lines[max_scroll])<=area do
+            used=used+height(lines[max_scroll])
+            max_scroll=max_scroll-1
+        end
         -- the cursor pulls the view along only when it moves (the wheel scrolls freely in between)
         if p.seen_cursor~=p.cursor then
             p.seen_cursor=p.cursor
-            if p.cursor<p.scroll+1 then p.scroll=p.cursor-1 end
-            if p.cursor>p.scroll+rows then p.scroll=p.cursor-rows end
-        end
-        p.scroll=math.max(0,math.min(p.scroll,math.max(0,n-rows)))
-        p.wheel=p.wheel or{passthrough=true}
-        p.wheel.scroll=function(delta)p.scroll=math.max(0,math.min(p.scroll+delta*3,math.max(0,n-rows)))end
-        cv:hit(x+12,ly,w-24,rows*rh,p.wheel)
-        for s=p.scroll+1,math.min(n,p.scroll+rows)do
-            local item=p.items[p.shown[s]]
-            local ry=ly+(s-p.scroll-1)*rh
-            local selected=s==p.cursor
-            local action={click=function()p.cursor=s;self:picker_choose()end}
-            if selected then cv:rect(x+12,ry+2,w-24,rh-4,C.select,10);cv:rect(x+12,ry+2,3,rh-4,C.gold,11)end
-            local lx=x+28
-            if item.icon and self.draw_preset_icon then self:draw_preset_icon(item.icon,x+24,ry+4,rh-8,12);lx=x+30+rh end
-            cv:text(L(item.label),lx,ry+(item.sub and 14 or rh/2),{size=SZ.label,colour=selected and C.text or C.dim,
-                max=w-180,z=12})
-            if item.sub then cv:text(L(item.sub),lx,ry+30,{size=SZ.tiny,colour=C.faint,max=w-180,z=12})end
-            if util.same(item.value,p.current)then
-                self.chip_fn(cv,L('CURRENT'),x+w-28,ry+rh/2,C.gold,C.gold_wash,'right',10)
-            elseif p.row and util.same(item.value,p.row.vanilla)then
-                self.chip_fn(cv,L('DEFAULT'),x+w-28,ry+rh/2,C.faint,C.line,'right',10)
+            local at=line_of[p.cursor]
+            if at then
+                -- (its group header shows with the first item of a group)
+                local top=lines[at-1]and lines[at-1].header and at-1 or at
+                if top<p.scroll+1 then p.scroll=top-1 end
+                local fill,first=0,at
+                while first>=1 and fill+height(lines[first])<=area do fill=fill+height(lines[first]);first=first-1 end
+                if p.scroll<first then p.scroll=first end
             end
-            cv:hit(x+12,ry,w-24,rh,action)
+        end
+        p.scroll=math.max(0,math.min(p.scroll,max_scroll))
+        p.wheel=p.wheel or{passthrough=true}
+        p.wheel.scroll=function(delta)p.scroll=math.max(0,math.min(p.scroll+delta*3,max_scroll))end
+        cv:hit(x+12,ly,w-24,area,p.wheel)
+        local ry=ly
+        local visible=0
+        for li=p.scroll+1,#lines do
+            local line=lines[li]
+            if ry+height(line)>ly+area+0.5 then break end
+            visible=visible+1
+            if line.header then
+                cv:text(string.upper(L(line.header)),x+28,ry+hh/2+3,{size=SZ.tiny,font='title',colour=C.gold_dim,
+                    max=w-80,z=12})
+                cv:rect(x+28,ry+hh-3,w-64,1,C.line,11)
+            else
+                local s=line.s
+                local item=p.items[p.shown[s]]
+                local selected=s==p.cursor
+                local action={click=function()p.cursor=s;self:picker_choose()end}
+                if selected then cv:rect(x+12,ry+2,w-24,rh-4,C.select,10);cv:rect(x+12,ry+2,3,rh-4,C.gold,11)end
+                local lx=x+28
+                if item.icon and self.draw_preset_icon then self:draw_preset_icon(item.icon,x+24,ry+4,rh-8,12);lx=x+30+rh end
+                -- (its warnings as badges, right of its name, left of CURRENT / DEFAULT)
+                local bx=x+w-124
+                for k=#(item.warnings or{}),1,-1 do
+                    local warn=WARNINGS[item.warnings[k]]
+                    local text=warn and L(warn.badge)or string.upper(tostring(item.warnings[k]))
+                    bx=bx-self.chip_fn(cv,text,bx,ry+rh/2,C.pending,C.pending_soft,'right',10)-4
+                end
+                local max=math.max(120,bx-8-lx)
+                cv:text(L(item.label),lx,ry+(item.sub and 14 or rh/2),{size=SZ.label,colour=selected and C.text or C.dim,
+                    max=math.min(w-180,max),z=12})
+                if item.sub then cv:text(L(item.sub),lx,ry+30,{size=SZ.tiny,colour=C.faint,max=math.min(w-180,max),z=12})end
+                if util.same(item.value,p.current)then
+                    self.chip_fn(cv,L('CURRENT'),x+w-28,ry+rh/2,C.gold,C.gold_wash,'right',10)
+                elseif p.row and util.same(item.value,p.row.vanilla)then
+                    self.chip_fn(cv,L('DEFAULT'),x+w-28,ry+rh/2,C.faint,C.line,'right',10)
+                end
+                cv:hit(x+12,ry,w-24,rh,action)
+            end
+            ry=ry+height(line)
         end
         if n==0 then cv:text(L('No match'),x+28,ly+20,{size=SZ.small,colour=C.faint,z=12})end
-        if n>rows then
-            local th=math.max(24,(rows*rh)*rows/n)
-            local t=p.scroll/math.max(1,n-rows)
-            cv:rect(x+w-10,ly,3,rows*rh,C.line,11)
-            cv:rect(x+w-10,ly+(rows*rh-th)*t,3,th,C.gold,12)
+        if max_scroll>0 then
+            local th=math.max(24,area*visible/math.max(1,#lines))
+            local t=p.scroll/math.max(1,max_scroll)
+            cv:rect(x+w-10,ly,3,area,C.line,11)
+            cv:rect(x+w-10,ly+(area-th)*t,3,th,C.gold,12)
         end
-        for i,line in ipairs(p.note or{})do
-            cv:text(line,x+24,y+h-26-(notes-i+1)*18,{size=SZ.tiny,colour=C.dim,max=w-48,z=11})
+        -- under the list: the highlighted payload option's warnings and acknowledgements, then the notes
+        local below={}
+        if p.details then
+            local d=self:picker_details(p.items[p.shown[p.cursor] or 0])
+            for k=1,2 do below[#below+1]=d[k]or{text=''}end
+        end
+        for _,line in ipairs(p.note or{})do below[#below+1]={text=line,colour=C.dim}end
+        for i,line in ipairs(below)do
+            if line.text~=''then
+                cv:text(line.text,x+24,y+h-26-(#below-i+1)*18,{size=SZ.tiny,colour=line.colour or C.dim,max=w-48,z=11})
+            end
         end
         cv:text(Lf('↑↓ choose   Enter / Tab select   Type to filter   Esc / Del close   %d of %d',n,#p.items),
             x+24,y+h-26,{size=SZ.tiny,colour=C.faint,max=w-48,z=11})

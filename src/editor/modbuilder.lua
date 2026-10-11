@@ -154,6 +154,10 @@ local function code_ref(code)
     id=code:match('^hd2%.pickup%("([^"]+)"%)$')
     if id then return {ref='pickup',id=id}end
     if code:match(':no_explosion%(%)$')then return {ref='none'}end
+    id=code:match('^hd2%.explosion%("([^"]+)"%)$')
+    if id then return {ref='explosion',id=id}end
+    local sw,sa,sp=code:match('^hd2%.support_weapon%("([^"]+)"%):attack%("([^"]+)"%):projectile%(%):terminal_action%("([^"]+)"%):explosion%(%)$')
+    if sw then return {ref='terminal',weapon=sw,attack=sa,phase=sp,resource='support_weapon'}end
     local w,a,p=code:match('^hd2%.weapon%("([^"]+)"%):attack%("([^"]+)"%):projectile%(%):terminal_action%("([^"]+)"%):explosion%(%)$')
     if w then return {ref='terminal',weapon=w,attack=a,phase=p}end
     w,a=code:match('^hd2%.weapon%("([^"]+)"%):attack%("([^"]+)"%):projectile%(%)$')

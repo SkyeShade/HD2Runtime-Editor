@@ -1565,9 +1565,18 @@ do
     H.app:reveal(ac8.rows[1])
     H.app:set_page_open(ac8,true)
     local list=outline(ac8)
-    starts(list,{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status','  Impact explosion',
-        '  Impact explosion · Status','  * Flak · Projectile','  Flak · Flight','  Flak · Direct hit',
-        '  Flak · Direct hit · Status','  Flak · Explosion','Handling / Fire'},'AC-8')
+    -- (HD2Runtime 0.31.2: each round's impact and expiry payload slots, the flak's burst its impact explosion)
+    local payloads=ac8.payload_slots~=nil
+    if payloads then
+        starts(list,{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status','  Impact explosion',
+            '  Impact explosion · Status','  * Expiry payload','  * Flak · Projectile','  Flak · Flight',
+            '  Flak · Direct hit','  Flak · Direct hit · Status','  Flak · Impact explosion','  * Flak · Expiry payload',
+            'Handling / Fire'},'AC-8')
+    else
+        starts(list,{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status','  Impact explosion',
+            '  Impact explosion · Status','  * Flak · Projectile','  Flak · Flight','  Flak · Direct hit',
+            '  Flak · Direct hit · Status','  Flak · Explosion','Handling / Fire'},'AC-8')
+    end
     assert(not index_of(list,'Damage'),'AC-8: no Damage category (its direct hits are its rounds\')')
     local f,a,ar,c=index_of(list,'Handling / Fire'),index_of(list,'Ammunition'),index_of(list,'Armory'),
         index_of(list,'Hellpod / Call-in')
@@ -1588,8 +1597,13 @@ do
     -- APW-1: swap, flight, direct hit and its status in Projectile
     local apw=H.catalog:object('sp|APW-1 Anti-Materiel Rifle')
     H.app:reveal(apw.rows[1])
-    starts(outline(apw),{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status',
-        'Handling / Fire'},'APW-1')
+    if payloads then
+        starts(outline(apw),{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status',
+            '  * Impact payload','  * Expiry payload','Handling / Fire'},'APW-1')
+    else
+        starts(outline(apw),{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status',
+            'Handling / Fire'},'APW-1')
+    end
     -- AR-2 Coyote: no swap; its payload slots alone are rows of Projectile after the direct hit
     local coyote=H.catalog:object('pw|AR-2 Coyote')
     H.app:reveal(coyote.rows[1])
