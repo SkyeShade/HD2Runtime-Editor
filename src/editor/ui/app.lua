@@ -204,14 +204,15 @@ function App:page_headers(object)
     end
     return keys
 end
--- Whether any header of the page is open (COLLAPSE ALL then, else EXPAND ALL); cached per page state.
+-- Whether any header of the page is open (COLLAPSE ALL then, else EXPAND ALL); cached per page list (field_items makes a
+-- new one when a header opens or closes and when the page's rows change: a payload slot growing a header of its own).
 function App:page_open(object)
     if not object then return false end
-    local sig=object.key..'\0'..self.expand_version
-    if self.page_open_sig==sig then return self.page_open_cache end
+    local items=self:field_items(object)
+    if self.page_open_items==items then return self.page_open_cache end
     local any=false
     for _,key in ipairs(self:page_headers(object))do if self:is_open(object,key)then any=true;break end end
-    self.page_open_sig,self.page_open_cache=sig,any
+    self.page_open_items,self.page_open_cache=items,any
     return any
 end
 -- Collapse or expand every header of the page (the button in the page header, Ctrl+Up / Ctrl+Down); the focused row
@@ -1921,8 +1922,12 @@ function App:draw_fields(y0,h)
     local focused=self.focus=='fields'
     local ly=hy+24
     local rh=theme.row_h
-    if self.fields_actions_object~=object or self.fields_actions_version~=self.expand_version then
-        self.fields_actions,self.fields_actions_object,self.fields_actions_version={},object,self.expand_version
+    -- (the rows' click handlers hold this list and its indices: they are made again whenever the list is, not only when a
+    -- header opens or closes. A list rebuilt around them (a payload slot that grows its explosion's settings and a
+    -- header, a projectile swap's donor rows, a status duration shown) kept the old handlers: a click on the new header
+    -- ran the old row's handler and never opened it, a click on a new row edited the row that was there before)
+    if self.fields_actions_items~=items then
+        self.fields_actions,self.fields_actions_items={},items
     end
     local actions=self.fields_actions
     self:list({x=x0,y=ly,w=w,h=y0+h-ly-4,count=#items,row_h=rh,selected=selected_item,scroll_key='field_scroll',
@@ -1979,7 +1984,13 @@ function App:draw_fields(y0,h)
             if not action then
                 local index=i
                 action={click=function(ux)
-                    for s,idx in ipairs(selectable)do if idx==index then self.field=s end end
+                    -- (the row drawn under the mouse, found again by itself when the list changed since that frame)
+                    local now,nsel=self:field_items(object)
+                    if now==items then
+                        for s,idx in ipairs(selectable)do if idx==index then self.field=s end end
+                    elseif not(self:refocus(now,nsel,items[index])and now[nsel[self.field]].row==items[index].row)then
+                        return
+                    end
                     self.focus='fields'
                     local r=items[index].row
                     -- (a link opens its page wherever it is clicked)
@@ -2295,10 +2306,14 @@ function App:reveal(row)
         end
         if not section.group then plain[#plain+1]=section end
     end
+    -- (only headers the page shows: a part folded into its row keeps its remembered state for when it grows a header)
     for _,c in ipairs(sections_module.layout(plain,object.category))do
         for _,sub in ipairs(c.subs)do
             for _,r in ipairs(sub.rows)do
-                if same(r)then self:toggle(object,c.key,true);self:toggle(object,sub.key,true)end
+                if same(r)then
+                    if not c.plain then self:toggle(object,c.key,true)end
+                    if not(c.plain or c.flat or sub.fold)then self:toggle(object,sub.key,true)end
+                end
             end
         end
     end

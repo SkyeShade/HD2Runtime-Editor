@@ -307,6 +307,20 @@ class EditorTests(unittest.TestCase):
         else:
             self.assertIn('older runtime fallback ok', result)
 
+    def test_page_rows_that_change_while_shown(self):
+        # the user report: an explosive payload picked in the picker left its Impact explosion header that no click
+        # opened and rows no click edited until the page was left (the rows' click handlers were kept from the list
+        # before); the same for a swap's donor rows and a status slot's duration and the next slot
+        result = lua_file('test_page_rebuild.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                                    'harness': (LUA / 'ui_harness.lua').as_posix()})
+        for line in ('picked payload opens and edits ok', 'payload switch and none ok', 'page open state ok',
+                     'payload applied and reset ok', 'preset payload ok'):
+            self.assertIn(line, result)
+        if (lua_host.RUNTIME / 'api' / 'payload_options.lua').is_file():
+            self.assertIn('support payload rebuild ok', result)
+        if (lua_host.RUNTIME / 'core' / 'status_slots.lua').is_file():
+            self.assertIn('status slot rebuild ok', result)
+
     def test_revert_all_over_300_fields(self):
         # one guarded operation at a time, as in the game: rows stay REMOVING until their base is back, nothing
         # re-applies, failed fields are reset too, and REVERT ALL works again after manual resets and failures
