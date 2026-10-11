@@ -80,7 +80,9 @@ def collect():
                 found.append(m.group(1))
     out, seen = [], set()
     for s in (unescape(x) for x in found):
-        if s and s not in seen and not s.isspace() and re.search(r'[A-Za-z]', s) and '\n' not in s:
+        # (an identifier such as 'acid_splash' is no text the window shows)
+        if s and s not in seen and not s.isspace() and re.search(r'[A-Za-z]', s) and '\n' not in s \
+                and not re.fullmatch(r'[a-z0-9]+(_[a-z0-9]+)+', s):
             seen.add(s)
             out.append(s)
     return sorted(out, key=str.lower)

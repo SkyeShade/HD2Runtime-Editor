@@ -178,6 +178,17 @@ do
         out[#out+1]='vehicle mounts ok'
     end
 end
+-- the Sterilizer's status slots point to the acid statuses for its spray
+do
+    local sterilizer=rows('sp|TX-41 Sterilizer')
+    local slot=find(sterilizer,function(r)return r.field=='damage.status_1_type'end)
+    local offered=false
+    for _,l in ipairs(slot and slot.labels or{})do if l.value=='acid_stream'then offered=true end end
+    if offered then
+        check(slot.note and slot.note:find('acid_splash',1,true),'Sterilizer status slot note')
+        out[#out+1]='sterilizer note ok'
+    end
+end
 -- the localisation template's catalogue part: every object name, section, group and field label it shows, once
 do
     local texts,seen=cat:texts(),{}

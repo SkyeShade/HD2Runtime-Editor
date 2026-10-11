@@ -53,6 +53,7 @@ return {
     'A Lua mod that does not use HD2Runtime',
     'A rate is 0 (unused) or %d to %d rpm',
     'A weapon keeps at least one fire mode',
+    'Acid splash and Acid stream (acid_splash, acid_stream) are available for the spray too',
     'ACTIVE',
     'ALL',
     'All',

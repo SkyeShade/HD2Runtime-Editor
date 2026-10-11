@@ -746,6 +746,9 @@ local TEAM_RELOAD_NOTES={
     ['rounds.spare_rounds']='Most own rounds (0 natively); each reload takes a 5-round clip from them before the '
         ..'backpack (multiples of 5 recommended)'}
 -- A feed's in-game name as a section label: FLAK -> Flak, CLUSTER BOMB -> Cluster Bomb; short ones (HE) stay as they are.
+-- Notes on a support weapon's status slots (Status applied), by weapon: shown where the status is picked.
+local STATUS_SLOT_NOTE={['TX-41 Sterilizer']={needs='acid_splash',
+    text='Acid splash and Acid stream (acid_splash, acid_stream) are available for the spray too'}}
 local function feed_title(text)
     return(tostring(text):gsub('%S+',function(word)
         if#word<=3 then return word:upper()end
@@ -899,6 +902,17 @@ local function support_rows(hd2,object,entry)
     end
     -- the RL-77's cluster rocket hits with its main rocket's own DamageInfo row: said so where it is shown again
     same_hit_rows(name,rows)
+    -- a hint on a status slot where a player looks for it (the slot's choices are the Runtime's, unchanged)
+    local slot_note=STATUS_SLOT_NOTE[name]
+    if slot_note then
+        for _,r in ipairs(rows)do
+            local offered={}
+            for _,l in ipairs(r.kind=='choice'and r.labels or{})do offered[l.value]=true end
+            if offered[slot_note.needs]and tostring(r.field):find('status_%d+_type$')and not r.note then
+                r.note=slot_note.text
+            end
+        end
+    end
     -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect are shown locked with
     -- the Runtime's reason, so nobody edits a value the game ignores (0.31.0: none are left; the GR-8, RL-77, FAF-14
     -- and StA-X3 own spares and, since the 0.31.0 rc2, the AC-8's own rounds are real fields)
