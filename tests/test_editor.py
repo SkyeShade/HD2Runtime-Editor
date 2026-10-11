@@ -254,6 +254,14 @@ class EditorTests(unittest.TestCase):
             for line in ('status slot order ok', 'status slot reset ok'):
                 self.assertIn(line, result)
 
+    def test_revert_all_over_300_fields(self):
+        # one guarded operation at a time, as in the game: rows stay REMOVING until their base is back, nothing
+        # re-applies, failed fields are reset too, and REVERT ALL works again after manual resets and failures
+        result = lua_file('test_revert_all.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                                  'harness': (LUA / 'ui_harness.lua').as_posix()})
+        for line in ('revert all ok', 'revert during apply ok', 'revert after resets ok', 'failed resets ok'):
+            self.assertIn(line, result)
+
     def test_window_frames_stay_inside_overlay_limits(self):
         result = lua_file('test_ui.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                           'harness': (LUA / 'ui_harness.lua').as_posix()})

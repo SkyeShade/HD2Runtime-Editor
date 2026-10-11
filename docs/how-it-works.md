@@ -237,6 +237,14 @@ The Runtime's guard (`core/ownership.expected`) accepts a write only when the by
 4. **Reset.** `handle:set(base)`, where `base` is the mod's claim value or vanilla. Once the reset is verified:
    - a field whose base is vanilla or a one-time mod write is released (its ensure is cancelled and the bytes stay at the base);
    - a field taken from a mod's ensure stays held at the mod's value.
+   - a field reset while its value is still on its way never gets that value first: an ensure that has not run yet is
+     stopped (an ensure counts its run in the update that writes, so nothing was written), and a steer still queued is
+     turned to the base. Until the base is back the field is *removing*: it stays in Changes with a `REMOVING` chip
+     and the counter "Removing n of m". A reset that fails keeps its `ERROR` and reason, and the value it could not
+     take away is not saved to the session. A field whose ensure stopped (rejected, blocked) remembers the value it left
+     in the game, so a later reset adopts that value again and takes it back instead of assuming the base.
+   - RESET TO DEFAULTS / REVERT ALL takes every field with a value of yours or a failed one, whether applied or still
+     being applied (before 0.9.3 it said "nothing to reset" when the only fields left were failed or applying ones).
 
 Values are held with three decimals (the script values' precision) or as integers. A float32 value counts as representable when its three-decimal form has the same float32 bytes.
 

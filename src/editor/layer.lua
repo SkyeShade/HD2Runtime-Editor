@@ -14,7 +14,11 @@
 --      fingerprints and rollback unchanged). Only fields whose value changed are touched.
 --   4. Reset. The handle is set back to the base value (the mod's, or vanilla). A field whose base is vanilla or a
 --      one-shot mod write is then released (the ensure stops; the bytes stay at the base). A field taken over from a
---      mod's ensure stays held at the mod's value for the session, standing in for that ensure.
+--      mod's ensure stays held at the mod's value for the session, standing in for that ensure. A field reset while
+--      its value is still on its way (its ensure not yet run, or its steer still queued) never gets that value first:
+--      the unrun ensure is stopped (nothing was written) or the queued steer is turned to the base. Until the base is
+--      back in the game the field is "removing" (slot.removing); a reset that fails keeps its error and is never
+--      saved again (slot.reset_failed).
 -- A value outside a handle's range is reached by adopting again with a wider handle (step 1 with the editor's own
 -- ensure handed over). Every failure stops at the guards and is shown on the field; nothing is retried blindly.
 --
@@ -206,14 +210,37 @@ function Layer:state(row)
     if slot.watch then return 'held'end
     return 'idle'
 end
+-- active, applying, errors, and removing (those of the applying fields being reset: slot.removing).
 function Layer:counts()
-    local active,applying,errors=0,0,0
+    local active,applying,errors,removing=0,0,0,0
     for _,slot in pairs(self.slots)do
         if slot.error then errors=errors+1
-        elseif slot.phase=='adopt'or slot.phase=='steer'or slot.dirty then applying=applying+1
+        elseif slot.phase=='adopt'or slot.phase=='steer'or slot.dirty then
+            applying=applying+1
+            if slot.removing then removing=removing+1 end
         elseif slot.user then active=active+1 end
     end
-    return active,applying,errors
+    return active,applying,errors,removing
+end
+-- Whether a field is being reset (its base value not yet back in the game).
+function Layer:removing(row)
+    local slot=self.slots[row.loc]
+    return slot~=nil and slot.removing==true and not slot.error
+end
+-- The resets under way: how many of them are done, and how many were asked for since none was under way.
+function Layer:removal()
+    local _,_,_,removing=self:counts()
+    local total=math.max(self.removal_total or 0,removing)
+    return total-removing,total
+end
+-- How many fields a reset of everything takes back: those with a value of yours or a failed one (being applied or
+-- not), apart from those already being reset.
+function Layer:resettable()
+    local n=0
+    for _,slot in pairs(self.slots)do
+        if slot.row and not slot.removing and(slot.user or slot.error)then n=n+1 end
+    end
+    return n
 end
 function Layer:busy()local _,applying=self:counts();return applying>0 end
 -- Every field whose value was refused or failed: {{row, slot, value (asked for), reason, code, origin, time}}.
@@ -227,11 +254,14 @@ function Layer:errors()
     end
     return out
 end
--- The user's applied values, {row key = value} (for the saved session and presets).
+-- The user's applied values, {row key = value} (for the saved session and presets). A value a reset was asked to take
+-- away (the reset failed) is not one of them.
 function Layer:overrides()
     local out={}
     for _,slot in pairs(self.slots)do
-        if slot.user and slot.target~=nil and slot.row and slot.row.key then out[slot.row.key]=slot.target end
+        if slot.user and not slot.reset_failed and slot.target~=nil and slot.row and slot.row.key then
+            out[slot.row.key]=slot.target
+        end
     end
     return out
 end
@@ -313,29 +343,67 @@ function Layer:set(row,value,origin)
     end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
+    if slot.removing then self.removal_total=math.max(0,(self.removal_total or 1)-1)end
+    slot.removing,slot.reset_failed=nil,nil
     slot.origin=origin or{kind='edit'}
     release_dependents(self,row,held)
     self:touch(row.key)
     self:changed()
     return true
 end
--- Back to the base value (the mod's, or vanilla).
+-- A field reset before its adoption ran: the ensure that would write its value is stopped, with those of the mod
+-- fields adopted with it (that mod's ensure keeps running: nothing was handed over). An ensure counts its run in the
+-- update that writes, so while none of the group has run, nothing was written. True when stopped.
+local function abort_adopt(self,slot)
+    local group=slot.phase=='adopt'and slot.group
+    if not group then return false end
+    for _,s in ipairs(group.slots)do
+        local w=s.next_watch
+        if type(w)~='table'or(w.runs or 0)>0 or FAILED[w.status]then return false end
+        if s~=slot and s.user then return false end
+    end
+    for _,s in ipairs(group.slots)do
+        pcall(s.next_watch.cancel)
+        s.next_watch,s.next_handle,s.group,s.adopt_value=nil,nil,nil,nil
+        s.phase=s.watch and'hold'or'idle'
+        if s~=slot and not s.watch and s.row.mirror then self.slots[s.loc]=nil end
+    end
+    for i=#self.groups,1,-1 do if self.groups[i]==group then table.remove(self.groups,i)end end
+    note(self,'reset '..tostring(slot.row.key)..' before its ensure ran: stopped, nothing was written')
+    return true
+end
+-- Back to the base value (the mod's, or vanilla). The field is removing until the base is back in the game.
 function Layer:reset(row)
     local slot=self.slots[row.loc]
     if not slot then return false end
     local base=self:base(slot.row)
-    slot.user,slot.error=false,nil
+    if not slot.removing then
+        self.removal_total=(self.removal_total or 0)+1
+        -- (the value being taken away, shown until it is gone)
+        slot.removed_value=slot.user and slot.target or slot.held
+        if slot.removed_value==nil then slot.removed_value=slot.failed_value end
+    end
+    slot.user,slot.error,slot.reset_failed=false,nil,nil
+    slot.removing=true
     slot.target=hold(slot.row,base)
     slot.dirty=true
+    abort_adopt(self,slot)
     release_dependents(self,slot.row,slot.target,true)
     self:touch(slot.row.key)
     self:changed()
     return true
 end
+-- Every field back to its base: those with a value of yours or a failed one, whether applied or still being applied.
+-- A field already being reset is left to finish. Returns the number of fields reset.
 function Layer:reset_all()
-    local n=0
+    local list={}
     for _,slot in pairs(self.slots)do
-        if slot.user or slot.error then self:reset(slot.row);n=n+1 end
+        if slot.row and not slot.removing and(slot.user or slot.error)then list[#list+1]=slot end
+    end
+    local n=0
+    -- (a status slot's reset takes its later slots with it: each field once)
+    for _,slot in ipairs(list)do
+        if self.slots[slot.loc]==slot and not slot.removing then self:reset(slot.row);n=n+1 end
     end
     return n
 end
@@ -465,8 +533,15 @@ local function fail(self,slot,why,code)
     slot.error=util.plain(why or'the operation was refused',300)
     slot.failed_value,slot.failed_code,slot.failed_at=slot.target,code,self.clock or 0
     slot.dirty,slot.readopts,slot.nudged=false,nil,nil
-    if slot.watch then
-        slot.phase='hold'
+    -- a reset that failed: the field still holds the value it had (shown with the error), which is not saved again
+    if slot.removing then
+        slot.removing,slot.reset_failed=nil,true
+        slot.origin={kind='reset'}
+    end
+    if slot.watch or slot.stranded~=nil then
+        -- the bytes keep the value the editor's ensure last applied (slot.held): with that ensure still holding it,
+        -- or left there by an ensure that stopped (slot.stranded), which a reset adopts again to take it back
+        slot.phase=slot.watch and'hold'or'idle'
         slot.target=slot.held
         local base=self:base(slot.row)
         slot.user=slot.held~=nil and not util.same(slot.held,hold(slot.row,base))
@@ -482,6 +557,7 @@ function Layer:adopt(slot)
     local row=slot.row
     local current
     if slot.watch then current=slot.held
+    elseif slot.stranded~=nil then current=slot.stranded
     else
         local base=self:base(row)
         current=base
@@ -573,6 +649,8 @@ end
 
 local function release_if_done(self,slot)
     if slot.phase~='hold'or slot.user or slot.dirty or not util.same(slot.target,slot.held)then return end
+    -- (a reset is done once its base is back: released here, or held at a mod's value)
+    if slot.removing then slot.removing=nil;self:changed()end
     if slot.base_kind=='ensure'then return end
     if slot.watch then pcall(slot.watch.cancel)end
     self.slots[slot.loc]=nil
@@ -612,7 +690,7 @@ local function step_group(self,group)
     for _,s in ipairs(group.slots)do
         s.watch,s.handle=s.next_watch,s.next_handle
         s.next_watch,s.next_handle,s.group=nil,nil,nil
-        s.held,s.phase=s.adopt_value,'hold'
+        s.held,s.phase,s.stranded=s.adopt_value,'hold',nil
         s.dirty=s.target~=nil and not util.same(s.target,s.held)
     end
     self:changed()
@@ -780,13 +858,20 @@ function Layer:tick(dt)
         elseif slot.phase=='steer'then
             local w=slot.watch
             if FAILED[w.status]then
-                slot.watch=nil
+                -- (the stopped ensure leaves its last value in the game: a later reset takes it back from there)
+                slot.watch,slot.stranded=nil,slot.held
                 fail(self,slot,w.error or w.status,code_of(w))
             elseif w.status=='waiting'and(w.runs or 0)>slot.mark then
                 slot.readopts,slot.nudged=nil,nil
                 slot.held,slot.phase=slot.steering,'hold'
                 slot.dirty=not util.same(slot.target,slot.held)
                 self:changed()
+            elseif slot.dirty and slot.target~=nil and not util.same(slot.target,slot.steering)and slot.handle
+                and self:covers(slot.handle,slot.target)then
+                -- another value asked for while this steer has not run (a reset, or a new value): the handle goes
+                -- to it now, so the value asked for before is never written first
+                slot.dirty=false
+                self:steer(slot)
             else
                 if queued(w)then slot.steer_started=(slot.steer_started or 0)+(dt or 0)end
                 local waited=(self.clock or 0)-(slot.steer_started or 0)
@@ -837,13 +922,14 @@ function Layer:tick(dt)
                 local target=slot.target
                 if target==nil then
                     slot.dirty=false
-                    if not slot.watch then self.slots[slot.loc]=nil end
+                    if not slot.watch then self.slots[slot.loc]=nil;self:changed()end
                 elseif slot.phase=='hold'and util.same(slot.held,target)then
                     slot.dirty=false
                     release_if_done(self,slot)
-                elseif slot.phase=='idle'and not slot.user and util.same(target,hold(slot.row,self:base(slot.row)))then
+                elseif slot.phase=='idle'and not slot.user and util.same(target,hold(slot.row,self:base(slot.row)))
+                    and(slot.stranded==nil or util.same(slot.stranded,target))then
                     slot.dirty=false
-                    self.slots[slot.loc]=nil
+                    self.slots[slot.loc]=nil;self:changed()
                 elseif slot.watch and slot.handle and self:covers(slot.handle,target)then
                     slot.dirty=false
                     self:steer(slot)
@@ -855,13 +941,18 @@ function Layer:tick(dt)
             elseif slot.phase=='hold'then
                 if slot.watch and FAILED[slot.watch.status]then
                     local w=slot.watch
-                    slot.watch=nil
+                    slot.watch,slot.stranded=nil,slot.held
                     fail(self,slot,'the editor ensure stopped: '..tostring(w.error or w.status),code_of(w))
                 else
                     release_if_done(self,slot)
                 end
             end
         end
+    end
+    if(self.removal_total or 0)>0 then
+        local any=false
+        for _,slot in pairs(self.slots)do if slot.removing and not slot.error then any=true;break end end
+        if not any then self.removal_total=0 end
     end
 end
 

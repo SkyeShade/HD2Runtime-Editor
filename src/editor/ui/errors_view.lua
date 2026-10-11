@@ -33,6 +33,7 @@ function M.install(App)
         if kind=='preset'then return Lf('Preset: %s',tostring(origin.name or'?'))end
         if kind=='session'then return L('Saved session')end
         if kind=='mod'then return Lf('Mod: %s (taken over)',self.pretty_mod(origin.name or'unknown'))end
+        if kind=='reset'then return L('Your reset (the value is still in the game)')end
         return L('Your edit')
     end
     -- Every failed field, by object and field (cached per layer state).

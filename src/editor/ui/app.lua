@@ -995,8 +995,13 @@ end
 
 function App:ask(kind,data)
     if kind=='reset'then
-        local active=self.layer:counts()
-        if active==0 and self.pending_n==0 and next(self:custom_values())==nil then self:toast(L('Nothing to reset: no editor values are active'),C.dim);return end
+        -- (failed values and values still being applied are reset too: not only the active ones)
+        if self.layer:resettable()==0 and self.pending_n==0 and next(self:custom_values())==nil then
+            local _,_,_,removing=self.layer:counts()
+            self:toast(removing>0 and L('Every field is already being reset')
+                or L('Nothing to reset: no editor values are active'),C.dim)
+            return
+        end
     end
     self.confirm={kind=kind,data=data}
 end
@@ -1188,7 +1193,7 @@ function App:draw_header()
     cv:text('×',P.w-32,29,{size=24,colour=hovered and C.error or C.dim,align='center',z=6})
     cv:hit(P.w-50,12,36,34,self.btn_close)
     local rx=P.w-62
-    local active,applying,errors=self.layer:counts()
+    local active,applying,errors,removing=self.layer:counts()
     -- status chips right to left, each only while it clears the tabs; one with an action is a button
     local function status(text,fg,bg,action)
         local w=cv:measure(text,SZ.tiny,'title')+14
@@ -1204,9 +1209,14 @@ function App:draw_header()
     if errors>0 then
         status(errors..' '..(errors==1 and L('ERROR')or L('ERRORS')),C.error,C.error_soft,self.btn_errors)
     end
-    if applying>0 then
+    if removing>0 then
+        local done,total=self.layer:removal()
         local pulse=0.55+0.45*math.abs(math.sin(self.time*4))
-        status(L('APPLYING')..' '..applying,{255,199,44,math.floor(255*pulse)},C.gold_soft)
+        status(Lf('REMOVING %d / %d',done,total),{255,152,56,math.floor(255*pulse)},C.pending_soft)
+    end
+    if applying-removing>0 then
+        local pulse=0.55+0.45*math.abs(math.sin(self.time*4))
+        status(L('APPLYING')..' '..(applying-removing),{255,199,44,math.floor(255*pulse)},C.gold_soft)
     end
     if active>0 then status(active..' '..L('ACTIVE'),C.gold,C.gold_wash)end
     if self.pending_n>0 then status(self.pending_n..' '..L('PENDING'),C.pending,C.pending_soft)end
@@ -1580,6 +1590,7 @@ function App:draw_fields(y0,h)
             elseif not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
             elseif not open then chip(cv,L('IN ORDER'),bxr,cy,C.faint,C.line,'right')
             elseif source=='pending'then chip(cv,L('PENDING'),bxr,cy,C.pending,C.pending_soft,'right')
+            elseif state=='applying'and self.layer:removing(row)then chip(cv,L('REMOVING'),bxr,cy,C.pending,C.pending_soft,'right')
             elseif state=='applying'then chip(cv,L('APPLYING'),bxr,cy,C.gold,C.gold_soft,'right')
             elseif source=='editor'then chip(cv,L('EDITED'),bxr,cy,C.gold,C.gold_wash,'right')
             elseif source=='mod'then chip(cv,L('MOD'),bxr,cy,C.mod,C.mod_soft,'right')end
@@ -1706,13 +1717,13 @@ function App:draw_footer(y,h)
     local bh=34
     local by=y+(h-bh)/2
     local bx=P.w-14
-    local active=self.layer:counts()
+    local resettable=self.layer:resettable()
     self.btn_reset=self.btn_reset or{click=function()self:ask('reset')end}
     self.btn_discard=self.btn_discard or{click=function()self:discard()end}
     self.btn_apply=self.btn_apply or{click=function()self:apply()end}
     local w=196
     bx=bx-w
-    button(self,L('RESET TO DEFAULTS'),bx,by,w,bh,(active>0 or self.pending_n>0)and'danger'or'disabled',self.btn_reset)
+    button(self,L('RESET TO DEFAULTS'),bx,by,w,bh,(resettable>0 or self.pending_n>0)and'danger'or'disabled',self.btn_reset)
     w=110;bx=bx-w-10
     button(self,L('DISCARD'),bx,by,w,bh,self.pending_n>0 and'normal'or'disabled',self.btn_discard)
     w=150;bx=bx-w-10
@@ -1733,10 +1744,11 @@ function App:draw_confirm()
     cv:rect(x,y,w,3,c.kind=='reset'and C.error or C.gold,10)
     local title,body
     if c.kind=='reset'then
-        local active=self.layer:counts()
+        local active,applying,errors,removing=self.layer:counts()
         title=L('RESET TO DEFAULTS?')
         body={L('Every field the editor changed goes back to the value its mod applies,'),
-            L('or to the game\'s own value.')..' '..Lf('%d active, %d pending.',active,self.pending_n)}
+            L('or to the game\'s own value.')..' '..Lf('%d active, %d applying, %d failed, %d pending.',active,
+                applying-removing,errors,self.pending_n)}
     elseif c.kind=='delete_preset'then
         title=L('DELETE PRESET?');body={Lf('"%s" will be removed from your saved presets.',tostring(c.data))}
     elseif c.kind=='overwrite_preset'then

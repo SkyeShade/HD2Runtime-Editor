@@ -75,6 +75,10 @@ function M.install(App)
             if row and not row.mirror and not seen[row.key]and(slot.user or slot.error)then
                 local state,why=self.layer:state(row)
                 list[#list+1]={row=row,value=slot.target~=nil and slot.target or slot.held,state=state,error=why}
+            elseif row and not row.mirror and not seen[row.key]and self.layer:removing(row)then
+                -- a field being reset stays listed (with the value being taken away) until its base is back
+                list[#list+1]={row=row,value=slot.removed_value~=nil and slot.removed_value or slot.held,
+                    state='removing'}
             end
         end
         table.sort(list,function(a,b)
@@ -87,7 +91,7 @@ function M.install(App)
         return list
     end
     function App:revert_change(entry)
-        if not entry then return end
+        if not entry or entry.state=='removing'then return end
         if entry.state=='pending'then self:unstage(entry.row);self:toast(L('Pending change removed'),C.dim);return end
         local base=self.layer:base(entry.row)
         self:stage(entry.row,base)
@@ -127,12 +131,18 @@ function M.install(App)
         self.change_index=clamp_index(self.change_index or 1,#list)
         cv:rect(0,y0,W,h,C.panel,1)
         cv:text(L('CHANGES'),20,y0+24,{size=20,font='title',colour=C.text})
-        local active,applying,errors=self.layer:counts()
-        cv:text(L('Values the editor applied or has pending (your mods\' own values are in Mods).')..'   '
-            ..Lf('%d active, %d pending, %d applying, %d failed',active,self.pending_n,applying,errors),
-            20,y0+47,{size=SZ.small,colour=C.faint,max=W-300})
+        local active,applying,errors,removing=self.layer:counts()
+        local counts=Lf('%d active, %d pending, %d applying, %d failed',active,self.pending_n,applying-removing,errors)
+        if removing>0 then
+            -- resets under way: each field stays listed (REMOVING) until the Runtime has its base value back
+            local done,total=self.layer:removal()
+            counts=Lf('Removing %d of %d',done,total)..'   '..counts
+        end
+        cv:text(L('Values the editor applied or has pending (your mods\' own values are in Mods).')..'   '..counts,
+            20,y0+47,{size=SZ.small,colour=removing>0 and C.pending or C.faint,max=W-300})
         self.btn_revert_all=self.btn_revert_all or{click=function()self:ask('reset')end}
-        button(self,L('REVERT ALL'),W-216,y0+16,196,34,(#list>0)and'danger'or'disabled',self.btn_revert_all)
+        local can_revert=self.layer:resettable()>0 or self.pending_n>0 or next(self:custom_values())~=nil
+        button(self,L('REVERT ALL'),W-216,y0+16,196,34,can_revert and'danger'or'disabled',self.btn_revert_all)
         self.btn_export_mod=self.btn_export_mod or{click=function()self:set_view('export')end}
         button(self,L('EXPORT AS MOD'),W-424,y0+16,196,34,(#list>0)and'primary'or'disabled',self.btn_export_mod)
         local hy=y0+66
@@ -171,6 +181,7 @@ function M.install(App)
                 if e.state=='pending'then
                     -- a pending value equal to the base resets the field when applied
                     fg,bg,label=C.pending,C.pending_soft,util.same(e.value,base)and L('PENDING RESET')or L('PENDING')
+                elseif e.state=='removing'then fg,bg,label=C.pending,C.pending_soft,L('REMOVING')
                 elseif e.state=='applying'then fg,bg,label={255,199,44,255},C.gold_soft,L('APPLYING')
                 elseif e.state=='error'or e.error then fg,bg,label=C.error,C.error_soft,L('ERROR')end
                 chip(cv,label,x+lw-112,cy,fg,bg,'right')
@@ -182,7 +193,7 @@ function M.install(App)
                     action={click=function()self:reset_change(self:changes()[index])end}
                     self.change_reset_actions[i]=action
                 end
-                button(self,L('RESET'),x+lw-96,y+4,80,rh-8,'danger',action)
+                button(self,L('RESET'),x+lw-96,y+4,80,rh-8,list[i].state=='removing'and'disabled'or'danger',action)
             end})
     end
 

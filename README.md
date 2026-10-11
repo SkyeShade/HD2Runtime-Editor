@@ -167,6 +167,7 @@ What each field shows:
 | `MOD` (blue) | A value an installed mod applied |
 | `PENDING` (orange) | Your staged change; press Apply |
 | `APPLYING` | Being written through HD2Runtime |
+| `REMOVING` (orange) | Being reset: shown until HD2Runtime has the default value back (REVERT ALL counts them) |
 | `EDITED` (yellow) | Your value is live |
 | `ERROR` (red) | HD2Runtime refused the change; the status bar says why, and the ERRORS badge (Ctrl+E) lists every one |
 | `LOCKED` | Read-only: the status bar says why (HD2Runtime's reason, another mod owns it, or more than 3 decimals) |

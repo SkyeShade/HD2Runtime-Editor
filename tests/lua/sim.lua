@@ -23,13 +23,24 @@ local function start_spec(kind)
         local ownership=require('hd2runtime/core/ownership')
         local watch={status='waiting'}
         local elapsed=0
+        -- S.serial = n: as in the game, one guarded operation at a time (runtime/exclusive.lua), each resolving for n
+        -- updates while the others report 'queued'
+        local exclusive=require('hd2runtime/runtime/exclusive')
+        local steps=0
         function watch.cancel()
             if watch.status~='complete'and watch.status~='rejected'then watch.status='cancelled'end
+            exclusive.release(watch)
         end
         function watch.tick(dt)
             if watch.status=='complete'or watch.status=='rejected'or watch.status=='cancelled'then return end
             elapsed=elapsed+dt
             if elapsed<startup then return end
+            if S.serial then
+                if not exclusive.acquire(watch)then watch.status='queued';return end
+                steps=steps+1
+                if steps<S.serial then watch.status='resolving';return end
+                exclusive.release(watch)
+            end
             -- references are encoded when the real prepare re-proves them live: here, from their selectors
             for _,change in ipairs(spec.changes or{})do
                 if change.desired_selector then
@@ -45,6 +56,7 @@ local function start_spec(kind)
                     watch.result={status='REJECTED',code=tostring(err):find('CONFLICT',1,true)and'CONFLICT'or'VALIDATION_FAILED',
                         reason=watch.error}
                     S.log[#S.log+1]=kind..' '..tostring(spec.id)..' '..watch.error
+                    if#S.log>400 then table.remove(S.log,1)end
                     return
                 end
             end
