@@ -662,6 +662,26 @@ local function player_rows(hd2,object,entry)
             rows[#rows+1]=row
         end
     end
+    -- HD2Runtime 0.30.x: a weapon that fires its default ammunition's projectile (the Liberator, Dominator, Diligence,
+    -- Breaker, Peacemaker and Redeemer) swaps it on that ammunition (weapon:projectile_source(): ammunition.projectile),
+    -- not on its dormant base member
+    if not entry.subweaponOf then
+        local ok,src=pcall(function()return hd2.weapon(name):projectile_source('primary')end)
+        local A=load('attack_outputs')
+        local ammunition=A and A.ammunition and A.ammunition[name]
+        if ok and type(src)=='table'and src.mechanism=='ammunition'and type(ammunition)=='table'then
+            -- (the Runtime's own ammunition source, which its write path uses as this field's descriptor)
+            local row=source_row(object,{id='ammunition.projectile',label='Projectile',section='Projectile · Swap',
+                descriptor=ammunition,field='ammunition.projectile',
+                code='hd2.weapon('..string.format('%q',name)..'):projectile_source("primary")',
+                source=function()return hd2.weapon(name):projectile_source('primary')end,
+                options=function(row)return projectile_options(hd2,row)end,own_label='Own ammunition'})
+            row.note='Swapped on the default ammunition ('..tostring(hd2.weapon(name):ammunition():describe().item)
+                ..'), which every weapon that equips it shares'
+            if entry.ordinaryWritesBlocked==true and row.editable then row.editable,row.reason=false,BLOCKED_REASON end
+            rows[#rows+1]=row
+        end
+    end
     -- HD2Runtime 0.31.0 (the LAS-99 Quasar report): the warm-up and the cooldown after an overheat are no members of
     -- their own. Shown as read-only notes that name the fields to edit, where a player looks for them.
     for _,f in ipairs(entry.fields or{})do
@@ -685,9 +705,28 @@ local TEAM_RELOAD_NOTES={
     ['magazine.spare_magazines']='Most own spares (0 natively); the reload uses them before the backpack',
     ['rounds.spare_rounds']='Most own rounds (0 natively); each reload takes a 5-round clip from them before the '
         ..'backpack (multiples of 5 recommended)'}
+-- A feed's in-game name as a section label: FLAK -> Flak, CLUSTER BOMB -> Cluster Bomb; short ones (HE) stay as they are.
+local function feed_title(text)
+    return(tostring(text):gsub('%S+',function(word)
+        if#word<=3 then return word:upper()end
+        return word:sub(1,1):upper()..word:sub(2):lower()
+    end))
+end
 local function support_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    -- HD2Runtime 0.31.1: the rows of the native ProgrammableAmmo projectile (role 'programmable') carry the feed's own
+    -- name, the AC-8's FLAK, the GR-8's HE, the RL-77's CLUSTER BOMB
+    local feed_name
+    local function role_text(role)
+        if role~='programmable'then return role_label(role)end
+        if feed_name==nil then
+            local ok,d=pcall(function()return hd2.support_weapon(name):feed('programmable'):describe()end)
+            local shown=ok and type(d)=='table'and type(d.presentation)=='table'and d.presentation.displayName
+            feed_name=type(shown)=='string'and shown~=''and feed_title(shown)or'Programmable ammo'
+        end
+        return feed_name
+    end
     for _,f in ipairs(entry.fields or{})do
         local value_kind=f.type=='boolean'or f.type=='status_reference'or f.type=='fire_mode_set'or f.type=='fire_rate_set'
             or f.type=='trait_set'or f.type=='armor_penetration_label'
@@ -700,15 +739,18 @@ local function support_rows(hd2,object,entry)
             if t.path=='projectile_reference'then
                 target=function()return hd2.support_weapon(name):attack(role):projectile()end
                 field=strip(id,role)
-                section=join(DOMAIN_LABELS[domain_of(field)]or'Projectile',role_label(role))
+                section=join(DOMAIN_LABELS[domain_of(field)]or'Projectile',role_text(role))
+                -- HD2Runtime 0.31.1: the hit of the missile the weapon spawns (Spear, Commando, W.A.S.P.), apart from
+                -- its impact explosion
+                if f.missileHit then section=join('Damage','Missile direct hit')end
             elseif t.path=='explosion'then
                 target=function()return hd2.support_weapon(name):attack(role):explosion()end
                 field=strip(id,role)
-                section=join('Explosion',role_label(role))
+                section=join('Explosion',role_text(role))
             elseif t.path=='attack'then
                 target=function()return hd2.support_weapon(name):attack(role)end
                 field=strip(id,role)
-                section=join(DOMAIN_LABELS[domain_of(field)]or util.humanize(domain_of(field)),role_label(role))
+                section=join(DOMAIN_LABELS[domain_of(field)]or util.humanize(domain_of(field)),role_text(role))
             else
                 target=function()return hd2.support_weapon(name)end
                 field=id
@@ -764,6 +806,54 @@ local function support_rows(hd2,object,entry)
             rows[#rows+1]=make_value_row(object,{id=f.semanticFieldId,kind='choice',label=f.displayName or'Overcharge explosion',
                 field=f.semanticFieldId,target=function()return hd2.support_weapon(name)end,vanilla=f.currentDefault,
                 labels=labels,options=static_options(labels),descriptor=f,unverified=true,section='Charge'})
+        end
+    end
+    -- HD2Runtime 0.31.1: a native ProgrammableAmmo projectile (the AC-8's flak) is swapped on the weapon itself
+    -- (feed('programmable'):source(): function_ammo.projectile); a weapon without one would need its function input
+    -- bound first, which is not offered here
+    for _,f in ipairs(entry.fields or{})do
+        if f.editable and f.type=='function_projectile_reference'then
+            local ok,d=pcall(function()return hd2.support_weapon(name):feed('programmable'):describe()end)
+            if ok and type(d)=='table'and d.state=='native'then
+                rows[#rows+1]=source_row(object,{id='function_ammo.projectile',label='Projectile',
+                    section=join('Projectile',role_text('programmable'),'Swap'),descriptor=f,field='function_ammo.projectile',
+                    code=base_code..':feed("programmable"):source()',
+                    source=function()return hd2.support_weapon(name):feed('programmable'):source()end,
+                    options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
+            end
+        end
+    end
+    -- HD2Runtime 0.31.1: the burst of that projectile (the AC-8's flak, the GR-8's HE), a catalogued explosion edited
+    -- through hd2.explosion(name); the Runtime's own descriptors, so the rows share the record identity of every other
+    -- route to the same bytes
+    local explosions=type(hd2.explosion)=='function'and load('explosion_catalogue')
+    local ok_writes,writes=pcall(require,'hd2runtime/domains/explosion_writes')
+    if explosions and ok_writes and type(writes.descriptor)=='function'then
+        -- (a burst the weapon's own rows already reach, the RL-77's, which is its primary rocket's: not shown twice)
+        local covered={}
+        for _,r in ipairs(rows)do if r.loc then covered[r.loc]=true end end
+        for _,eid in ipairs(util.sorted_keys(explosions.explosions or{}))do
+            local e=explosions.explosions[eid]
+            for _,o in ipairs(e.owners or{})do
+                if o.name==name and o.role=='function_impact'then
+                    for _,field in ipairs(explosions.fields or{})do
+                        local okd,d=pcall(writes.descriptor,e,eid,field.id)
+                        if okd and type(d)=='table'and d.editable and numeric(d.type,d.currentDefault)then
+                            local suffix=field.id:gsub('^explosion%.',''):gsub('^damage%.','')
+                            local ap=suffix:match('^ap_(%a+)$')
+                            local label=ap and('Armor penetration: '..(ap=='direct'and'direct'or ap..' angle'))
+                                or util.humanize(suffix)
+                            local row=make_row(object,{id=eid..'|'..field.id,label=label,
+                                unit=d.unit,field=field.id,target=function()return hd2.explosion(eid)end,
+                                shared=d.shared==true,unverified=true,descriptor=d,
+                                section=join('Explosion',role_text('programmable')),vanilla=d.currentDefault,
+                                min=d.range and d.range.min,max=d.range and d.range.max,type=d.type,
+                                storage=(d.backing or{}).storage})
+                            if not covered[row.loc]then rows[#rows+1]=row end
+                        end
+                    end
+                end
+            end
         end
     end
     -- HD2Runtime 0.30.2: a team-reload weapon's own ammunition rows the Runtime flags noEffect are shown locked with

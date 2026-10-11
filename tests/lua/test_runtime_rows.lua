@@ -96,4 +96,41 @@ else
     check(not bc,'no conversion rows without the API')
     out[#out+1]='no beam conversion ok'
 end
+-- the ammunition swap (HD2Runtime 0.30.x: weapon:projectile_source() names the default ammunition): on the ammunition,
+-- shared, not on the dormant base member
+if A and type(A.ammunition)=='table'and A.ammunition['AR-23 Liberator']then
+    for _,key in ipairs({'pw|AR-23 Liberator','pw|P-2 Peacemaker'})do
+        local swap=find(rows(key),function(r)return r.field=='ammunition.projectile'end)
+        check(swap and swap.editable and swap.shared and swap.section=='Projectile · Swap'
+            and swap.note:find('default ammunition',1,true),key..' ammunition swap')
+    end
+    check(not find(rows('pw|SMG-32 Reprimand'),function(r)return r.field=='ammunition.projectile'end),
+        'a component host has no ammunition swap')
+    out[#out+1]='ammunition swap ok'
+end
+-- HD2Runtime 0.31.1: the Peacemaker's ammunition row, the missile direct hit and the ProgrammableAmmo rows
+local peacemaker=find(rows('pw|P-2 Peacemaker'),function(r)return r.field=='damage.player_standard_damage'
+    or r.field=='damage.standard_damage'end)
+local hit=find(rows('sp|FAF-14 Spear'),function(r)return r.descriptor and r.descriptor.missileHit end)
+local flak=find(rows('sp|AC-8 Autocannon'),function(r)return r.descriptor and r.descriptor.programmableFeed end)
+if peacemaker and hit and flak then
+    check(peacemaker.section=='Damage'and peacemaker.vanilla==100 and peacemaker.unverified and peacemaker.shared,
+        'Peacemaker damage: '..tostring(peacemaker.section))
+    check(hit.section:find('^Damage · Missile direct hit')and hit.unverified,'Spear direct hit: '..hit.section)
+    local ac8=rows('sp|AC-8 Autocannon')
+    local function section(label)return find(ac8,function(r)return r.section==label end)end
+    check(section('Projectile · Flak')and section('Damage · Flak')and section('Projectile · Flak · Swap')
+        and section('Explosion · Flak'),'AC-8 flak sections')
+    local burst=find(ac8,function(r)return r.section=='Explosion · Flak'and r.field=='explosion.damage.standard_damage'end)
+    check(burst and burst.vanilla==190 and burst.unverified,'the flak burst from the explosion catalogue')
+    -- the RL-77 cluster rocket's burst damage is its primary rocket's row: shown once, under the primary impact
+    local rl77=rows('sp|RL-77 Airburst Rocket Launcher')
+    check(find(rl77,function(r)return r.section=='Explosion · Cluster Bomb'and r.field=='explosion.inner_radius'end)
+        and not find(rl77,function(r)return r.section=='Explosion · Cluster Bomb'
+            and r.field=='explosion.damage.standard_damage'end),'RL-77 burst rows not shown twice')
+    out[#out+1]='0.31.1 damage rows ok'
+else
+    check(not hit and not flak,'no 0.31.1 rows without the Runtime fields')
+    out[#out+1]='no 0.31.1 rows ok'
+end
 return table.concat(out,'\n')

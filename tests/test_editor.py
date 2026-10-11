@@ -184,8 +184,13 @@ class EditorTests(unittest.TestCase):
         self.assertIn('beam conversion ok', result)
         if (lua_host.RUNTIME / 'domains' / 'status_effect_writes.lua').is_file():
             for line in ('beam swaps ok', 'beam fire mode ok', 'team reload ok', 'derived heat ok',
-                         'mounted sections ok'):
+                         'mounted sections ok', 'ammunition swap ok'):
                 self.assertIn(line, result)
+        # HD2Runtime 0.31.1 (scripts/programmable_feed_fields.py): the Peacemaker, missile and flak rows
+        if (lua_host.RUNTIME / 'scripts' / 'programmable_feed_fields.py').is_file():
+            self.assertIn('0.31.1 damage rows ok', result)
+        else:
+            self.assertIn('no 0.31.1 rows ok', result)
 
     def test_dependent_fields_follow_what_they_need(self):
         # the rearm pool and the mission uses (HD2Runtime 0.31.0); beam conversion settings and their conversion

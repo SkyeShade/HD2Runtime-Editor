@@ -58,6 +58,12 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
       projectile mount, the EXO-55 Breakthrough's shield arm, the Hover Pack's flight labels;
     - team-reload weapons' own spares (GR-8, RL-77, FAF-14, W.A.S.P.) and every backpack's ammunition (Backpack ·
       Ammo; -1 = full at call-in);
+    - the second ammunition of the AC-8 (Flak), GR-8 (HE) and RL-77 (Cluster Bomb): its projectile swap and its burst
+      (Explosion · Flak, from the explosion catalogue); weapons that fire their default ammunition (Liberator,
+      Dominator, Diligence, Breaker, Peacemaker, Redeemer) swap their projectile on that ammunition (Projectile · Swap);
+  - **With HD2Runtime 0.31.1:** the Peacemaker's and Redeemer's projectile and damage (their ammunition's round), the
+    missile direct hit of the Spear, Commando and W.A.S.P. (Damage · Missile direct hit: most of their damage), and
+    the second ammunition's own projectile and damage (Projectile · Flak, Damage · Flak).
     - charges before cooldown (the Eagle Rearm pool; read-only on the Eagles, and joining waits for a finite Mission
       uses), the Orbital Railcannon's targeting and the Orbital Laser's re-search interval;
     - two or three fire modes on a weapon without a fire-mode selector bind the selector in the same write;

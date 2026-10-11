@@ -74,6 +74,9 @@ function M.start(hd2,id)
         local shared_records=require('hd2runtime/core/shared_records')
         if type(shared_records.entry)=='function'then shared_records.entry({})end
     end)
+    -- The explosion catalogue's own field descriptors (HD2Runtime 0.31.1 ProgrammableAmmo burst rows), resolved while
+    -- the game loads like every other module.
+    pcall(require,'hd2runtime/domains/explosion_writes')
     local layer=layer_module.new({hd2=hd2,id=id,ledger=ledger,catalog=catalog,log=log})
     local store
     do
