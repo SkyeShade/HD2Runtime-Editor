@@ -120,10 +120,11 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     by HD2Runtime (the AC-8's flak) is its impact explosion: set aside from view, never locked. The missiles (Spear,
     Commando, W.A.S.P.) offer impact only; their expiry row says why. Every write needs allow_shared and
     allow_unverified_effect (and allow_unverified_reference for another source's explosion), as the validator asks.
-  - **The payload picker (HD2Runtime 0.31.2).** Every explosion a payload takes (138), the weapon's own and None
+  - **The payload picker (HD2Runtime 0.31.2).** Every explosion a payload takes (139), the weapon's own and None
     first, then by group with a header each (Weapons, Support weapons, Throwables, Orbitals, Eagles, Hellbombs,
     Sentries, Mines, Vehicles, Backpacks, Enemies, Other). Type to search a name, owner or group. Each entry shows its
-    damage and radius and its warnings as badges (VERY LARGE, LINGERING, FIRE, SHRAPNEL, ARC, NO DAMAGE); the
+    damage and radius and its warnings as badges (VERY LARGE, LINGERING, FIRE, SHRAPNEL, ARC, NO DAMAGE, and 300 MB
+    LOAD on the EXCESSIVELY LARGE NUKE, whose two mission objective packages load first); the
     highlighted one's warnings are explained under the list with the acknowledgements a write of it carries (+ marks
     those it adds). The primaries' slots use it too; an older HD2Runtime keeps the earlier donor list. An explosion
     whose game package HD2Runtime loads first shows **LOADING** on its row (and in Changes) until it is written; a
@@ -157,7 +158,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - It never overwrites a project ModBuilder made. Reopen ModBuilder's project list to see a new one.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.9.2, for HD2Runtime 0.30.0 or later (0.31.1 recommended).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 0.9.3, for HD2Runtime 0.30.0 or later (0.31.2 recommended).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 
@@ -305,7 +306,7 @@ stratagems, enemies ...), subtitles, sections, groups, field labels and value la
 
 The search finds an object by its English name and by its translated one.
 
-**The game's own names.** With an HD2Runtime that reads the game's texts (its game text API, expected in 0.31.2),
+**The game's own names.** With an HD2Runtime that reads the game's texts (its game text API, HD2Runtime 0.31.2),
 weapons, support weapons, throwables, backpacks, vehicles, boosters and stratagems are shown by the game's own name in
 the game's language (Settings: **Use the game's names**, on by default). They come before a localisation file's
 translation of the name; the search still finds every object by its English name, and presets, exports and keys keep
