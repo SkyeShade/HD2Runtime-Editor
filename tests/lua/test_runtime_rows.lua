@@ -113,6 +113,14 @@ local peacemaker=find(rows('pw|P-2 Peacemaker'),function(r)return r.field=='dama
     or r.field=='damage.standard_damage'end)
 local hit=find(rows('sp|FAF-14 Spear'),function(r)return r.descriptor and r.descriptor.missileHit end)
 local flak=find(rows('sp|AC-8 Autocannon'),function(r)return r.descriptor and r.descriptor.programmableFeed end)
+-- On a Runtime that has them (0.31.1 and later), all three must be there: never skipped silently.
+local version=tostring(hd2.version or'')
+local major,minor,patch=version:match('^(%d+)%.(%d+)%.(%d+)')
+local has_0_31_1=major and(tonumber(major)*1e6+tonumber(minor)*1e3+tonumber(patch))>=31001
+if has_0_31_1 then
+    check(peacemaker and hit and flak,('0.31.1 rows on %s: Peacemaker %s, Spear direct hit %s, AC-8 flak %s'):format(
+        version,tostring(peacemaker~=nil),tostring(hit~=nil),tostring(flak~=nil)))
+end
 if peacemaker and hit and flak then
     check(peacemaker.section=='Damage'and peacemaker.vanilla==100 and peacemaker.unverified and peacemaker.shared,
         'Peacemaker damage: '..tostring(peacemaker.section))
