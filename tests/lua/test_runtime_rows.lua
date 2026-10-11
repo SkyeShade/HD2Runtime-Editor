@@ -118,6 +118,16 @@ local version=tostring(hd2.version or'')
 local major,minor,patch=version:match('^(%d+)%.(%d+)%.(%d+)')
 local has_0_31_1=major and(tonumber(major)*1e6+tonumber(minor)*1e3+tonumber(patch))>=31001
 if has_0_31_1 then
+    -- the G-4 Gas explosion's status slots: Gas and Gas Confusion, and a third status with its strength
+    local gas=rows('th|G-4 Gas')
+    local function slot(field)return find(gas,function(r)return r.field==field end)end
+    local third,strength=slot('explosion.damage.status_3_type'),slot('explosion.damage.status_3_strength')
+    check(third and strength and slot('explosion.damage.status_1_type'),'G-4 Gas status slot rows')
+    check(third.section=='Explosion · Status'and third.vanilla=='none'and third.shared and third.unverified,
+        'G-4 Gas third status: '..tostring(third.section))
+    local offered={}
+    for _,o in ipairs(third.labels or{})do offered[o.value]=true end
+    check(offered.none and offered.fire and not offered.acid_storm,'G-4 Gas third status choices')
     check(peacemaker and hit and flak,('0.31.1 rows on %s: Peacemaker %s, Spear direct hit %s, AC-8 flak %s'):format(
         version,tostring(peacemaker~=nil),tostring(hit~=nil),tostring(flak~=nil)))
 end

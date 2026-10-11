@@ -1266,11 +1266,22 @@ local function throwable_rows(hd2,object,entry)
         for _,id in ipairs(util.sorted_keys(t.fields or{}))do
             local f=t.fields[id]
             local min,max,integer=range_of(f)
-            if f.editable and numeric(f.type,f.currentDefault)then
+            -- HD2Runtime 0.31.1: the explosion's status slots (each used slot's status, and the first empty slot's
+            -- status and strength), as the primaries have them
+            local slot_section=f.statusSlot and join(section,'Status')or section
+            if f.editable and f.type=='status_reference'and type(f.allowedValues)=='table'then
+                local labels={}
+                if f.allowNone then labels[1]={value='none',label='None'}end
+                for _,v in ipairs(f.allowedValues)do labels[#labels+1]={value=v,label=util.humanize(v)}end
+                rows[#rows+1]=make_value_row(object,{id=f.instanceKey or(key..':'..id),kind='choice',
+                    label=f.displayName,field=f.semanticFieldId or id,target=target,vanilla=f.currentDefault,
+                    labels=labels,options=static_options(labels),descriptor=f,shared=shared_ack(f),
+                    unverified=unverified(f),section=slot_section})
+            elseif f.editable and numeric(f.type,f.currentDefault)then
                 rows[#rows+1]=make_row(object,{id=f.instanceKey or(key..':'..id),label=f.displayName,unit=f.unit,
                     vanilla=f.currentDefault,min=min,max=max,type=integer and'integer'or f.type,
                     storage=(f.backing or{}).storage,field=f.semanticFieldId or id,target=target,
-                    shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=section})
+                    shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=slot_section})
             end
         end
     end
