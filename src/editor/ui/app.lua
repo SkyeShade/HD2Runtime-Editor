@@ -15,6 +15,7 @@ local search_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/search_vie
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local presets_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/presets_view')
 local errors_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/errors_view')
+local sections_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/sections')
 local L=i18n.L
 local Lf=i18n.Lf
 local C,SZ=theme.colour,theme.size
@@ -142,14 +143,84 @@ function App:held_by_runtime_fn(row)
     if slot and(slot.watch or slot.next_watch or slot.user)then return true end
     return#self.ledger:holders(row.loc)>0
 end
--- The selected object's flat field list: {{section=label} | {row=row}}, and the indices of rows.
-function App:is_open(object,key)return self.expanded[object.key..'\0'..key]==true end
-function App:toggle(object,key,open)
+-- Whether a header is open. A group (an object part: magazines, a vehicle weapon, damage zones) and its sections are
+-- closed until opened, per object. A category of the page (ui/sections.lua, key 'c|...') and its subsections are open
+-- until closed, and that is remembered per kind for every page in the settings ('collapsed_sections'): closing Armory
+-- closes it on every weapon.
+function App:collapsed_sections()
+    if not self.collapsed then
+        local saved=self.presets and self.presets:setting('collapsed_sections',nil)
+        self.collapsed={}
+        if type(saved)=='table'then for k,v in pairs(saved)do if v==true then self.collapsed[k]=true end end end
+    end
+    return self.collapsed
+end
+function App:is_open(object,key)
+    if key:sub(1,2)=='c|'then return not self:collapsed_sections()[key]end
+    return self.expanded[object.key..'\0'..key]==true
+end
+function App:toggle(object,key,open,quiet)
+    if key:sub(1,2)=='c|'then
+        local collapsed=self:collapsed_sections()
+        if open==nil then open=collapsed[key]==true end
+        if(not collapsed[key])==open then return end
+        collapsed[key]=not open or nil
+        self.expand_version=self.expand_version+1
+        if not quiet and self.presets then self.presets:set_setting('collapsed_sections',collapsed)end
+        return
+    end
     local id=object.key..'\0'..key
     if open==nil then open=not self.expanded[id]end
     if(self.expanded[id]==true)==open then return end
     self.expanded[id]=open or nil
     self.expand_version=self.expand_version+1
+end
+-- Every header of an object's page: {key, ...} (categories, their subsections, groups and their sections).
+function App:page_headers(object)
+    local keys={}
+    if not object then return keys end
+    local sections=self:effective_sections(object)
+    local plain,groups,seen={},{},{}
+    for _,section in ipairs(sections)do
+        if section.group then
+            if not seen[section.group]then seen[section.group]=true;keys[#keys+1]='g|'..section.group end
+            keys[#keys+1]='s|'..section.group..'|'..section.label
+        else plain[#plain+1]=section end
+    end
+    for _,c in ipairs(sections_module.layout(plain,object.category))do
+        keys[#keys+1]=c.key
+        for _,sub in ipairs(c.subs)do keys[#keys+1]=sub.key end
+    end
+    return keys
+end
+-- Whether any header of the page is open (COLLAPSE ALL then, else EXPAND ALL); cached per page state.
+function App:page_open(object)
+    if not object then return false end
+    local sig=object.key..'\0'..self.expand_version
+    if self.page_open_sig==sig then return self.page_open_cache end
+    local any=false
+    for _,key in ipairs(self:page_headers(object))do if self:is_open(object,key)then any=true;break end end
+    self.page_open_sig,self.page_open_cache=sig,any
+    return any
+end
+-- Collapse or expand every header of the page (the button in the page header, Ctrl+Up / Ctrl+Down); the focused row
+-- stays focused when it is still shown, else its category's header.
+function App:set_page_open(object,open)
+    if not object then return end
+    local item=self:focused_item()
+    for _,key in ipairs(self:page_headers(object))do self:toggle(object,key,open,true)end
+    if self.presets then self.presets:set_setting('collapsed_sections',self:collapsed_sections())end
+    local items,selectable=self:field_items(object)
+    self.field=1
+    if item then
+        for s,index in ipairs(selectable)do
+            local it=items[index]
+            if(item.row and it.row==item.row)or(item.key and it.key==item.key)then self.field=s;break end
+            if item.row and it.header and it.depth==0 then
+                for _,r in ipairs(it.rows or{})do if r==item.row then self.field=s end end
+            end
+        end
+    end
 end
 -- A used status slot's duration (catalog status_children) is its status's own: it is shown under the slot while the slot
 -- holds that status (as shown: a pending status first), or while it holds a value of yours or an error. Returns the rows
@@ -237,19 +308,39 @@ function App:field_items(object)
         items[#items+1]=item
         if pick then selectable[#selectable+1]=#items end
     end
-    local groups,order={},{}
+    local groups,order,plain={},{},{}
     for _,section in ipairs(sections)do
         if section.group then
             if not groups[section.group]then groups[section.group]={};order[#order+1]=section.group end
             local list=groups[section.group]
             list[#list+1]=section
+        else plain[#plain+1]=section end
+    end
+    for g,list in pairs(groups)do groups[g]=sections_module.order_group(list)end
+    -- the page's own sections in categories (ui/sections.lua), each collapsible, before the object's parts; a
+    -- category of one part shows its rows under the category itself
+    for _,c in ipairs(sections_module.layout(plain,object.category))do
+        local open=self:is_open(object,c.key)
+        local single=#c.subs==1 and(c.subs[1].title==c.title or not c.classified)
+        add({header=c.title,key=c.key,open=open,count=#c.rows,subs=#c.subs,depth=0,rows=c.rows,category=true},true)
+        if open then
+            if single then
+                for _,row in ipairs(c.subs[1].rows)do add({row=row,depth=1,parent=c.key},true)end
+            else
+                for _,sub in ipairs(c.subs)do
+                    local sopen=self:is_open(object,sub.key)
+                    add({header=sub.title,key=sub.key,open=sopen,count=#sub.rows,depth=1,parent=c.key,rows=sub.rows},true)
+                    if sopen then
+                        for _,row in ipairs(sub.rows)do add({row=row,depth=2,parent=sub.key},true)end
+                    end
+                end
+            end
         end
     end
     local emitted={}
     for _,section in ipairs(sections)do
         if not section.group then
-            add({section=section.label,count=#section.rows})
-            for _,row in ipairs(section.rows)do add({row=row,depth=0},true)end
+            -- (in its category, above)
         elseif not emitted[section.group]then
             emitted[section.group]=true
             local g=section.group
@@ -748,6 +839,7 @@ function App:handle_browse_keys(f)
             self:set_weapon_group(id,groups[index])
             return
         end
+        if f.ctrl and(k.UP or k.DOWN)then self:set_page_open(object,k.DOWN==true);return end
         if k.UP then self:select_object(clamp_index(self.obj-1,#objects))end
         if k.DOWN then self:select_object(clamp_index(self.obj+1,#objects))end
         if k.PAGEUP then self:select_object(clamp_index(self.obj-page,#objects))end
@@ -757,6 +849,8 @@ function App:handle_browse_keys(f)
         if k.LEFT then self.focus='categories'end
         if(k.RIGHT or k.ENTER)and object then self.focus='fields'end
     elseif self.focus=='fields'then
+        -- Ctrl+Up collapses every header of the page, Ctrl+Down expands them all
+        if f.ctrl and(k.UP or k.DOWN)then self:set_page_open(object,k.DOWN==true);return end
         if k.UP then self.field=clamp_index(self.field-1,#selectable)end
         if k.DOWN then self.field=clamp_index(self.field+1,#selectable)end
         if k.PAGEUP then self.field=clamp_index(self.field-page,#selectable)end
@@ -765,7 +859,8 @@ function App:handle_browse_keys(f)
         if k.END then self.field=#selectable end
         local item=self:focused_item()
         if item and item.header then
-            if k.RIGHT or k.ENTER then self:toggle_item(item,object,true)end
+            -- (Enter toggles a header, as a click does; Right opens it, Left closes it)
+            if k.ENTER then self:toggle_item(item,object)elseif k.RIGHT then self:toggle_item(item,object,true)end
             if k.LEFT then
                 if item.open then self:toggle_item(item,object,false)
                 elseif item.parent then
@@ -1456,7 +1551,15 @@ function App:draw_fields(y0,h)
     -- object header
     local hx=x0+20
     if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end
-    cv:text(util.display_name(object),hx,y0+24,{size=20,font='title',colour=C.text,max=w-40-(hx-x0)})
+    -- collapse or expand every category and part of the page (Ctrl+Up / Ctrl+Down)
+    local any_open=self:page_open(object)
+    self.btn_page_open=self.btn_page_open or{click=function()
+        local o=self:object()
+        self:set_page_open(o,not self:page_open(o))
+    end}
+    local bw=142
+    button(self,any_open and L('COLLAPSE ALL')or L('EXPAND ALL'),x0+w-bw-14,y0+12,bw,28,'normal',self.btn_page_open)
+    cv:text(util.display_name(object),hx,y0+24,{size=20,font='title',colour=C.text,max=w-60-bw-(hx-x0)})
     local items,selectable=self:field_items(object)
     local markers=self:markers()
     local edited=0
@@ -1525,7 +1628,7 @@ function App:draw_fields(y0,h)
                 if item.depth==0 then
                     cv:text(string.upper(L(item.header)),x+indent+20,cy,{size=SZ.small,font='title',colour=C.gold,
                         max=lw-indent-170-reserve})
-                    cv:text(Lf('%d parts · %d fields',item.subs,item.count),right,cy,
+                    cv:text(item.subs>1 and Lf('%d parts · %d fields',item.subs,item.count)or Lf('%d fields',item.count),right,cy,
                         {size=SZ.tiny,colour=C.faint,align='right'})
                 else
                     cv:text(L(item.header),x+indent+20,cy,{size=SZ.label,colour=selected and C.text or C.dim,
@@ -1707,6 +1810,8 @@ function App:draw_footer(y,h)
     elseif self.search and self.search.active then hint=L('Type to filter   Backspace erase   Tab done   Del clear')
     elseif self.rename then hint=L('Type a name   Tab save   Del cancel')
     elseif self.view=='search'then hint=L('Type to search   ↑↓ select   Enter open   Backspace erase   Del clear')
+    elseif self.view=='browse'and self.focus=='fields'and(self:focused_item()or{}).header then
+        hint=L('F8 close   Enter open / close   ←→ open, close   Ctrl+↑ collapse all   Ctrl+↓ expand all   F9 apply')
     elseif self.view=='browse'and self.focus=='fields'then
         hint=L('F8 close   ←→ adjust (Shift x10, Ctrl ÷10)   digits type a value   Del revert   F9 apply')
     else hint=L('F8 close   ↑↓ select   ←→ panes   Tab next pane   Shift+Tab next tab   F9 apply') end
@@ -1812,11 +1917,20 @@ function App:reveal(row)
     self:goto_object(object)
     self.catalog:open(object)
     local function same(r)return r==row or(r.key~=nil and r.key==row.key)end
+    local plain={}
     for _,section in ipairs((self:effective_sections(object)))do
         for _,r in ipairs(section.rows)do
             if same(r)and section.group then
                 self:toggle(object,'g|'..section.group,true)
                 self:toggle(object,'s|'..section.group..'|'..section.label,true)
+            end
+        end
+        if not section.group then plain[#plain+1]=section end
+    end
+    for _,c in ipairs(sections_module.layout(plain,object.category))do
+        for _,sub in ipairs(c.subs)do
+            for _,r in ipairs(sub.rows)do
+                if same(r)then self:toggle(object,c.key,true);self:toggle(object,sub.key,true)end
             end
         end
     end

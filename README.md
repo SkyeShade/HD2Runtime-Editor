@@ -42,6 +42,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **Armor perks:** your own armor passive and a second passive on top of it. They are solo only and held for the session, not exported (see [Limitations](#limitations)).
   - **Armor:** every armor's piece weights (light, medium, heavy, per piece), the per-weight armor value, speed and stamina tables, and the armor damage curve. The list filters by weight; each armor shows its passive and its stats.
 - **Tidy long lists.** Damage zones (vehicles, deployables, enemies, Helldivers), enemy attacks, attachments and vehicle weapons are groups that start closed. Each part inside them opens on its own.
+- **Pages in categories.** An object's own fields are sorted into a few categories, each with its parts: **Projectile** (the projectile swap first, its flight, its impact and expiry explosions with their payload slot first, one set per feed such as the AC-8's Flak), **Damage** (direct hit, then its status slots), **Handling / Fire**, **Ammunition**, **Heat / Charge**, **Beam / Arc**, **Armory** and **Hellpod / Call-in** (last on a weapon's page, first on a stratagem's). Every category and part can be closed (click, Enter, ←); a closed one stays closed on every page until you open it again. COLLAPSE ALL / EXPAND ALL in the page header (Ctrl+↑ / Ctrl+↓) closes or opens everything on the page. Row keys and presets are unchanged.
 - **More than numbers.**
   - **Calldown codes:** an arrow-key code editor. Right-click an arrow to remove it; DEFAULT restores the game's code.
   - **Fire modes and rate-of-fire modes**, as in ModBuilder. Filling an empty rate slot on a weapon without a rate selector (the Liberator, for example) binds the game's own selector in the same write.
@@ -146,12 +147,13 @@ The tabs are Browse, Changes, Export, Mods, Custom, Presets, Logs and Settings (
 | → / ← | Go deeper or back (categories, objects, fields). In the field list: nudge the value (Shift ×10, Ctrl ÷10) |
 | Tab / Shift+Tab | Next pane / next tab (Browse, Mods, Presets) |
 | Digits, `.`, `-` | Type a value for the selected field. Tab, ↑ or ↓ confirms; Del cancels |
-| Enter | Choose a value for a non-numeric field (picker, code, fire mode or rate editor); open a group |
+| Enter | Choose a value for a non-numeric field (picker, code, fire mode or rate editor); open or close a category or group |
 | → / ← on a group | Open / close it (← on a field inside it jumps back to its group) |
 | Right-click | Remove an arrow in the calldown code editor |
 | Del | Remove a field's pending change, or stage it back to its default |
 | Ctrl+F | Search the object list |
 | Ctrl+← / Ctrl+→ | Previous / next weapon group (Primary, Secondary) |
+| Ctrl+↑ / Ctrl+↓ | Collapse / expand every category and group of the page |
 | F9 | Apply pending changes |
 | F10 | Reset to defaults (asks first) |
 | Ins | Save a new preset (Presets tab) |

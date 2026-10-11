@@ -2733,7 +2733,12 @@ function Catalog:texts()
             add(item.label)
             for _,object in ipairs((self:objects(item.id))or{})do
                 add(object.name);add(object.subtitle);add(object.detail)
-                for _,section in ipairs(object.sections or{})do add_parts(section.label);add_parts(section.group)end
+                for _,section in ipairs(object.sections or{})do
+                    add_parts(section.label);add_parts(section.group)
+                    -- (the page's category and subsection titles: ui/sections.lua)
+                    local ok,sections=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/ui/sections')
+                    if ok then for _,t in ipairs(sections.titles(section.label))do add_parts(t)end end
+                end
                 for _,row in ipairs(object.rows or{})do
                     add(row.label);add(row.note);add(row.reason)
                     for _,l in ipairs(row.labels or{})do add(l.label)end

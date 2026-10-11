@@ -1531,6 +1531,100 @@ do
         end
     end
 end
+-- object pages in categories (ui/sections.lua): Projectile (its type swap first, flight, impact and expiry explosions
+-- with their payload slot first), Damage (direct hit, then its status slots), Handling / Fire, Ammunition, Armory,
+-- Hellpod / Call-in last on a weapon's page; one set per feed (the AC-8's Flak); every header collapsible, remembered
+-- per kind in the settings, closed headers skipped by the keyboard and marked with what their fields hold
+do
+    local function shows(d,text)
+        for _,it in ipairs(d.items)do if it.k=='t'and it.s:find(text,1,true)then return true end end
+        return false
+    end
+    local sections=require('mods/skyeshade/hd2runtime_editor/editor/ui/sections')
+    local function headers(object)
+        local out={}
+        for _,it in ipairs((H.app:field_items(object)))do
+            if it.header then out[#out+1]=(it.depth==0 and''or'  ')..it.header end
+        end
+        return out
+    end
+    local function index_of(list,text)for i,t in ipairs(list)do if t==text then return i end end end
+    H.app:set_view('browse')
+    local ac8=H.catalog:object('sp|AC-8 Autocannon')
+    H.app:reveal(ac8.rows[1])
+    H.app:set_page_open(ac8,true)
+    local list=headers(ac8)
+    local p,d,f,a,ar,c=index_of(list,'Projectile'),index_of(list,'Damage'),index_of(list,'Handling / Fire'),
+        index_of(list,'Ammunition'),index_of(list,'Armory'),index_of(list,'Hellpod / Call-in')
+    assert(p and d and f and a and ar and c and p<d and d<f and f<a and a<ar and ar<c,
+        'AC-8 categories in order: '..table.concat(list,', '))
+    for _,sub in ipairs({'  Flight','  Impact explosion','  Impact explosion · Status','  Flak · Projectile type',
+            '  Flak · Flight','  Flak · Explosion','  Direct hit','  Direct hit · Status','  Flak · Direct hit',
+            '  Flak · Direct hit · Status','  Call-in','  Hellpod'})do
+        assert(index_of(list,sub),'AC-8 subsection '..sub..': '..table.concat(list,', '))
+    end
+    assert(index_of(list,'  Flight')<index_of(list,'  Flak · Flight')
+        and index_of(list,'  Flak · Flight')<index_of(list,'  Flak · Explosion')
+        and index_of(list,'  Flak · Explosion')<d,'the main round, then the Flak feed, inside Projectile')
+    -- a category of one part shows its rows under the category itself (Armory)
+    assert(not index_of(list,'  Armory'),'no Armory subsection under Armory')
+    -- the Liberator: the projectile swap first, each payload slot opens its explosion
+    local lib=H.catalog:object('pw|AR-23 Liberator')
+    H.app:reveal(lib.rows[1])
+    local items=H.app:field_items(lib)
+    assert(items[1].header=='Projectile'and items[2].header=='Projectile type'and items[3].row
+        and items[3].row.field=='ammunition.projectile','Liberator: Projectile type first: '..tostring(items[2].header))
+    local impact
+    for i,it in ipairs(items)do if it.header=='Impact explosion'then impact=items[i+1]end end
+    assert(impact and impact.row and impact.row.field=='terminal.explosion','the impact payload slot opens Impact explosion')
+    -- row keys and sections are unchanged (presentation only)
+    for _,r in ipairs(lib.rows)do assert(r.key:find('^pw|AR%-23 Liberator|'),'row key unchanged: '..r.key)end
+    assert(sections.classify('Damage · Flak direct hit · Status')=='damage','classification table')
+    -- Enter on a category closes it; the keyboard skips its rows; the choice is saved for every page of that kind
+    H.app.focus='fields'
+    local _,selectable=H.app:field_items(lib)
+    local before=#selectable
+    H.app.field=1
+    step({'ENTER'},nil,'80_category_closed')
+    local after
+    items,selectable=H.app:field_items(lib)
+    after=#selectable
+    assert(after<before and items[selectable[1]].header=='Projectile'and not items[selectable[1]].open,
+        'Projectile closed: '..before..' -> '..after)
+    assert(items[selectable[2]].header=='Damage','Down from a closed category goes to the next one')
+    local saved=H.store.data.settings and H.store.data.settings.collapsed_sections
+    assert(saved and saved['c|projectile']==true,'the closed category is saved')
+    local sw=H.catalog:object('sp|GL-21 Grenade Launcher')
+    H.app:reveal(sw.rows[1])
+    items=H.app:field_items(sw)
+    local closed
+    for _,it in ipairs(items)do if it.header=='Projectile'then closed=not it.open end end
+    assert(closed,'closed on every weapon page')
+    -- an edit inside a closed category marks its header
+    local vel
+    for _,r in ipairs(sw.rows)do if r.field=='projectile.velocity'then vel=r end end
+    assert(H.app:stage(vel,(vel.vanilla or 0)+5),'velocity staged')
+    for _,it in ipairs((H.app:field_items(sw)))do
+        if it.header=='Projectile'then assert(H.app:header_marks(it,H.app:markers()).pending,'closed category marked')end
+    end
+    H.app:discard()
+    -- Ctrl+Down expands everything, Ctrl+Up collapses everything (the page header button too)
+    step({'DOWN'},{down={'CTRL'}},'81_expand_all')
+    assert(H.app:page_open(sw),'expanded')
+    items,selectable=H.app:field_items(sw)
+    for _,it in ipairs(items)do if it.header then assert(it.open,'every header open: '..it.header)end end
+    step({'UP'},{down={'CTRL'}},'82_collapse_all')
+    items,selectable=H.app:field_items(sw)
+    for _,index in ipairs(selectable)do assert(items[index].header and items[index].depth==0,'only categories left')end
+    assert(shows(step({},nil,'83_collapsed'),'EXPAND ALL'),'the button offers EXPAND ALL')
+    H.app.btn_page_open.click()
+    assert(H.app:page_open(sw)and shows(step({}),'COLLAPSE ALL'),'the button expands the page')
+    -- reveal opens a closed category to show its row
+    H.app:set_page_open(sw,false)
+    assert(H.app:reveal(vel),'revealed')
+    assert(H.app:focused_row()==vel,'the row in a closed category is shown and focused')
+    H.app:set_page_open(sw,true)
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')
