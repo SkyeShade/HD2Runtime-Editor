@@ -1112,7 +1112,8 @@ end
 -- A vehicle's mounts by what they are (the Runtime names them by their mount node or slot only: "slot_3"): the
 -- TD-110 Maelstrom's two pods fire the MLS-4X Commando's seeking missile. Unlisted mounts keep the humanized node name.
 local MOUNT_LABELS={
-    ['TD-110 Maelstrom']={slot_2='Driver gun',slot_3='Missile pods (slot 3)',slot_4='Missile pods (slot 4)'},
+    ['TD-110 Maelstrom']={attach_tank_gun='Main cannon',slot_0='Main cannon',slot_2='Driver gun',
+        slot_3='Missile pods (slot 3)',slot_4='Missile pods (slot 4)'},
     ['TD-220 Bastion MK XVI']={attach_tank_gun='Cannon',attach_tank_gun_mg='Coaxial MG',slot_0='Cannon',
         slot_1='Coaxial MG'}}
 local function mount_label(vehicle,mount,slot)
