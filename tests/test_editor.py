@@ -258,6 +258,20 @@ class EditorTests(unittest.TestCase):
                                           'harness': (LUA / 'ui_harness.lua').as_posix()})
         self.assertIn('ui ok', result, result)
 
+    def test_presets_tab_imports_sections_and_icons(self):
+        import subprocess
+        # the 0.9.2 reader, to show an older editor still reads a file with an icon (when the tag is there)
+        old = subprocess.run(['git', 'show', 'v0.9.2:src/editor/preset_files.lua'], cwd=lua_host.PROJECT,
+                             capture_output=True, text=True, encoding='utf-8')
+        result = lua_file('test_presets.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                               'harness': (LUA / 'ui_harness.lua').as_posix(),
+                                               'old_preset_files': old.stdout if old.returncode == 0 else ''})
+        for line in ('large import ok', 'background import ok', 'malformed ok', 'modbuilder file ok', 'sections ok',
+                     'icons ok'):
+            self.assertIn(line, result)
+        if old.returncode == 0:
+            self.assertIn('old editor ok', result)
+
     def test_saved_session_keeps_values_that_did_not_come_back(self):
         result = lua_file('test_session.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                                'harness': (LUA / 'ui_harness.lua').as_posix()})

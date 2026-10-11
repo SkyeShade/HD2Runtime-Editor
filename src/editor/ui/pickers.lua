@@ -1,7 +1,8 @@
 -- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The two value editors that open over the window: a searchable picker (choices, mission uses, projectile and
--- explosion donors) and a calldown code editor. Installed onto the app (ui/app.lua).
+-- explosion donors; any list through open_list_picker, such as a preset's icon) and a calldown code editor. Installed
+-- onto the app (ui/app.lua).
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
@@ -81,11 +82,20 @@ function M.install(App)
         self.picker={row=row,items=items,index=index,filter=filter or'',scroll=0,current=current}
         self:picker_filter()
     end
+    -- A picker over any list: opts = {title, subtitle, items = {{value, label, sub, icon}}, current, on_choose(value),
+    -- note = {lines shown above the keys}}. An item's icon is drawn with draw_preset_icon.
+    function App:open_list_picker(opts)
+        local index=1
+        for i,item in ipairs(opts.items)do if util.same(item.value,opts.current)then index=i end end
+        self.picker={title=opts.title,subtitle=opts.subtitle,items=opts.items,index=index,filter='',scroll=0,
+            current=opts.current,on_choose=opts.on_choose,note=opts.note}
+        self:picker_filter()
+    end
     function App:picker_filter()
         local p=self.picker
         local q=p.filter:lower()
         p.shown={}
-        local typed=p.row.kind=='uses'and tonumber(q)
+        local typed=p.row and p.row.kind=='uses'and tonumber(q)
         if typed and typed<=0 then
             -- mission uses: 0 or -1 means unlimited (where the stratagem can be unlimited)
             for i,item in ipairs(p.items)do if item.value=='unlimited'then p.shown[1]=i end end
@@ -109,6 +119,7 @@ function M.install(App)
         self.picker=nil
         local index=p and p.shown[p.cursor]
         if not index then return end
+        if p.on_choose then return p.on_choose(p.items[index].value)end
         self:stage(p.row,p.items[index].value)
     end
     function App:handle_picker_keys(f)
@@ -139,8 +150,9 @@ function M.install(App)
         cv:frame(x,y,w,h,C.line_strong,10)
         cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
-        cv:text(string.upper(L(p.row.label)),x+24,y+30,{size=18,font='title',colour=C.text,max=w-90,z=11})
-        cv:text(util.display_name(p.row.object),x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
+        cv:text(p.title or string.upper(L(p.row.label)),x+24,y+30,{size=18,font='title',colour=C.text,max=w-90,z=11})
+        local subtitle=p.subtitle or(p.row and util.display_name(p.row.object))
+        if subtitle then cv:text(subtitle,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})end
         close_button(self,cv,x,y,w,function()self.picker=nil end)
         -- filter
         local fy=y+74
@@ -154,7 +166,8 @@ function M.install(App)
         end
         -- list
         local ly,rh=fy+44,40
-        local rows=math.floor((y+h-56-ly)/rh)
+        local notes=p.note and#p.note or 0
+        local rows=math.floor((y+h-56-notes*18-ly)/rh)
         local n=#p.shown
         -- the cursor pulls the view along only when it moves (the wheel scrolls freely in between)
         if p.seen_cursor~=p.cursor then
@@ -172,12 +185,14 @@ function M.install(App)
             local selected=s==p.cursor
             local action={click=function()p.cursor=s;self:picker_choose()end}
             if selected then cv:rect(x+12,ry+2,w-24,rh-4,C.select,10);cv:rect(x+12,ry+2,3,rh-4,C.gold,11)end
-            cv:text(L(item.label),x+28,ry+(item.sub and 14 or rh/2),{size=SZ.label,colour=selected and C.text or C.dim,
+            local lx=x+28
+            if item.icon and self.draw_preset_icon then self:draw_preset_icon(item.icon,x+24,ry+4,rh-8,12);lx=x+30+rh end
+            cv:text(L(item.label),lx,ry+(item.sub and 14 or rh/2),{size=SZ.label,colour=selected and C.text or C.dim,
                 max=w-180,z=12})
-            if item.sub then cv:text(L(item.sub),x+28,ry+30,{size=SZ.tiny,colour=C.faint,max=w-180,z=12})end
+            if item.sub then cv:text(L(item.sub),lx,ry+30,{size=SZ.tiny,colour=C.faint,max=w-180,z=12})end
             if util.same(item.value,p.current)then
                 self.chip_fn(cv,L('CURRENT'),x+w-28,ry+rh/2,C.gold,C.gold_wash,'right',10)
-            elseif util.same(item.value,p.row.vanilla)then
+            elseif p.row and util.same(item.value,p.row.vanilla)then
                 self.chip_fn(cv,L('DEFAULT'),x+w-28,ry+rh/2,C.faint,C.line,'right',10)
             end
             cv:hit(x+12,ry,w-24,rh,action)
@@ -188,6 +203,9 @@ function M.install(App)
             local t=p.scroll/math.max(1,n-rows)
             cv:rect(x+w-10,ly,3,rows*rh,C.line,11)
             cv:rect(x+w-10,ly+(rows*rh-th)*t,3,th,C.gold,12)
+        end
+        for i,line in ipairs(p.note or{})do
+            cv:text(line,x+24,y+h-26-(notes-i+1)*18,{size=SZ.tiny,colour=C.dim,max=w-48,z=11})
         end
         cv:text(Lf('↑↓ choose   Enter / Tab select   Type to filter   Esc / Del close   %d of %d',n,#p.items),
             x+24,y+h-26,{size=SZ.tiny,colour=C.faint,max=w-48,z=11})

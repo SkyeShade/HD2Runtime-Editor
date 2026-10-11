@@ -249,9 +249,15 @@ function M.start(hd2,id)
     app.ctx.forget_saved=function()session:forget_all()end
     local clock=0
     local restore=presets:setting('restore_session',true)
+    local background_error
     mod:on_frame(function(dt)
         clock=clock+(dt or 0)
         layer:tick(dt or 0)
+        -- a preset import (and the Windows dialog it waits for) goes on while the window is closed
+        if not overlay:status().visible then
+            local ok,why=pcall(app.background_tick,app)
+            if not ok and why~=background_error then background_error=why;log('preset import failed: '..tostring(why))end
+        end
         if can_block and presets:setting('block_game_input',true)and overlay:status().visible then block(true)end
         if not session.restored and clock>=RESTORE_MIN then
             local ready=others_settled(hd2,id)

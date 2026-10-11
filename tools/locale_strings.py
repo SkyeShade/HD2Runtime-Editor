@@ -26,7 +26,8 @@ LITERAL = r"'((?:[^'\\]|\\.)*)'"
 # keys whose literal values the window shows through L() (catalogue rows and objects, tables of labels)
 SHOWN_KEYS = ('label', 'section', 'group', 'subtitle', 'detail', 'note', 'own_label', 'sub')
 # tables of the catalogue whose values are labels or notes (key -> text)
-LABEL_TABLES = ('PRESET_ACTIONS', 'FILE_ACTIONS', 'WEAPON_GROUPS', 'GROUP_LABELS', 'DOMAIN_LABELS', 'UI_GROUPS',
+LABEL_TABLES = ('PRESET_ACTIONS', 'FILE_ACTIONS', 'MB_ACTIONS', 'IMPORT_ACTIONS', 'WEAPON_GROUPS', 'GROUP_LABELS',
+                'DOMAIN_LABELS', 'UI_GROUPS',
                 'PATH_LABELS', 'HOVER_LABELS', 'TEAM_RELOAD_NOTES', 'DERIVED_HEAT', 'MOUNT_LABELS', 'STATUS_SLOT_NOTE',
                 'SAME_HIT_LABELS', 'VW_NOTES', 'CHAIN_LABELS', 'HELLBOMB_NOTE')
 
@@ -74,7 +75,7 @@ def collect():
             for m in re.finditer(r'\b' + name + r'=\{', text):
                 body = block(text, m.end() - 1)
                 found += re.findall(r"=\s*" + LITERAL, body)
-                if name in ('PRESET_ACTIONS', 'FILE_ACTIONS', 'WEAPON_GROUPS'):
+                if name in ('PRESET_ACTIONS', 'FILE_ACTIONS', 'MB_ACTIONS', 'IMPORT_ACTIONS', 'WEAPON_GROUPS'):
                     found += re.findall(LITERAL, body)
             for m in re.finditer(r'\b' + name + r'=' + LITERAL, text):
                 found.append(m.group(1))

@@ -9,7 +9,9 @@
 | `editor/catalog.lua` | Categories → objects → sections → rows, read from the installed Runtime's generated catalogues. One adapter per family; a family whose table changed shape is reported unavailable. |
 | `editor/ledger.lua` | Which mod applied which value: an observer on `core/shared_records.claim`, plus the operation registry behind `hd2.diagnostics.operations`. |
 | `editor/layer.lua` | The override layer: adopt, hand-over, steer, reset (below). |
-| `editor/presets.lua` | Presets, the saved session and settings in `hd2.store`. |
+| `editor/presets.lua` | Presets (with their icons), the saved session and settings in `hd2.store`. A preset that would take the store past HD2Runtime's 1 MiB per mod (with room for the session) is refused with its size. |
+| `editor/preset_files.lua` | Shared preset files (`.hd2rpreset.json`, with an optional `icon`): encode, decode, list, and the reading job that reads, decodes and checks a file a few milliseconds a frame. |
+| `editor/ui/presets_view.lua` | The Presets tab: the import page and its job (also stepped while the window is closed, `background_tick`), the collapsible sections, the icon picker. Every import outcome is a toast, the import page's last result and a log line. |
 | `editor/session.lua` | The saved session: restored once at startup, saved whenever the values change. A saved value that does not come back at a start (no row now, refused by the Runtime this time, a custom stratagem not registered) stays saved until that field is changed or reset, so one bad start never erases it. |
 | `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel), the app (Browse, staging, dialogs), pickers (the value picker, the code, fire mode, rate and traits editors) and views (Changes, Mods, Custom, Settings). |
 | `editor/installed.lua`, `editor/json.lua` | Every deployed mod from the mod manager's own state (Echelon `state.json`, HD2 Arsenal `hd2a_data.json`), read with `io.open` and a JSON reader that yields, so the 1 MB file is parsed over a few frames. |

@@ -13,9 +13,7 @@ local views=require('mods/skyeshade/hd2runtime_editor/editor/ui/views')
 local export_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/export_view')
 local search_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/search_view')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
-local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
-local preset_files=require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
-local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
+local presets_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/presets_view')
 local L=i18n.L
 local Lf=i18n.Lf
 local C,SZ=theme.colour,theme.size
@@ -25,7 +23,6 @@ local App={};App.__index=App
 local VIEWS={{id='browse',label='BROWSE'},{id='search',label='SEARCH'},{id='changes',label='CHANGES'},{id='export',label='EXPORT'},{id='mods',label='MODS'},
     {id='custom',label='CUSTOM'},{id='presets',label='PRESETS'},{id='logs',label='LOGS'},{id='settings',label='SETTINGS'}}
 local CAT_W,OBJ_W=224,334
-local PRESETS_W=470
 
 function M.new(ctx)
     local self=setmetatable({ctx=ctx,hd2=ctx.hd2,catalog=ctx.catalog,layer=ctx.layer,ledger=ctx.ledger,
@@ -1023,6 +1020,8 @@ function App:frame(d,dt)
     if self.view=='search'then typing,letters=true,true end
     local f=self.input:poll(dt or 0,{typing=typing,letters=letters,mouse=self.ctx.mouse})
     self.frame_input=f
+    -- a preset import reads a few milliseconds a frame, on any tab (presets_view.lua)
+    self:import_tick()
     self:handle_keys(f)
     if f.mouse then self:handle_mouse(f)end
     self:draw()
@@ -1603,8 +1602,9 @@ function App:draw_status(y,h)
         cv:text(L('Settings are saved with the editor\'s data and apply at once.'),
             18,cy,{size=SZ.small,colour=C.faint,max=maxw})
     else
-        cv:text(L('Presets store field values by name; loading one stages them as pending changes.'),
-            18,cy,{size=SZ.small,colour=C.faint,max=maxw})
+        -- an import's progress or its result stays here a while (presets_view.lua)
+        local text,colour=self:presets_status()
+        cv:text(text,18,cy,{size=SZ.small,colour=colour,max=maxw})
     end
 end
 
@@ -1730,10 +1730,11 @@ function App:current_values()
     return values
 end
 -- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the
--- loadout screen colours it. False when there is none (the layout keeps its text-only form).
+-- loadout screen colours it, at layer z (4 by default). False when there is none (the layout keeps its text-only form).
 -- (ex: an object that is only its explosion, the NUX-223 Hellbomb: no icon of its own, a plain square)
 local STRATAGEM_FAMILIES={st=true,sp=true,sb=true,ve=true,rs=true,ex=true}
-function App:draw_icon(object,x,y,size)
+function App:draw_icon(object,x,y,size,z)
+    z=z or 4
     if type(self.canvas.d.image)~='function'then return false end
     local icons=self.ctx.icons
     local family=tostring(object.key):match('^(%a+)|')
@@ -1743,23 +1744,23 @@ function App:draw_icon(object,x,y,size)
     if entry and entry.game then
         -- the game's own HUD icon through HD2Runtime: a stratagem's category layer in its category colour, the white
         -- layer white; a booster as the Runtime draws it (its yellow plate)
-        if family=='bo'then self.canvas:image(entry.handle,x,y,size,size,{z=4})
+        if family=='bo'then self.canvas:image(entry.handle,x,y,size,size,{z=z})
         else
             local tone=object.tone and theme.tone[object.tone]or C.gold
-            self.canvas:image(entry.handle,x,y,size,size,{colours={r=tone,g={255,255,238,255},b={0,0,0,0}},z=4})
+            self.canvas:image(entry.handle,x,y,size,size,{colours={r=tone,g={255,255,238,255},b={0,0,0,0}},z=z})
         end
         return true
     end
     if entry then
         -- the game's HUD sprite: R in its accent, G white, B (a booster's glyph) in its own measured colour
         self.canvas:image(entry.handle,x,y,size,size,
-            {colours={r=entry.accent,g={255,255,238,255},b=entry.dark or{0,0,0,0}},z=4})
+            {colours={r=entry.accent,g={255,255,238,255},b=entry.dark or{0,0,0,0}},z=z})
         return true
     end
     -- a stratagem or booster the game has no icon for: a plain square in its category colour (never made-up art)
     if (icons and STRATAGEM_FAMILIES[family])or family=='bo'then
         local tone=object.tone and theme.tone[object.tone]or(family=='bo'and{255,221,31,255})or C.gold
-        self.canvas:rect(x+size*0.18,y+size*0.18,size*0.64,size*0.64,tone,4)
+        self.canvas:rect(x+size*0.18,y+size*0.18,size*0.64,size*0.64,tone,z)
         return true
     end
     return false
@@ -1792,518 +1793,38 @@ function App:decode_value(key,stored)
     if not row or not row.editable then return nil end
     return row,catalog_module.decode(self.catalog,row,stored)
 end
-function App:save_preset(name,confirmed)
-    local values=self:current_values()
-    if next(values)==nil then self:toast(L('Nothing to save: edit a field first'),C.dim);return end
-    if not confirmed and self.presets:find(name)then self:ask('overwrite_preset',name);return end
-    local ok,why=self.presets:save(name,self:encode_values(values))
-    if ok then self:toast(Lf('Saved preset %s (%d fields)',name,util.count(values)),C.ok)
-    else self:toast(Lf('Could not save: %s',tostring(why)),C.error)end
+-- Field values by key: resolved names where the catalogue has the field. The sorted rows are kept while the same
+-- values table (or the same cache_key) is shown: a preset of thousands of fields sorted every frame took tens of
+-- milliseconds a frame.
+local function natural_key(s)
+    return (tostring(s):lower():gsub('%d+',function(d)return string.format('%09d',tonumber(d))end))
 end
--- The toast after values were staged from a preset or a file.
-function App.loaded_text(name,pending,missing)
-    if missing>0 then
-        return Lf('Loaded %s: %d pending, %d unknown fields skipped. Press Apply.',name,pending,missing)
-    end
-    return Lf('Loaded %s: %d pending. Press Apply.',name,pending)
-end
-function App:load_preset(name)
-    local values=self.presets:load(name)
-    if not values then return end
-    local missing=self:stage_map(values)
-    self:toast(App.loaded_text(name,self.pending_n,missing),missing>0 and C.pending or C.ok)
-end
-function App:finish_rename()
-    local r=self.rename
-    self.rename=nil
-    if not r then return end
-    if r.create then
-        local name=self.presets:unique_name(r.text~=''and r.text or'Preset')
-        self:save_preset(name,true)
-        local list=self.presets:list()
-        self.preset_index=#list+1
-        return
-    end
-    local ok,why=self.presets:rename(r.old,r.text)
-    if ok then self:toast(Lf('Renamed to %s',r.text),C.ok)else self:toast(tostring(why),C.error)end
-end
-local PRESET_ACTIONS={'LOAD','SAVE OVER','RENAME','SHARE','DELETE'}
-function App:preset_action_run(index,preset)
-    if not preset then return end
-    local a=PRESET_ACTIONS[index]
-    if a=='LOAD'then self:load_preset(preset.name)
-    elseif a=='SAVE OVER'then self:save_preset(preset.name)
-    elseif a=='RENAME'then self.rename={old=preset.name,text=preset.name}
-    elseif a=='SHARE'then self:share_preset(preset)
-    elseif a=='DELETE'then self:ask('delete_preset',preset.name)end
-end
---------------------------------------------------------------------------------------- shared preset files --
--- The shared folder's preset files (editor/preset_files.lua), listed again every few seconds while the tab shows
--- them, so a file dropped into the folder appears by itself.
-function App:preset_files()
-    if not self.pf_list or self.time-(self.pf_time or-99)>3 then
-        self.pf_list=preset_files.list(preset_files.folder(),win.list)
-        self.pf_time=self.time
-    end
-    return self.pf_list
-end
--- A preset as a file in the shared folder, with each field's name for people reading it.
-function App:share_preset(preset)
-    local folder=preset_files.folder()
-    if not folder then self:toast(L('No Documents folder (%USERPROFILE%)'),C.error);return end
-    local values,labels={},{}
-    for _,item in ipairs(preset.fields or{})do
-        values[item.k]=item.v
-        local row=self.catalog:row(item.k)
-        if row then labels[item.k]=row.object.name..' · '..row.label
-        elseif App.is_custom_key(item.k)then
-            local name,label=self:custom_value_text(item.k,item.v)
-            labels[item.k]=name..' · '..label
-        end
-    end
-    local ok,path=pcall(preset_files.save,folder,preset.name,values,labels,
-        {editor=self.ctx.version,runtime=self.ctx.minimum},win.mkdir)
-    if not ok then self:toast(Lf('Not shared: %s',tostring(path)),C.error);return end
-    self.pf_list=nil
-    self:toast(Lf('Shared as %s',path),C.ok)
-    if self.ctx.log then self.ctx.log('shared the preset '..preset.name..' as '..path)end
-end
--- A file's preset, read once per size: {preset, error}.
-function App:preset_file_open(f)
-    local key=f.path..'@'..tostring(f.size)
-    if self.pf_key~=key then
-        local preset,why=preset_files.load(f.path)
-        self.pf_open,self.pf_key,self.detail_scroll={preset=preset,error=preset==nil and tostring(why)or nil},key,0
-    end
-    return self.pf_open
-end
-local FILE_ACTIONS={'LOAD','SAVE AS PRESET'}
-function App:preset_file_action_run(index,f)
-    local open=self:preset_file_open(f)
-    if not open.preset then self:toast(tostring(open.error),C.error);return end
-    local p=open.preset
-    if FILE_ACTIONS[index]=='LOAD'then
-        local missing=self:stage_map(p.values)
-        self:toast(App.loaded_text(p.name,self.pending_n,missing),missing>0 and C.pending or C.ok)
-    else
-        local name=self.presets:unique_name(p.name)
-        local ok,why=self.presets:save(name,p.values)
-        if ok then self:toast(Lf('Saved preset %s (%d fields)',name,util.count(p.values)),C.ok)
-        else self:toast(Lf('Could not save: %s',tostring(why)),C.error)end
-    end
-end
--- A preset file from anywhere: the Windows open-file dialog, then a copy into the shared folder.
-function App:preset_file_pick()
-    if self.pf_picking then return end
-    local job,why=win.pick_file({title=L('Choose a preset file'),
-        filter=L('HD2R Editor presets')..' (*.hd2rpreset.json)|*.hd2rpreset.json;*.json|',folder=preset_files.folder()})
-    if not job then self:toast(Lf('The Windows file dialog did not open (%s)',tostring(why)),C.error);return end
-    self.pf_picking=job
-end
-function App:preset_file_poll()
-    local job=self.pf_picking
-    if not job then return end
-    local result=job.poll()
-    if result==nil then return end
-    self.pf_picking=nil
-    if not result then return end
-    local path,preset=preset_files.import(result,preset_files.folder(),win.mkdir)
-    if not path then self:toast(Lf('Not imported: %s',tostring(preset)),C.error);return end
-    self.pf_list=nil
-    self:toast(Lf('Imported %s into the shared folder',path:match('([^\\]+)$')or path),C.ok)
-end
-function App:new_preset()
-    if next(self:current_values())==nil then self:toast(L('Nothing to save: edit a field first'),C.dim);return end
-    self.rename={create=true,text=self.presets:unique_name('Preset')}
-end
-------------------------------------------------------------------------------------- ModBuilder projects --
--- ModBuilder's library (editor/modbuilder.lua), read when the Presets tab first lists it and on REFRESH.
-function App:mb_projects()
-    if not self.mb_list then
-        local list,why=modbuilder.projects()
-        self.mb_list,self.mb_error=list or{},why
-    end
-    return self.mb_list
-end
--- A project's edits, read once per saved version: {items, error}.
-function App:mb_open_project(p)
-    local key=p.id..'@'..p.modified
-    if self.mb_key~=key then
-        local project,why=modbuilder.read(p.id)
-        local open={items={},error=project==nil and tostring(why)or nil}
-        if project then
-            local ok,items=pcall(modbuilder.items,self.catalog,project)
-            if ok then open.items=items else open.error=tostring(items)end
-        end
-        self.mb_open,self.mb_key,self.mb_scroll=open,key,0
-    end
-    return self.mb_open
-end
-function App:mb_select(open,on)
-    for _,it in ipairs(open.items)do if it.row and not it.why then it.selected=on end end
-end
--- Stages the chosen edits like any other change (Apply writes them).
-function App:mb_stage(open,name)
-    local n,failed=0,0
-    local chosen={}
-    for _,it in ipairs(open.items)do
-        if it.selected and it.row and not it.why then chosen[#chosen+1]=it end
-    end
-    -- (status slot 1 before slot 2: the slots fill in order)
-    for _,it in ipairs(slot_order(chosen,function(x)return x.row end))do
-        if self:stage_value(it.row,it.value)then n=n+1 else failed=failed+1 end
-    end
-    if n==0 and failed==0 then self:toast(L('Nothing chosen to stage'),C.dim);return end
-    self:toast(Lf('Staged %d values from %s. Press Apply.',n,name)..(failed>0 and(' '..Lf('%d refused',failed))or''),
-        failed>0 and C.pending or C.ok)
-    self:sound('click')
-end
--- The Presets list: the new preset, the presets, the shared files (under their header), ModBuilder's projects (under
--- theirs). Built again when a frame passes or any of the lists changes.
-function App:preset_entries()
-    local presets,files,projects=self.presets:list(),self:preset_files(),self:mb_projects()
-    local key=tostring(self.time)..'|'..#presets
-    if not self.pe_list or self.pe_key~=key or self.pe_files~=files or self.pe_projects~=projects then
-        local out={{kind='new'}}
-        for _,p in ipairs(presets)do out[#out+1]={kind='preset',preset=p}end
-        out[#out+1]={kind='file_header'}
-        for _,f in ipairs(files)do out[#out+1]={kind='file',file=f}end
-        out[#out+1]={kind='mb_header'}
-        for _,p in ipairs(projects)do out[#out+1]={kind='mb',project=p}end
-        self.pe_list,self.pe_key,self.pe_files,self.pe_projects=out,key,files,projects
-    end
-    return self.pe_list
-end
--- The list index of the first entry of a kind ('file_header', 'mb_header', ...), or nil.
-function App:preset_index_of(kind)
-    for i,e in ipairs(self:preset_entries())do if e.kind==kind then return i end end
-    return nil
-end
-function App:preset_entry(i)return self:preset_entries()[i]or{kind='new'}end
-function App:preset_count()return #self:preset_entries()end
-local MB_ACTIONS={'STAGE CHOSEN','CHOOSE ALL','CHOOSE NONE'}
-function App:mb_action_run(index,p)
-    local open=self:mb_open_project(p)
-    local a=MB_ACTIONS[index]
-    if a=='STAGE CHOSEN'then self:mb_stage(open,p.name)
-    elseif a=='CHOOSE ALL'then self:mb_select(open,true)
-    else self:mb_select(open,false)end
-end
-function App:handle_presets_keys(f)
-    local k=f.keys
-    local list=self.presets:list()
-    local n=self:preset_count()
-    if k.UP then self.preset_index=clamp_index(self.preset_index-1,n)end
-    if k.DOWN then self.preset_index=clamp_index(self.preset_index+1,n)end
-    local entry=self:preset_entry(self.preset_index)
-    local actions=entry.kind=='mb'and MB_ACTIONS or entry.kind=='file'and FILE_ACTIONS or PRESET_ACTIONS
-    if k.LEFT then self.preset_action=clamp_index(self.preset_action-1,#actions)end
-    if k.RIGHT then self.preset_action=clamp_index(self.preset_action+1,#actions)end
-    self.preset_action=clamp_index(self.preset_action,#actions)
-    if k.INSERT then self:new_preset()end
-    if k.ENTER then
-        if entry.kind=='new'then self:new_preset()
-        elseif entry.kind=='preset'then self:preset_action_run(self.preset_action,entry.preset)
-        elseif entry.kind=='mb'then self:mb_action_run(self.preset_action,entry.project)
-        elseif entry.kind=='file'then self:preset_file_action_run(self.preset_action,entry.file)
-        elseif entry.kind=='file_header'then self:preset_file_pick()
-        else self.mb_list=nil end
-    end
-    if k.DELETE and entry.kind=='preset'then self:ask('delete_preset',entry.preset.name)end
-end
-function App:draw_presets(y0,h)
-    local cv=self.canvas
-    local P=theme.panel
-    local n=self:preset_count()
-    self.preset_index=clamp_index(self.preset_index,n)
-    self:preset_file_poll()
-    cv:rect(0,y0,PRESETS_W,h,C.panel_alt,1)
-    cv:rect(PRESETS_W-1,y0,1,h,C.line,2)
-    cv:text(L('PRESETS'),18,y0+20,{size=SZ.heading,font='title',colour=C.faint})
-    if not self.presets:available()then
-        cv:text(L('Saved data needs a newer HD2Runtime (hd2.store).'),18,y0+52,{size=SZ.small,colour=C.error,max=PRESETS_W-36})
-        return
-    end
-    self.preset_actions=self.preset_actions or{}
-    local bottom=y0+h-118
-    self:list({x=0,y=y0+36,w=PRESETS_W-1,h=bottom-y0-40,count=n,row_h=48,selected=self.preset_index,
-        scroll_key='preset_scroll',focused=true,actions=self.preset_actions,
-        click=function(i)
-            if i==1 and self.preset_index==1 then self:new_preset()end
-            self.preset_index=i
-        end,
-        draw=function(i,x,y,w,rh)
-            local selected=i==self.preset_index
-            if selected then cv:rect(x+8,y+2,w-16,rh-4,C.select,2);cv:rect(x+8,y+2,3,rh-4,C.gold,3)
-            elseif self.hover==self.preset_actions[i]then cv:rect(x+8,y+2,w-16,rh-4,C.hover,2)end
-            if i==1 then
-                local renaming=self.rename and self.rename.create
-                if renaming then
-                    local tw=cv:text(self.rename.text,x+22,y+rh/2,{size=SZ.label,colour=C.text,max=w-60})
-                    if math.floor(self.time*2)%2==0 then cv:rect(x+24+tw,y+14,2,20,C.gold,6)end
-                else
-                    cv:text(L('+  NEW PRESET FROM CURRENT VALUES'),x+22,y+rh/2,{size=SZ.tab,font='title',colour=C.gold,max=w-44})
-                end
-                return
-            end
-            local entry=self:preset_entry(i)
-            if entry.kind=='file_header'then
-                cv:text(L('SHARED PRESET FILES'),x+22,y+rh/2,{size=SZ.tab,font='title',colour=C.faint,max=w-120})
-                cv:text(tostring(#self:preset_files()),x+w-22,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
-                return
-            elseif entry.kind=='file'then
-                local f=entry.file
-                cv:text(f.name,x+22,y+17,{size=SZ.label,colour=selected and C.text or C.dim,max=w-60})
-                cv:text(L('file')..'   '..string.format('%.1f KB',(f.size or 0)/1024),x+22,y+35,{size=SZ.tiny,colour=C.faint,max=w-44})
-                return
-            elseif entry.kind=='mb_header'then
-                cv:text(L('MODBUILDER PROJECTS'),x+22,y+rh/2,{size=SZ.tab,font='title',colour=C.faint,max=w-120})
-                cv:text(tostring(#self:mb_projects()),x+w-22,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
-                return
-            elseif entry.kind=='mb'then
-                local mp=entry.project
-                cv:text(mp.name,x+22,y+17,{size=SZ.label,colour=selected and C.text or C.dim,max=w-60})
-                cv:text(tostring(mp.resource or'')..'   '..mp.modified:sub(1,10),x+22,y+35,{size=SZ.tiny,colour=C.faint,max=w-44})
-                return
-            end
-            local p=entry.preset
-            local renaming=self.rename and not self.rename.create and self.rename.old==p.name
-            if renaming then
-                local tw=cv:text(self.rename.text,x+22,y+17,{size=SZ.label,colour=C.text,max=w-60})
-                if math.floor(self.time*2)%2==0 then cv:rect(x+24+tw,y+7,2,20,C.gold,6)end
-            else
-                cv:text(p.name,x+22,y+17,{size=SZ.label,colour=selected and C.text or C.dim,max=w-60})
-            end
-            local when=p.created and p.created>0 and os.date and os.date('%Y-%m-%d %H:%M',p.created)or''
-            cv:text((p.count==1 and L('1 field')or Lf('%d fields',p.count))..(when~=''and('   '..when)or''),x+22,y+35,
-                {size=SZ.tiny,colour=C.faint,max=w-44})
-        end})
-    -- settings
-    local sy=bottom+8
-    cv:rect(0,sy-8,PRESETS_W-1,1,C.line,2)
-    local restore=self.presets:setting('restore_session',true)
-    self.toggle_restore=self.toggle_restore or{click=function()
-        self.presets:set_setting('restore_session',not self.presets:setting('restore_session',true))end}
-    local tx,ty=18,sy+14
-    cv:rect(tx,ty-9,34,18,restore and C.gold or C.line_strong,3)
-    cv:rect(restore and tx+18 or tx+2,ty-7,14,14,restore and C.inverse or C.dim,4)
-    cv:text(L('Restore my last applied values when the game starts'),tx+46,ty,{size=SZ.small,colour=C.dim,max=PRESETS_W-80})
-    cv:hit(tx,ty-12,PRESETS_W-36,24,self.toggle_restore)
-    -- the cursor capture (HD2Runtime r50, experimental)
-    if self.ctx.set_free_cursor then
-        local free=self.presets:setting('free_cursor',true)
-        self.toggle_cursor=self.toggle_cursor or{click=function()
-            local on=not self.presets:setting('free_cursor',true)
-            self.presets:set_setting('free_cursor',on)
-            self.ctx.set_free_cursor(on)
-        end}
-        local cy2=ty+28
-        cv:rect(tx,cy2-9,34,18,free and C.gold or C.line_strong,3)
-        cv:rect(free and tx+18 or tx+2,cy2-7,14,14,free and C.inverse or C.dim,4)
-        cv:text(L('Free the mouse from the camera while open (experimental)'),tx+46,cy2,{size=SZ.small,colour=C.dim,max=PRESETS_W-80})
-        cv:hit(tx,cy2-12,PRESETS_W-36,24,self.toggle_cursor)
-    end
-    cv:text(Lf('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.',self:hotkey()),
-        18,sy+70,{size=SZ.tiny,colour=C.faint,max=PRESETS_W-36})
-    -- detail
-    local x0=PRESETS_W
-    local w=P.w-x0
-    cv:rect(x0,y0,w,h,C.panel,1)
-    if self.preset_index==1 then
-        local values=self:current_values()
-        cv:text(L('NEW PRESET'),x0+20,y0+24,{size=20,font='title',colour=C.text})
-        cv:text(Lf('%d fields would be saved: every applied editor value and every pending change.',util.count(values)),
-            x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
-        self.btn_new=self.btn_new or{click=function()self:new_preset()end}
-        button(self,L('SAVE AS NEW PRESET'),x0+20,y0+72,230,34,next(values)and'primary'or'disabled',self.btn_new)
-        self:draw_value_list(values,x0,y0+124,w,y0+h-y0-128)
-        return
-    end
-    local entry=self:preset_entry(self.preset_index)
-    if entry.kind=='file_header'then return self:draw_files_header(x0,y0,w,h)end
-    if entry.kind=='file'then return self:draw_preset_file(entry.file,x0,y0,w,h)end
-    if entry.kind=='mb_header'then return self:draw_mb_header(x0,y0,w,h)end
-    if entry.kind=='mb'then return self:draw_mb_project(entry.project,x0,y0,w,h)end
-    local p=entry.preset
-    cv:text(p.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
-    cv:text(Lf('%d fields',p.count),x0+20,y0+47,{size=SZ.small,colour=C.faint})
-    self.preset_btns=self.preset_btns or{}
-    local bx=x0+20
-    for i,label in ipairs(PRESET_ACTIONS)do
-        local action=self.preset_btns[i]
-        if not action then
-            local index=i
-            action={click=function()
-                self.preset_action=index
-                local e=self:preset_entry(self.preset_index)
-                if e.kind=='preset'then self:preset_action_run(index,e.preset)end
-            end}
-            self.preset_btns[i]=action
-        end
-        local bw=cv:measure(L(label),SZ.tab,'title')+40
-        local style=(i==1 and'primary')or(label=='DELETE'and'danger')or'normal'
-        button(self,L(label),bx,y0+72,bw,34,style,action)
-        if i==self.preset_action then cv:rect(bx,y0+108,bw,2,C.gold,5)end
-        bx=bx+bw+10
-    end
-    local values={}
-    for _,item in ipairs(p.fields or{})do values[item.k]=item.v end
-    self:draw_value_list(values,x0,y0+124,w,y0+h-y0-128)
-end
-function App:draw_files_header(x0,y0,w,h)
-    local cv=self.canvas
-    cv:text(L('SHARED PRESET FILES'),x0+20,y0+24,{size=20,font='title',colour=C.text})
-    local lines={L('Presets as files, to share with other players. The editor lists this folder:'),
-        tostring(preset_files.folder()or L('(no %USERPROFILE%)')),'',
-        L('SHARE on a preset writes it here. Put a file someone sent you here (or use IMPORT A FILE) and it shows up.'),
-        L('Pick a file to see its values; LOAD stages them, SAVE AS PRESET keeps them with your presets.')}
-    for i,line in ipairs(lines)do
-        cv:text(line,x0+20,y0+56+(i-1)*22,{size=SZ.small,colour=i==2 and C.dim or C.faint,max=w-40})
-    end
-    self.btn_pf_import=self.btn_pf_import or{click=function()self:preset_file_pick()end}
-    self.btn_pf_open=self.btn_pf_open or{click=function()
-        local folder=preset_files.folder()
-        if folder then win.mkdir(folder)end
-        local ok,why=win.open(folder or'')
-        if not ok then self:toast(Lf('Could not open it: %s',tostring(why)),C.error)end
-    end}
-    button(self,self.pf_picking and L('CHOOSE IN THE WINDOWS DIALOG...')or L('IMPORT A FILE'),x0+20,y0+200,300,34,
-        'primary',self.btn_pf_import)
-    button(self,L('OPEN THE FOLDER'),x0+332,y0+200,220,34,'normal',self.btn_pf_open)
-end
-function App:draw_preset_file(f,x0,y0,w,h)
-    local cv=self.canvas
-    local open=self:preset_file_open(f)
-    local p=open.preset
-    cv:text(p and p.name or f.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
-    if not p then
-        cv:text(Lf('Could not read this file: %s',tostring(open.error)),x0+20,y0+47,{size=SZ.small,colour=C.error,max=w-40})
-        return
-    end
-    local info=f.name..'   '..Lf('%d fields',util.count(p.values))..(p.editor and('   '..Lf('from editor %s',p.editor))or'')
-        ..(p.skipped>0 and('   '..Lf('%d unreadable fields skipped',p.skipped))or'')
-    cv:text(info,x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
-    self.pf_btns=self.pf_btns or{}
-    local bx=x0+20
-    for i,label in ipairs(FILE_ACTIONS)do
-        local action=self.pf_btns[i]
-        if not action then
-            local index=i
-            action={click=function()
-                self.preset_action=index
-                local e=self:preset_entry(self.preset_index)
-                if e.kind=='file'then self:preset_file_action_run(index,e.file)end
-            end}
-            self.pf_btns[i]=action
-        end
-        local bw=cv:measure(L(label),SZ.tab,'title')+40
-        button(self,L(label),bx,y0+72,bw,34,i==1 and'primary'or'normal',action)
-        if i==self.preset_action then cv:rect(bx,y0+108,bw,2,C.gold,5)end
-        bx=bx+bw+10
-    end
-    self:draw_value_list(p.values,x0,y0+124,w,y0+h-y0-128)
-end
-function App:draw_mb_header(x0,y0,w,h)
-    local cv=self.canvas
-    cv:text(L('MODBUILDER PROJECTS'),x0+20,y0+24,{size=20,font='title',colour=C.text})
-    local lines={L('Your HD2Runtime ModBuilder projects, read from its library on this PC:'),
-        tostring(modbuilder.root()or L('(no %LOCALAPPDATA%)')),'',
-        L('Pick one to see its edits as editor fields, choose which to stage, then Apply.'),
-        L('Edits the editor cannot take are listed with the reason (scripts and custom content stay in ModBuilder).'),'',
-        L('To send your changes to ModBuilder: Export tab, then SAVE TO MODBUILDER.')}
-    for i,line in ipairs(lines)do
-        cv:text(line,x0+20,y0+56+(i-1)*22,{size=SZ.small,colour=i==2 and C.dim or C.faint,max=w-40})
-    end
-    if self.mb_error then cv:text(tostring(self.mb_error),x0+20,y0+230,{size=SZ.small,colour=C.error,max=w-40})end
-    self.btn_mb_refresh=self.btn_mb_refresh or{click=function()self.mb_list,self.mb_key=nil,nil end}
-    button(self,L('REFRESH'),x0+20,y0+260,160,34,'normal',self.btn_mb_refresh)
-end
-function App:draw_mb_project(p,x0,y0,w,h)
-    local cv=self.canvas
-    local open=self:mb_open_project(p)
-    local ok_n,chosen=0,0
-    for _,it in ipairs(open.items)do
-        if it.row and not it.why then ok_n=ok_n+1 end
-        if it.selected and it.row and not it.why then chosen=chosen+1 end
-    end
-    cv:text(p.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
-    cv:text(Lf('%s   ModBuilder project, SDK %s   %d of %d edits can be staged',tostring(p.resource or''),
-        tostring(p.sdk or'?'),ok_n,#open.items),x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
-    self.mb_btns=self.mb_btns or{}
-    local bx=x0+20
-    for i,label in ipairs(MB_ACTIONS)do
-        local action=self.mb_btns[i]
-        if not action then
-            local index=i
-            action={click=function()
-                self.preset_action=index
-                local e=self:preset_entry(self.preset_index)
-                if e.kind=='mb'then self:mb_action_run(index,e.project)end
-            end}
-            self.mb_btns[i]=action
-        end
-        local text=i==1 and(L(label)..'  ('..chosen..')')or L(label)
-        local bw=cv:measure(text,SZ.tab,'title')+40
-        button(self,text,bx,y0+72,bw,34,i==1 and(chosen>0 and'primary'or'disabled')or'normal',action)
-        if i==self.preset_action then cv:rect(bx,y0+108,bw,2,C.gold,5)end
-        bx=bx+bw+10
-    end
-    local y=y0+124
-    if open.error then
-        cv:text(Lf('Could not read this project: %s',open.error),x0+20,y+12,{size=SZ.small,colour=C.error,max=w-40})
-        return
-    end
-    cv:rect(x0,y,w,22,C.header,2)
-    cv:text(L('EDIT'),x0+46,y+11,{size=SZ.tiny,font='title',colour=C.faint})
-    cv:text(L('VALUE'),x0+w-18,y+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
-    self.mb_item_actions=self.mb_item_actions or{}
-    self:list({x=x0,y=y+24,w=w,h=y0+h-y-28,count=#open.items,row_h=28,scroll_key='mb_scroll',focused=false,
-        actions=self.mb_item_actions,
-        click=function(i)
-            local it=self.mb_open.items[i]
-            if it and it.row and not it.why then it.selected=not it.selected end
-        end,
-        draw=function(i,x,ry,lw,rh)
-            local it=open.items[i]
-            local cy=ry+rh/2
-            local usable=it.row and not it.why
-            if usable then
-                cv:rect(x+18,cy-7,14,14,it.selected and C.gold or C.line_strong,3)
-                if not it.selected then cv:rect(x+20,cy-5,10,10,C.panel,4)end
-            end
-            local tx=x+46
-            if it.row then
-                local nw=cv:text(util.display_name(it.row.object),tx,cy,{size=SZ.small,colour=C.faint,max=(lw-260)*0.45})
-                cv:text(L(it.row.label),tx+12+nw,cy,{size=SZ.small,colour=usable and C.dim or C.faint,max=lw-330-nw})
-            else
-                cv:text(L(it.label),tx,cy,{size=SZ.small,colour=C.faint,max=lw-330})
-            end
-            if usable then
-                cv:text(self:text(it.row,it.value),x+lw-18,cy,{size=SZ.label,colour=C.gold,align='right',max=260})
-            else
-                cv:text(L(tostring(it.why)),x+lw-18,cy,{size=SZ.tiny,colour=C.error,align='right',max=300})
-            end
-        end})
-end
--- Field values by key: resolved names where the catalogue has the field.
-function App:draw_value_list(values,x0,y,w,h)
-    local cv=self.canvas
-    local keys=util.sorted_keys(values)
+function App:value_rows(values,cache_key)
+    local c=self.value_rows_cache
+    if c and(cache_key and c.key==cache_key or not cache_key and c.values==values)then return c.rows end
     local rows={}
-    for _,key in ipairs(keys)do
-        local row=self.catalog:row(key)
-        rows[#rows+1]={key=key,row=row,value=values[key]}
-    end
-    for _,item in ipairs(rows)do
-        if not item.row and App.is_custom_key(item.key)then
-            item.custom_name,item.custom_label,item.custom_text=self:custom_value_text(item.key,item.value)
+    for key,value in pairs(values)do
+        local item={key=key,row=self.catalog:row(key),value=value}
+        if not item.row and App.is_custom_key(key)then
+            item.custom_name,item.custom_label,item.custom_text=self:custom_value_text(key,value)
         end
+        local row=item.row
+        if row then
+            -- (a catalogue row keeps its sort key: the next list of it costs nothing)
+            row.sort_key=row.sort_key or natural_key(row.object.name..' '..row.label)
+            item.sort=row.sort_key..'\0'..key
+        else
+            item.sort=natural_key(item.custom_name and(item.custom_name..' '..item.custom_label)or key)..'\0'..key
+        end
+        rows[#rows+1]=item
     end
-    table.sort(rows,function(a,b)
-        local an=a.row and(a.row.object.name..' '..a.row.label)or(a.custom_name and(a.custom_name..' '..a.custom_label))or a.key
-        local bn=b.row and(b.row.object.name..' '..b.row.label)or(b.custom_name and(b.custom_name..' '..b.custom_label))or b.key
-        return util.natural_less(an,bn)
-    end)
+    table.sort(rows,function(a,b)return a.sort<b.sort end)
+    self.value_rows_cache={values=values,key=cache_key,rows=rows}
+    return rows
+end
+function App:draw_value_list(values,x0,y,w,h,cache_key)
+    local cv=self.canvas
+    local rows=self:value_rows(values,cache_key)
     cv:rect(x0,y,w,22,C.header,2)
     cv:text(L('FIELD'),x0+18,y+11,{size=SZ.tiny,font='title',colour=C.faint})
     cv:text(L('VALUE'),x0+w-18,y+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
@@ -2359,5 +1880,6 @@ end
 views.install(App)
 export_view.install(App)
 search_view.install(App)
+presets_view.install(App)
 
 return M
