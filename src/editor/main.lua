@@ -7,6 +7,7 @@ local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local ledger_module=require('mods/skyeshade/hd2runtime_editor/editor/ledger')
 local layer_module=require('mods/skyeshade/hd2runtime_editor/editor/layer')
 local presets_module=require('mods/skyeshade/hd2runtime_editor/editor/presets')
+local session_module=require('mods/skyeshade/hd2runtime_editor/editor/session')
 local app_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/app')
 local sounds_module=require('mods/skyeshade/hd2runtime_editor/editor/sounds')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
@@ -216,45 +217,26 @@ function M.start(hd2,id)
         end
     end
 
-    -- Every frame: drive the override layer; restore the last session once; save the session when it settles.
-    local clock,restored,saved_version=0,false,-1
+    -- Every frame: drive the override layer; restore the last session once; save the session whenever it changes
+    -- (editor/session.lua: a saved value that does not come back at this start stays saved).
+    local session=session_module.new({app=app,layer=layer,presets=presets,log=log})
+    state.session=session
+    app.ctx.forget_saved=function()session:forget_all()end
+    local clock=0
     local restore=presets:setting('restore_session',true)
     mod:on_frame(function(dt)
         clock=clock+(dt or 0)
         layer:tick(dt or 0)
         if can_block and presets:setting('block_game_input',true)and overlay:status().visible then block(true)end
-        if not restored and clock>=RESTORE_MIN then
+        if not session.restored and clock>=RESTORE_MIN then
             local ready=others_settled(hd2,id)
             local build=type(hd2.build)=='function'and select(2,pcall(hd2.build))or'matched'
             if(ready and build~='not_ready')or clock>=RESTORE_MAX then
-                restored=true
-                if restore then
-                    local values=presets:session()
-                    local applied,missing_rows=0,0
-                    for key,stored in pairs(values)do
-                        if app.is_custom_key(key)then
-                            -- a custom stratagem tune, applied through the Runtime again
-                            if app:apply_custom_value(key,stored)then applied=applied+1 else missing_rows=missing_rows+1 end
-                        else
-                            local row,value=app:decode_value(key,stored)
-                            if row and value~=nil and layer:set(row,value)then applied=applied+1 else missing_rows=missing_rows+1 end
-                        end
-                    end
-                    if applied+missing_rows>0 then
-                        log('restored '..applied..' saved values'..(missing_rows>0 and(' ('..missing_rows..' no longer available)')or''))
-                    end
-                end
-                saved_version=layer.version
+                if restore then session:restore()
+                else session.restored,session.saved_version=true,layer.version end
             end
         end
-        if restored and(app.save_session or layer.version~=saved_version)and not layer:busy()then
-            app.save_session=false
-            saved_version=layer.version
-            -- the layer's values and the custom stratagem tunes
-            local values=layer:overrides()
-            for key,value in pairs(app:custom_values())do values[key]=value end
-            presets:set_session(app:encode_values(values))
-        end
+        session:tick()
     end,{id='hd2runtime_editor.layer'})
     log('HD2R Editor '..M.VERSION..' ready; press '..hotkey..' to open')
     return state

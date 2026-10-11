@@ -10,6 +10,7 @@
 | `editor/ledger.lua` | Which mod applied which value: an observer on `core/shared_records.claim`, plus the operation registry behind `hd2.diagnostics.operations`. |
 | `editor/layer.lua` | The override layer: adopt, hand-over, steer, reset (below). |
 | `editor/presets.lua` | Presets, the saved session and settings in `hd2.store`. |
+| `editor/session.lua` | The saved session: restored once at startup, saved whenever the values change. A saved value that does not come back at a start (no row now, refused by the Runtime this time, a custom stratagem not registered) stays saved until that field is changed or reset, so one bad start never erases it. |
 | `editor/ui/*.lua` | The window: theme, canvas (scaled 1080p units, cached text metrics, hit regions), input (key repeat, typing, mouse, wheel), the app (Browse, staging, dialogs), pickers (the value picker, the code, fire mode, rate and traits editors) and views (Changes, Mods, Custom, Settings). |
 | `editor/installed.lua`, `editor/json.lua` | Every deployed mod from the mod manager's own state (Echelon `state.json`, HD2 Arsenal `hd2a_data.json`), read with `io.open` and a JSON reader that yields, so the 1 MB file is parsed over a few frames. |
 | `editor/i18n.lua`, `editor/strings.lua` | Localisation: `L(text)` looks every interface text up in the chosen language file; `strings.lua` lists the texts for the template. |

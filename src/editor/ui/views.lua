@@ -521,6 +521,7 @@ function M.install(App)
             self:toast(L('Unlimited uses for a custom stratagem need HD2Runtime 0.30.3'),C.error);self:sound('error');return
         end
         local ok,why=api.tune(entry.id,{[field]=value})
+        self.layer:touch('custom|'..tostring(entry.id)..'|'..field)
         self.save_session=true
         if ok then
             self:toast(L('%s: %s set to %s (from the next call)'):format(entry.label or entry.id,L(field),
@@ -533,6 +534,7 @@ function M.install(App)
         local api=custom_api(self)
         if api and type(api.untune)=='function'then
             api.untune(entry.id)
+            for _,field in ipairs({'cooldown','uses'})do self.layer:touch('custom|'..tostring(entry.id)..'|'..field)end
             self.save_session=true
             self:toast(L('%s: back to its own cooldown and uses'):format(entry.label or entry.id),C.dim)
             self.custom_cache=nil

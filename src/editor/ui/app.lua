@@ -442,7 +442,7 @@ function App:stage_map(map)
     for key,stored in pairs(map)do
         if App.is_custom_key(key)then
             -- a custom stratagem tune applies at once (the Runtime has no pending step for it)
-            if not self:apply_custom_value(key,stored)then missing=missing+1 end
+            if self:apply_custom_value(key,stored)then self.layer:touch(key)else missing=missing+1 end
         else
             local row,value=self:decode_value(key,stored)
             if row and value~=nil then self:stage(row,value)else missing=missing+1 end
@@ -468,6 +468,8 @@ function App:discard()
 end
 function App:reset_defaults()
     local n=self.layer:reset_all()+self:untune_custom_all()
+    -- the saved values that did not come back at this start go too (editor/session.lua)
+    if self.ctx.forget_saved then self.ctx.forget_saved()end
     self.pending,self.pending_n={},0
     self.save_session=true
     self:toast(n>0 and('Returning '..n..(n==1 and' field'or' fields')..' to the mods\' and game values')

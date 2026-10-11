@@ -207,6 +207,12 @@ class EditorTests(unittest.TestCase):
                                           'harness': (LUA / 'ui_harness.lua').as_posix()})
         self.assertIn('ui ok', result, result)
 
+    def test_saved_session_keeps_values_that_did_not_come_back(self):
+        result = lua_file('test_session.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                               'harness': (LUA / 'ui_harness.lua').as_posix()})
+        for line in ('kept ok', 'player wins ok', 'reset all ok', 'next start ok'):
+            self.assertIn(line, result)
+
     def test_shipped_addon_starts(self):
         spec = importlib.util.spec_from_file_location('hd2sdk', lua_host.RUNTIME / 'sdk' / 'hd2.py')
         sdk = importlib.util.module_from_spec(spec)

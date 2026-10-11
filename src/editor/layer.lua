@@ -144,7 +144,7 @@ local Layer={};Layer.__index=Layer
 
 function M.new(opts)
     return setmetatable({hd2=opts.hd2,id=opts.id,ledger=opts.ledger,catalog=opts.catalog,
-        log=opts.log or function()end,slots={},groups={},released={},counter=0,version=0,history={}},Layer)
+        log=opts.log or function()end,slots={},groups={},released={},counter=0,version=0,history={},touched={}},Layer)
 end
 
 local function note(self,text)
@@ -153,6 +153,8 @@ local function note(self,text)
     pcall(self.log,text)
 end
 function Layer:changed()self.version=self.version+1 end
+-- Fields the player changed or reset, by row key (editor/session.lua: a carried saved value gives way to them).
+function Layer:touch(key)if key~=nil then self.touched[key]=true end end
 
 -- The editor row for a field another mod's operation wrote (found through the catalogue), with that mod's own
 -- acknowledgements added; nil when the editor has no row for it.
@@ -272,11 +274,13 @@ function Layer:set(row,value)
         local slot=self.slots[row.loc]
         if slot and(slot.user or slot.error)then self:reset(row)end
         release_dependents(self,row,held)
+        self:touch(row.key)
         return true
     end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
     release_dependents(self,row,held)
+    self:touch(row.key)
     self:changed()
     return true
 end
@@ -289,6 +293,7 @@ function Layer:reset(row)
     slot.target=hold(slot.row,base)
     slot.dirty=true
     release_dependents(self,slot.row,slot.target,true)
+    self:touch(slot.row.key)
     self:changed()
     return true
 end
