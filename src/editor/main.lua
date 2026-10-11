@@ -86,11 +86,20 @@ function M.start(hd2,id)
     local presets=presets_module.new(store)
     local hotkey=presets:setting('hotkey',M.HOTKEY)
     -- the language chosen in Settings (a file in the localisation folder); none chosen yet: the game's language when a
-    -- localisation file for it is there (hd2.ui.language, HD2Runtime 0.31.1), English otherwise
+    -- localisation file for it is there (hd2.ui.language, HD2Runtime 0.31.1), English otherwise. Checked again each
+    -- time the window opens (the game reads its language once its world is up, and the player may change it).
     local language=presets:setting('language',nil)
-    if language==nil then
+    local auto_language
+    local function follow_game_language()
+        if presets:setting('language',nil)~=nil then return false end
         local auto=i18n.use_game_language(hd2)
+        if not auto and i18n.language()~='English'then i18n.use('English')end
+        if auto==auto_language then return false end
+        auto_language=auto
         if auto then log('language '..tostring(auto)..' (the game language; pick another in Settings)')end
+        return true
+    end
+    if language==nil then follow_game_language()
     elseif language~='English'then
         local ok,why=i18n.use(language)
         if not ok then log('language '..tostring(language)..' unavailable: '..tostring(why))end
@@ -187,6 +196,8 @@ function M.start(hd2,id)
             app.input:reset()
             app.edit=nil
         else
+            -- (texts cached in the game's language before it changed are built again)
+            if follow_game_language()then app.tab_actions,app.mods_cache,app.changes_key=nil,nil,nil end
             overlay:show()
         end
     end
