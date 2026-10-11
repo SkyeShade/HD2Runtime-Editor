@@ -1,12 +1,12 @@
 -- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
 -- The few Windows calls the editor makes itself, through LuaJIT's FFI (declared once, each call guarded): open a file
--- or folder with its default program (ShellExecuteW), list a folder (FindFirstFileW), create folders, the user's
--- folders, and the Windows open-file dialog. Every function returns nil and why when the FFI or the call is
+-- or folder with its default program (ShellExecuteW), list a folder (FindFirstFileW), read a file by its UTF-8 path
+-- (CreateFileW), create folders, the user's folders, and the Windows open-file dialog. Every function returns nil and why when the FFI or the call is
 -- unavailable.
 local M={}
 
-local ffi,kernel,shell,user,comdlg
+local ffi,kernel,shell,user,comdlg,wide_ok
 local function load()
     if ffi~=nil then return ffi~=false end
     local ok=pcall(function()
@@ -51,6 +51,17 @@ local function load()
         shell=ffi.load('shell32')
     end)
     if not ok then ffi=false end
+    -- (the wide-character file reader, declared on its own: without it only M.reader is unavailable)
+    if ok and rawget(_G,'HD2REditorWinV3')~=true then
+        wide_ok=pcall(ffi.cdef,[[
+            void *CreateFileW(const uint16_t *name, uint32_t access, uint32_t share, void *security,
+                uint32_t disposition, uint32_t flags, void *template);
+            int GetFileSizeEx(void *file, int64_t *size);
+            int SetFilePointerEx(void *file, int64_t distance, int64_t *position, uint32_t method);
+            int ReadFile(void *file, void *buffer, uint32_t bytes, uint32_t *read, void *overlapped);
+        ]])
+        if wide_ok then rawset(_G,'HD2REditorWinV3',true)end
+    else wide_ok=ok end
     return ok
 end
 
@@ -112,6 +123,42 @@ function M.list(folder,pattern)
         return a.name:lower()<b.name:lower()
     end)
     return out
+end
+
+-- A file opened for reading by its UTF-8 path (CreateFileW: a path the game's io.open cannot open, with characters
+-- outside the system code page, as the Windows dialog returns them). A handle like io.open's for what the editor
+-- uses: read(n), seek('end' | 'set', offset), close(); or nil and why.
+function M.reader(path)
+    if not load()or not wide_ok then return nil,'no FFI'end
+    local ok,handle=pcall(function()
+        -- GENERIC_READ, share read and write, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL
+        return kernel.CreateFileW(M.wide(path),0x80000000,0x1+0x2,nil,3,0x80,nil)
+    end)
+    if not ok then return nil,tostring(handle)end
+    if handle==nil or tonumber(ffi.cast('intptr_t',handle))==-1 then return nil,'it does not exist or cannot be opened'end
+    local r={handle=handle}
+    local size=ffi.new('int64_t[1]')
+    local done=ffi.new('uint32_t[1]')
+    function r:seek(whence,offset)
+        if whence=='end'then
+            if kernel.GetFileSizeEx(self.handle,size)==0 then return nil end
+            kernel.SetFilePointerEx(self.handle,0,nil,2)
+            return tonumber(size[0])
+        end
+        kernel.SetFilePointerEx(self.handle,offset or 0,nil,0)
+        return offset or 0
+    end
+    function r:read(n)
+        n=math.max(0,math.floor(tonumber(n)or 0))
+        if n==0 then return''end
+        local buffer=ffi.new('uint8_t[?]',n)
+        if kernel.ReadFile(self.handle,buffer,n,done,nil)==0 or done[0]==0 then return nil end
+        return ffi.string(buffer,done[0])
+    end
+    function r:close()
+        if self.handle then kernel.CloseHandle(self.handle);self.handle=nil end
+    end
+    return r
 end
 
 -- Creates a folder and every missing parent. True, or nil and why.

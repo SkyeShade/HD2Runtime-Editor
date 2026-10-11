@@ -1,9 +1,11 @@
 -- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
--- A small JSON reader for the mod managers' state files (Echelon state.json, HD2 Arsenal hd2a_data.json).
--- decode(text, yield_every): objects become tables, arrays become lists, null becomes nil. With yield_every, the
--- decoder calls coroutine.yield() after that many values, so a caller running it in a coroutine can spread a large
--- file over several frames.
+-- A small JSON reader for the mod managers' state files (Echelon state.json, HD2 Arsenal hd2a_data.json), preset
+-- files and ModBuilder projects. decode(text, yield_every, strict): objects become tables, arrays become lists, null
+-- becomes nil. With yield_every, the decoder calls coroutine.yield(position, length) after that many values (the byte
+-- it reached and the text's length, for a progress line), so a caller running it in a coroutine can spread a large
+-- file over several frames. strict: text after the value is an error too. An error names its byte ('JSON: <what> at
+-- byte N'); M.explain turns that into a line and column.
 local M={}
 
 local ESCAPES={['"']='"',['\\']='\\',['/']='/',b='\b',f='\f',n='\n',r='\r',t='\t'}
@@ -14,7 +16,7 @@ local function utf8(code)
     return string.char(0xE0+math.floor(code/4096),0x80+math.floor(code/64)%64,0x80+code%64)
 end
 
-function M.decode(text,yield_every)
+function M.decode(text,yield_every,strict)
     local pos,count=1,0
     local find,sub,byte=string.find,string.sub,string.byte
     local function fail(what)error('JSON: '..what..' at byte '..pos,0)end
@@ -53,7 +55,7 @@ function M.decode(text,yield_every)
     end
     function value()
         count=count+1
-        if yield_every and count%yield_every==0 then coroutine.yield()end
+        if yield_every and count%yield_every==0 then coroutine.yield(pos,#text)end
         skip()
         local c=byte(text,pos)
         if c==34 then return str()
@@ -100,7 +102,32 @@ function M.decode(text,yield_every)
         end
     end
     local result=value()
+    if strict then
+        skip()
+        if pos<=#text then fail('unexpected text after the end')end
+    end
     return result
+end
+
+-- The line and column of byte `pos` in text (1-based), for an error a person can find.
+function M.where(text,pos)
+    local line,last=1,0
+    local find=string.find
+    local at=1
+    while true do
+        local s=find(text,'\n',at,true)
+        if not s or s>=pos then break end
+        line,last,at=line+1,s,s+1
+    end
+    return line,pos-last
+end
+-- 'JSON: x at byte N' -> 'x at line L, column C' (any other message as it is).
+function M.explain(text,message)
+    message=tostring(message)
+    local what,byte=message:match('^JSON: (.-) at byte (%d+)$')
+    if not what then return message end
+    local line,column=M.where(text,tonumber(byte))
+    return what..' at line '..line..', column '..column
 end
 
 return M
