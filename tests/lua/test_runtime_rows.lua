@@ -2,6 +2,7 @@
 -- publishes it: sections, labels, locks and acknowledgements. Returns one line per check that ran.
 local hd2=require('hd2runtime/api/hd2')
 local catalog=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
+local sections=require('mods/skyeshade/hd2runtime_editor/editor/ui/sections')
 local cat=catalog.new(hd2)
 local out={}
 local function check(cond,msg)if not cond then error('FAILED: '..msg,2)end end
@@ -315,6 +316,144 @@ do
         check(count and not count.editable and count.reason==tx.reason and not count.foreign and not count.editor_lock,
             'TX-41 Items spawned locked with the Runtime reason')
         out[#out+1]='read-only hellpod ok'
+    end
+    -- HD2Runtime 0.31.2: the TX-41's rack is writable: its items spawned and slots in the Hellpod section, in the
+    -- Hellpod / Call-in category (last on a weapon's page)
+    if type(tx)=='table'and tx.writable==true then
+        local object=cat:object('sp|TX-41 Sterilizer')
+        local list=rows('sp|TX-41 Sterilizer')
+        local count=find(list,function(r)return r.field=='payload.spawn_count'end)
+        local slot1=find(list,function(r)return r.field=='payload.entity'and r.label=='Slot 1'end)
+        check(count and count.editable and slot1 and slot1.editable,'TX-41 items spawned and slot 1 editable')
+        check(count.section=='Hellpod'and slot1.section=='Hellpod','in the Hellpod section: '..count.section)
+        local plain={}
+        for _,s in ipairs(object.sections)do if not s.group then plain[#plain+1]=s end end
+        local cats=sections.layout(plain,object.category)
+        local last=cats[#cats]
+        check(last.id=='call_in'and last.title=='Hellpod / Call-in','Hellpod / Call-in last: '..tostring(last.title))
+        local pod
+        for _,sub in ipairs(last.subs)do if sub.title=='Hellpod'then pod=sub end end
+        local has_count,has_slot=false,false
+        for _,r in ipairs(pod and pod.rows or{})do
+            if r==count then has_count=true end
+            if r==slot1 then has_slot=true end
+        end
+        check(has_count and has_slot,'both in its Hellpod subsection')
+        check(catalog.text(slot1,slot1.vanilla)~='Empty'and#slot1.options(slot1)>1,'slot 1 holds the TX-41, others offered')
+        out[#out+1]='sterilizer hellpod ok'
+    end
+end
+-- HD2Runtime 0.31.2: projectile swaps on the LAS-99 Quasar and the RS-422 Railgun (the fired-type trace), first in the
+-- Projectile category; every donor needs allow_unverified_reference (HOST_STRUCTURE_UNVERIFIED) and the own projectile
+-- needs nothing. The swap's own rows (projectile, direct hit, impact explosion, their statuses) follow it; the heat,
+-- charge and the Railgun's overcharge explosion do not. The M-1000 Maxigun and the GL-28 stay read-only with the
+-- Runtime's reason, shown where the swap would be.
+local function first_projectile_row(key)
+    local object=cat:object(key)
+    local plain={}
+    for _,s in ipairs(object.sections)do if not s.group then plain[#plain+1]=s end end
+    local cats=sections.layout(plain,object.category)
+    return cats[1].id=='projectile'and cats[1].subs[1].title=='Projectile type'and cats[1].rows[1]or nil
+end
+do
+    local traced,read_only=0,0
+    for _,item in ipairs({{'LAS-99 Quasar Cannon','EAT-17 Expendable Anti-Tank'},{'RS-422 Railgun','APW-1 Anti-Materiel Rifle'}})do
+        local name,donor_name=item[1],item[2]
+        local ok,src=pcall(function()return hd2.support_weapon(name):projectile_source('primary')end)
+        local swap=find(rows('sp|'..name),function(r)return r.field=='attack.projectile'end)
+        if ok and type(src)=='table'and src.writable then
+            check(swap and swap.editable and swap.swap_scope=='attack:primary',name..' swap writable')
+            check(first_projectile_row('sp|'..name)==swap,name..' swap first in Projectile')
+            local donor
+            for _,o in ipairs(swap.options(swap))do if o.label==donor_name then donor=o.value end end
+            check(donor,name..' offers '..donor_name)
+            local okp,acks=catalog.probe(swap,donor)
+            check(okp and acks.allow_unverified_reference and acks.allow_unverified_effect,
+                name..' donor needs allow_unverified_reference: '..tostring(acks))
+            check(catalog.probe(swap,swap.vanilla),name..' own projectile restores')
+            local follows={}
+            for _,r in ipairs(swap.fires_rows or{})do
+                follows[r.field]=true
+                check(not tostring(r.field):find('^heat')and not tostring(r.field):find('^charge')
+                    and not tostring(r.section):find('Overcharge',1,true),name..' swap takes only projectile rows: '..r.key)
+                check(r.fires_from==swap,name..' row linked to its swap')
+            end
+            check(follows['projectile.velocity']and follows['damage.standard_damage']and follows['damage.status_1_type'],
+                name..' projectile, direct hit and status rows follow the swap')
+            if name=='LAS-99 Quasar Cannon'then
+                check(follows['explosion.inner_radius']and follows['explosion.damage.status_1_type'],
+                    'the Quasar impact explosion follows the swap')
+            end
+            traced=traced+1
+        elseif ok and type(src)=='table'and src.status and swap then
+            check(not swap.editable and swap.reason==src.reason,name..' read-only with the Runtime reason')
+        end
+    end
+    if traced==2 then out[#out+1]='traced hosts ok'end
+    for _,name in ipairs({'M-1000 Maxigun','GL-28 Belt-Fed Grenade Launcher'})do
+        local ok,src=pcall(function()return hd2.support_weapon(name):projectile_source('primary')end)
+        if ok and type(src)=='table'and src.status and not src.writable then
+            local swap=find(rows('sp|'..name),function(r)return r.field=='attack.projectile'end)
+            check(swap and not swap.editable and swap.reason==src.reason and swap.section=='Projectile · Swap'
+                and not swap.foreign and not swap.editor_lock and catalog.text(swap,swap.vanilla)=='Own projectile',
+                name..' swap shown read-only with the Runtime reason')
+            check(first_projectile_row('sp|'..name)==swap,name..' read-only swap first in Projectile')
+            read_only=read_only+1
+        end
+    end
+    if read_only==2 then out[#out+1]='read-only swaps ok'end
+end
+-- player weapons: the swap on the attack, or on the default ammunition (the Liberator), takes the projectile rows
+do
+    local adj=find(rows('pw|BR-14 Adjudicator'),function(r)return r.swap_scope=='attack:primary'end)
+    local lib=find(rows('pw|AR-23 Liberator'),function(r)return r.swap_scope=='attack:primary'end)
+    for _,swap in ipairs({adj,lib})do
+        check(swap.fires_rows and#swap.fires_rows>0,swap.key..' has own projectile rows')
+        for _,r in ipairs(swap.fires_rows)do
+            check(tostring(r.field):find('^projectile%.')or tostring(r.field):find('^damage%.')
+                or tostring(r.field):find('^explosion%.')or tostring(r.field):find('^terminal%.')
+                or tostring(r.field):find('^status%.'),swap.key..' follows only projectile rows: '..r.key)
+        end
+    end
+    check(find(rows('pw|AR-23 Liberator'),function(r)return r.field=='weapon.fire_rate'end).fires_from==nil,
+        'the fire rate follows no swap')
+    -- a vehicle's mounts: each swap takes its own mount's rows only, and its donor shows in the mount's group
+    local exo=cat:object('ve|EXO-49 Emancipator Exosuit')
+    if exo then
+        cat:open(exo)
+        local mounts=0
+        for _,swap in ipairs(exo.swap_rows or{})do
+            mounts=mounts+1
+            check(swap.group and swap.fires_rows and#swap.fires_rows>0,swap.key..' has its mount rows')
+            for _,r in ipairs(swap.fires_rows)do check(r.group==swap.group,swap.key..' takes only its mount: '..r.key)end
+            local donor
+            for _,o in ipairs(swap.options(swap))do
+                local id=catalog.donor_of(swap,o.value)
+                if id then donor=id;break end
+            end
+            for _,s in ipairs(cat:donor_sections(exo,swap,donor))do
+                check(s.group==swap.group,'donor in the mount group: '..tostring(s.group))
+            end
+        end
+        check(mounts==0 or mounts==2,'both Emancipator mounts swap: '..mounts)
+        if mounts==2 then out[#out+1]='mount swap scopes ok'end
+    end
+    out[#out+1]='swap scopes ok'
+end
+-- HD2Runtime 0.31.2: the LAS-99 Quasar's cooling while overheated, right after the cooling rate in Heat, with its note
+do
+    local list=rows('sp|LAS-99 Quasar Cannon')
+    local at
+    for i,r in ipairs(list or{})do if r.field=='heat.cool_per_second_overheated'then at=i end end
+    if at then
+        local row=list[at]
+        check(list[at-1].field=='heat.cool_per_second','right after the cooling rate: '..tostring(list[at-1].field))
+        check(row.editable and row.section=='Heat'and sections.classify(row.section)=='heat','in Heat / Charge')
+        check(row.label=='Cooling rate while overheated','its label: '..tostring(row.label))
+        check(row.note and row.note:find('100 / this value',1,true)and row.note:find('15 s',1,true),'its note')
+        check(row.acks.allow_unverified_effect,'needs allow_unverified_effect')
+        check(row.min==0.1 and row.max==1000,'range 0.1 to 1000: '..tostring(row.min)..' '..tostring(row.max))
+        out[#out+1]='quasar overheated cooling ok'
     end
 end
 -- the localisation template's catalogue part: every object name, section, group and field label it shows, once

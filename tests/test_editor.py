@@ -237,6 +237,19 @@ class EditorTests(unittest.TestCase):
             self.assertIn('rl77 bomblets ok', result)
         if 'nux223_hellbomb/behavior' in text and 'b100_portable_hellbomb/behavior' in text:
             self.assertIn('hellbombs ok', result)
+        # projectile swaps: every swap takes its own projectile rows; hosts HD2Runtime keeps read-only show its reason
+        for line in ('swap scopes ok', 'mount swap scopes ok', 'read-only swaps ok'):
+            self.assertIn(line, result)
+        # HD2Runtime 0.31.2: the Quasar and Railgun swaps (HOST_STRUCTURE_UNVERIFIED), the Quasar's cooling while
+        # overheated, the TX-41's writable rack
+        writes = lua_host.RUNTIME / 'domains' / 'player_weapon_writes.lua'
+        if writes.is_file() and 'HOST_STRUCTURE_UNVERIFIED' in writes.read_text(encoding='utf-8'):
+            self.assertIn('traced hosts ok', result)
+        constants = lua_host.RUNTIME / 'domains' / 'constants.lua'
+        if constants.is_file() and 'cool_per_second_overheated' in constants.read_text(encoding='utf-8'):
+            self.assertIn('quasar overheated cooling ok', result)
+        if (lua_host.RUNTIME / 'domains' / 'projectile_stats.lua').is_file():
+            self.assertIn('sterilizer hellpod ok', result)
 
     def test_dependent_fields_follow_what_they_need(self):
         # the rearm pool and the mission uses (HD2Runtime 0.31.0); beam conversion settings and their conversion
@@ -255,6 +268,19 @@ class EditorTests(unittest.TestCase):
         # status slots (HD2Runtime 0.31.2): slot 2 waits for slot 1; a reset clears the later slot first
         if (lua_host.RUNTIME / 'core' / 'status_slots.lua').is_file():
             for line in ('status slot order ok', 'status slot reset ok'):
+                self.assertIn(line, result)
+
+    def test_projectile_swaps_in_the_window(self):
+        # a swap to a donor sets the weapon's own projectile rows aside and shows what it fires; their values are
+        # dropped or taken back in an order the Runtime accepts (window, presets, saved session, exports)
+        result = lua_file('test_swaps.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                             'harness': (LUA / 'ui_harness.lua').as_posix()})
+        for line in ('swap staged ok', 'swap order ok', 'swap errors ok', 'swap presets ok', 'swap export ok',
+                     'swap session ok'):
+            self.assertIn(line, result)
+        # HD2Runtime 0.31.2: on the LAS-99 Quasar, with the donor's stats and the link to its own projectile
+        if (lua_host.RUNTIME / 'domains' / 'projectile_stats.lua').is_file():
+            for line in ('host LAS-99 Quasar Cannon', 'donor stats ok', 'link ok'):
                 self.assertIn(line, result)
 
     def test_revert_all_over_300_fields(self):

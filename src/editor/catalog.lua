@@ -203,7 +203,8 @@ local function make_row(object,spec)
             allow_unverified_reference=spec.unverified_reference==true or nil,
             allow_component_swap=spec.component_swap==true or nil},
         editable=spec.editable~=false,reason=spec.reason,semantic=spec.semantic or spec.field,group=spec.group,
-        note=spec.note or beam_note(spec),disabled_value=spec.disabled_value,info=spec.info}
+        note=spec.note or beam_note(spec),disabled_value=spec.disabled_value,info=spec.info,
+        fires_scope=spec.fires_scope,swap_scope=spec.swap_scope}
     -- a turret's limits are ordered (minimum below maximum, checked against the other limit's reviewed value): the
     -- layer gives them exact-value handles, never a range that would cross the other limit
     row.exact=ORDERED_LIMITS[tostring(spec.field)]or nil
@@ -239,7 +240,7 @@ make_value_row=function(object,spec)
         min=spec.min,max=spec.max,integer=spec.kind=='uses'or nil,directions=spec.directions,
         min_length=spec.min_length,max_length=spec.max_length,unlimited=spec.unlimited,group=spec.group,
         modes=spec.modes,max_modes=spec.max_modes,slots=spec.slots,note=spec.note,controller=spec.controller,
-        export_reason=spec.export_reason}
+        export_reason=spec.export_reason,fires_scope=spec.fires_scope,swap_scope=spec.swap_scope}
     row.loc=location(spec.descriptor,'row:'..row.key)
     return row
 end
@@ -403,7 +404,7 @@ local beam_options
 local function source_row(object,spec)
     local ok,src=pcall(spec.source)
     local common={id=spec.id,kind='reference',label=spec.label,section=spec.section,descriptor=spec.descriptor,
-        unverified=true,field=spec.field,
+        unverified=true,field=spec.field,swap_scope=spec.swap_scope,
         target=function()return spec.source().target end,expect=function()return spec.source().expect end,
         options=spec.options}
     if ok and type(src)=='table'and src.writable and src.expect then
@@ -519,6 +520,26 @@ end
 M.info_row=info_row
 -- Derived heat values (HD2Runtime 0.31.0 heat.warmup, heat.overheat_cooldown) and the section that shows them.
 local DERIVED_HEAT={['heat.warmup']='Wind-up',['heat.overheat_cooldown']='Heat'}
+-- Notes shown with a field, by field id. HD2Runtime 0.31.2: the LAS-99 Quasar's lockout after an overheat is its own
+-- member (WeaponHeat +140: the heat lost per second while overheated); "Cooling rate" never governs it.
+local FIELD_NOTES={['heat.cool_per_second_overheated']='Lockout after overheating = 100 / this value (6.66 = 15 s); '
+    ..'"Cooling rate" does not change it'}
+-- A field shown right after another one of the same section (where a player looks for it), by field id.
+local PLACED_AFTER={['heat.cool_per_second_overheated']='heat.cool_per_second'}
+local function place_after(rows)
+    for field,anchor in pairs(PLACED_AFTER)do
+        local from,to
+        for i,r in ipairs(rows)do
+            if r.field==field then from=i elseif r.field==anchor and not to then to=i end
+        end
+        if from and to and from~=to+1 and rows[from].section==rows[to].section then
+            local row=table.remove(rows,from)
+            if from<to then to=to-1 end
+            table.insert(rows,to+1,row)
+        end
+    end
+    return rows
+end
 -- The armory's presentation of a weapon (presentation only: menus read it when they build an item view):
 -- the displayed armor penetration (one label) and the displayed traits (an ordered list of up to five), which share
 -- the weapon's five label slots (the layer edits one of them at a time).
@@ -590,7 +611,7 @@ local function player_rows(hd2,object,entry)
             local id=f.semanticFieldId
             local domain=domain_of(id)
             local branch,phase=b.branch,b.phase
-            local section,target,field
+            local section,target,field,fires
             local role,when=branch,phase
             local projectile=function()return hd2.weapon(name):attack(role):projectile()end
             -- Weapons without a projectile attack (flame, arc, beam, melee) own their damage rows on the weapon.
@@ -600,10 +621,12 @@ local function player_rows(hd2,object,entry)
                 field=strip(id,branch)
                 section=domain=='damage'and join('Damage',direct_hit(role_label(branch)))
                     or join(DOMAIN_LABELS[domain],role_label(branch))
+                fires='attack:'..branch
             elseif domain=='explosion'and has_projectile and phase then
                 target=function()return projectile():terminal_action(when):explosion()end
                 field=strip(id,branch,phase)
                 section=join('Explosion',role_label(branch),util.humanize(phase))
+                fires='attack:'..branch
             elseif branch and(domain=='projectile'or domain=='damage'or domain=='explosion')then
                 target=function()return hd2.weapon(name)end
                 field=id
@@ -613,8 +636,9 @@ local function player_rows(hd2,object,entry)
                 field=id
                 section=domain_label(id)
             end
+            -- (fires_scope: the swap whose donor these rows give way to, "What a swapped weapon fires" below)
             local common={id=id,label=f.displayName,unit=f.unit,field=field,target=target,shared=shared_ack(f),
-                unverified=unverified(f),descriptor=f,section=section}
+                unverified=unverified(f),descriptor=f,section=section,fires_scope=fires,note=FIELD_NOTES[id]}
             if locked then common.editable,common.reason=false,BLOCKED_REASON end
             if numeric(f.type,f.currentDefault)then
                 common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,b.storage
@@ -663,6 +687,7 @@ local function player_rows(hd2,object,entry)
                     common.vanilla=common.expect()
                     common.label='Projectile'
                     common.section=join('Projectile',role_label(role),'Swap')
+                    common.fires_scope,common.swap_scope=nil,'attack:'..role
                     common.options=function(row)return projectile_options(hd2,row)end
                     rows[#rows+1]=make_value_row(object,common)
                     rows[#rows].swap={kind='projectile',role=role}
@@ -713,7 +738,7 @@ local function player_rows(hd2,object,entry)
         if ok and type(src)=='table'and src.mechanism=='ammunition'and type(ammunition)=='table'then
             -- (the Runtime's own ammunition source, which its write path uses as this field's descriptor)
             local row=source_row(object,{id='ammunition.projectile',label='Projectile',section='Projectile · Swap',
-                descriptor=ammunition,field='ammunition.projectile',
+                descriptor=ammunition,field='ammunition.projectile',swap_scope='attack:primary',
                 code='hd2.weapon('..string.format('%q',name)..'):projectile_source("primary")',
                 source=function()return hd2.weapon(name):projectile_source('primary')end,
                 options=function(row)return projectile_options(hd2,row)end,own_label='Own ammunition'})
@@ -737,7 +762,7 @@ local function player_rows(hd2,object,entry)
     end
     -- the catalogue weapon each row writes ('AR/GL-21 One-Two / underbarrel' for a sub-weapon): ModBuilder's identity
     for _,r in ipairs(rows)do r.weapon_name=name end
-    return rows
+    return place_after(rows)
 end
 
 --------------------------------------------------------------------------------------- catalogue explosions --
@@ -851,6 +876,21 @@ local function feed_title(text)
         return word:sub(1,1):upper()..word:sub(2):lower()
     end))
 end
+-- The swap a support weapon's field follows (its swap_scope), by the record its linkage reaches: the attack's projectile,
+-- its damage, its impact or expiry explosion and their statuses ('attack:<role>'), or the ProgrammableAmmo projectile's
+-- ('function:programmable'). The Runtime resolves those records through the projectile the weapon fires, so after a
+-- swap it refuses them (COMPOSITION_TARGET_CHANGED or a changed record identity).
+local function support_fires(f)
+    local b=type(f.backing)=='table'and f.backing or{}
+    local link=b.linkage=='status'and b.parentLinkage or b.linkage
+    if type(link)~='string'then return nil end
+    if link:find('^function_projectile')then return 'function:programmable'end
+    if link=='projectile'or link=='projectile_damage'or link:find('^projectile_explosion')then
+        local role=b.parentRole or tostring((type(f.target)=='table'and f.target.attack)or'primary'):gsub('_status_%d+$','')
+        return 'attack:'..role
+    end
+    return nil
+end
 local function support_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
@@ -897,7 +937,8 @@ local function support_rows(hd2,object,entry)
                 section=domain_label(id)
             end
             local common={id=id..(role and('@'..role)or''),label=f.displayName,unit=f.unit,field=field,target=target,
-                shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=section}
+                shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=section,fires_scope=support_fires(f),
+                note=FIELD_NOTES[id]}
             if numeric(f.type,f.currentDefault)then
                 common.vanilla,common.min,common.max,common.type=f.currentDefault,f.min,f.max,f.type
                 common.storage=(f.backing or{}).storage
@@ -926,14 +967,16 @@ local function support_rows(hd2,object,entry)
     -- HD2Runtime 0.31.0: its projectile swaps (projectile_source(role)), its beam swap (beam_source()) and its
     -- overcharge explosion (its own, or another charge weapon's)
     local base_code='hd2.support_weapon('..string.format('%q',name)..')'
+    local swapped={}
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
         if f.type=='projectile_reference'and t.path=='attack'and not f.deprecated then
             -- (a swap HD2Runtime publishes read-only is shown locked with its reason, where a player looks for it)
             local role=t.attack or'primary'
+            swapped[role]=true
             local row=source_row(object,{id='attack.projectile@'..role,label='Projectile',
                 section=join('Projectile',role_label(role),'Swap'),descriptor=f,field='attack.projectile',
-                code=base_code..':projectile_source('..string.format('%q',role)..')',
+                code=base_code..':projectile_source('..string.format('%q',role)..')',swap_scope='attack:'..role,
                 source=function()return hd2.support_weapon(name):projectile_source(role)end,
                 options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
             if not f.editable and row.editable then
@@ -954,6 +997,19 @@ local function support_rows(hd2,object,entry)
                 labels=labels,options=static_options(labels),descriptor=f,unverified=true,section='Charge'})
         end
     end
+    -- A projectile host HD2Runtime keeps read-only publishes no swap field at all (HD2Runtime 0.31.2: the M-1000 Maxigun
+    -- and the GL-28, linked-ammunition weapons whose fired type the trace does not prove; the magazine-pattern and
+    -- rounds-fed weapons): its projectile_source() says why. Shown locked with that reason, where a player looks for it.
+    if not swapped.primary then
+        local ok,src=pcall(function()return hd2.support_weapon(name):projectile_source('primary')end)
+        if ok and type(src)=='table'and src.status~=nil and not src.writable and type(src.reason)=='string'then
+            local labels={{value='own',label='Own projectile'}}
+            rows[#rows+1]=make_value_row(object,{id='attack.projectile@primary',kind='reference',label='Projectile',
+                section='Projectile · Swap',field='attack.projectile',vanilla='own',labels=labels,
+                options=static_options(labels),editable=false,reason=src.reason,
+                target=function()return hd2.support_weapon(name)end})
+        end
+    end
     -- HD2Runtime 0.31.1: a native ProgrammableAmmo projectile (the AC-8's flak) is swapped on the weapon itself
     -- (feed('programmable'):source(): function_ammo.projectile); a weapon without one would need its function input
     -- bound first, which is not offered here
@@ -963,6 +1019,7 @@ local function support_rows(hd2,object,entry)
             if ok and type(d)=='table'and d.state=='native'then
                 rows[#rows+1]=source_row(object,{id='function_ammo.projectile',label='Projectile',
                     section=join('Projectile',role_text('programmable'),'Swap'),descriptor=f,field='function_ammo.projectile',
+                    swap_scope='function:programmable',
                     code=base_code..':feed("programmable"):source()',
                     source=function()return hd2.support_weapon(name):feed('programmable'):source()end,
                     options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
@@ -1009,7 +1066,7 @@ local function support_rows(hd2,object,entry)
                 or'Capped by Spare magazines (0 natively); the reload uses own spares before the backpack')
         end
     end
-    return rows
+    return place_after(rows)
 end
 
 -- Damage zone sections of vehicles, backpacks (and their linked drone or shield) and stratagems' deployed entities: the
@@ -1333,6 +1390,8 @@ local function vehicle_weapon_rows(hd2,object,entry)
     -- HD2Runtime 0.31.0: a mount that holds a shield arm, not a weapon (the EXO-55 Breakthrough's left mount) is
     -- reached through the vehicle's :shield(), never :weapon(mount)
     local shield=entry.mountedShield==true
+    -- (a mount's swap and the rows that follow it, apart from the other mounts of the same page)
+    local function mount_scope(scope)return scope and(tostring(entry.name)..'|'..scope)or nil end
     local function base()
         if drone then return hd2.backpack(carrier):drone():weapon()end
         if shield then return hd2.vehicle(carrier):shield()end
@@ -1369,12 +1428,12 @@ local function vehicle_weapon_rows(hd2,object,entry)
                     rows[#rows+1]=make_value_row(object,{id=f.semanticFieldId..(role and('@'..role)or''),kind='choice',
                         label=f.displayName,field=field,target=target,vanilla=f.currentDefault,labels=labels,
                         options=static_options(labels),descriptor=f,shared=shared_ack(f),unverified=unverified(f),
-                        section=join(section,'Status')})
+                        section=join(section,'Status'),fires_scope=mount_scope(support_fires(f))})
                 else
                     rows[#rows+1]=make_row(object,{id=f.semanticFieldId..(role and('@'..role)or''),label=f.displayName,
                         unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
                         storage=(f.backing or{}).storage,field=field,target=target,shared=shared_ack(f),
-                        unverified=unverified(f),descriptor=f,section=section})
+                        unverified=unverified(f),descriptor=f,section=section,fires_scope=mount_scope(support_fires(f))})
                 end
             end
         end
@@ -1419,6 +1478,7 @@ local function vehicle_weapon_rows(hd2,object,entry)
             options=function(row)return projectile_options(hd2,row)end}
         if src.writable and src.expect then
             common.vanilla=src.expect
+            common.swap_scope=mount_scope('attack:primary')
         else
             common.editable=false
             common.reason=tostring(src.reason or'read-only in this HD2Runtime')
@@ -2306,6 +2366,150 @@ local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boost
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},ex={'resupply'},
     en={'terminids','automatons','illuminate','structures'},hd={'helldiver'},ar={'armor'},se={'status_effects'}}
 
+------------------------------------------------------------------------------ what a swapped weapon fires --
+-- After a projectile swap (staged or applied) the weapon fires the donor's projectile, and HD2Runtime refuses the
+-- rows it reaches through its own projectile: flight, direct-hit damage, impact and expiry explosions and their
+-- statuses (COMPOSITION_TARGET_CHANGED). Those rows carry fires_scope ('attack:<role>', 'function:programmable'), the
+-- swap row swap_scope; Catalog:open links them (row.fires_from = the swap row, swap.fires_rows, object.swap_rows) and
+-- the window sets them aside while the swap names a donor (ui/app.lua fires_sections). In their place it shows the
+-- donor's stats (HD2Runtime 0.31.2 hd2.attack_output(id):stats(): vanilla game data, read-only) and, when the donor is
+-- its owner's own editable projectile (:owner_projectile()), a link to the owner's page, where an edit is shared.
+-- The texts of these rows (shown through L()).
+local FIRES_TEXTS={fires='Fires',feed='Donor\'s projectile (vanilla)',link='Edit the donor\'s projectile',open='OPEN',
+    fires_note='The donor\'s projectile replaces this weapon\'s own: its own projectile, damage and explosion rows are set '
+        ..'aside until the swap is reset (HD2Runtime refuses them while it fires another projectile: '
+        ..'COMPOSITION_TARGET_CHANGED)',
+    values_note='The donor\'s own values from the game data (vanilla), read-only: an edit a mod or you made to them is '
+        ..'not shown here'}
+M.FIRES_TEXTS=FIRES_TEXTS
+local FIRES_FLIGHT={{key='velocity',label='Projectile velocity'},{key='mass',label='Projectile mass'},
+    {key='drag',label='Projectile drag'},{key='gravity',label='Projectile gravity'},
+    {key='lifetime',label='Projectile lifetime'},{key='pellet_count',label='Pellet count'},
+    {key='diameter',label='Diameter'},{key='lifetime_variance',label='Lifetime variance'},
+    {key='penetration_slowdown',label='Penetration slowdown'}}
+local FIRES_DAMAGE={{key='standard_damage',label='Standard damage'},{key='durable_damage',label='Durable damage'},
+    {key='ap_direct',label='Armor penetration: direct'},{key='ap_slight',label='Armor penetration: slight angle'},
+    {key='ap_large',label='Armor penetration: large angle'},{key='ap_extreme',label='Armor penetration: extreme angle'},
+    {key='demolition',label='Demolition'},{key='stagger',label='Stagger'},{key='push_force',label='Push force'}}
+local FIRES_EXPLOSION={{key='inner_radius',label='Explosion inner radius'},
+    {key='outer_radius',label='Explosion outer radius'},{key='shockwave_radius',label='Explosion shockwave radius'},
+    {key='shrapnel_count',label='Shrapnel count'},{key='arc',label='Arc explosion'}}
+local FIRES_EXPLOSION_DAMAGE={{key='standard_damage',label='Explosion standard damage'},
+    {key='durable_damage',label='Explosion durable damage'},{key='ap_direct',label='Explosion AP: direct'},
+    {key='ap_slight',label='Explosion AP: slight angle'},{key='ap_large',label='Explosion AP: large angle'},
+    {key='ap_extreme',label='Explosion AP: extreme angle'},{key='demolition',label='Explosion demolition'},
+    {key='stagger',label='Explosion stagger'},{key='push_force',label='Explosion push force'}}
+-- The output id a swap row's value names when it is a donor (not the weapon's own projectile), else nil.
+function M.donor_of(row,value)
+    if type(row)~='table'or not row.swap_scope or type(value)~='table'then return nil end
+    local id=rawget(value,'output')
+    if type(id)~='string'or util.same(value,row.vanilla)then return nil end
+    -- (the weapon's own output picked from the list fires its own projectile)
+    local A=load('attack_outputs')
+    local o=A and type(A.outputs)=='table'and A.outputs[id]
+    if o and type(o.owner)=='table'and row.object and o.owner.name==row.object.name
+        and row.swap_scope=='attack:primary'then return nil end
+    return id
+end
+-- The owner of an output ({name, kind}) and the catalogue key of its page ('sp|' support, 'pw|' player weapons).
+local OWNER_FAMILY={support_weapon='sp',player_weapon='pw'}
+local function output_owner(id)
+    local A=load('attack_outputs')
+    local o=A and type(A.outputs)=='table'and A.outputs[id]
+    local owner=o and type(o.owner)=='table'and o.owner or nil
+    return owner
+end
+M.output_owner=output_owner
+local function number_text(v)
+    if type(v)=='number'then return util.format(v)end
+    if type(v)=='boolean'then return v and'On'or'Off'end
+    return v~=nil and tostring(v)or'-'
+end
+-- The donor's sections for a swap row on its object: {{label, rows}} (info rows; a link row). hd2: the real hd2.
+local function donor_sections(hd2,object,swap,id)
+    local units={}
+    for _,r in ipairs(object.rows or{})do if r.field and r.unit and not units[r.field]then units[r.field]=r.unit end end
+    -- "Projectile · Flak · Swap" -> "Flak": the round or feed the swap is on
+    local middle=tostring(swap.section):gsub('^Projectile',''):gsub(' · Swap$',''):gsub('^ · ','')
+    if middle==''then middle=nil end
+    local feed=join(middle,FIRES_TEXTS.feed)
+    local base='fires|'..tostring(swap.swap_scope)..'|'..id..'|'
+    local sections,by={},{}
+    local function add(section,row)
+        local s=by[section]
+        -- (a mount's donor in the mount's own group)
+        if not s then s={label=section,group=swap.group,rows={}};by[section]=s;sections[#sections+1]=s end
+        row.group=swap.group
+        s.rows[#s.rows+1]=row
+    end
+    local function info(section,part,label,text,reason,unit)
+        local row=info_row(object,{id=base..part,label=label,field='info',section=section,text=text,
+            reason=reason or FIRES_TEXTS.values_note,info=true})
+        row.unit,row.fires_info=unit,true
+        add(section,row)
+        return row
+    end
+    local owner=output_owner(id)
+    local donor=owner and owner.name or id
+    local fires=info(swap.section,'fires',FIRES_TEXTS.fires,donor,FIRES_TEXTS.fires_note)
+    fires.donor=id
+    local okh,handle=pcall(function()return hd2.attack_output(id)end)
+    if not okh or type(handle)~='table'then return sections end
+    -- the owner's own editable projectile (edits there are shared with the owner and every weapon that fires it)
+    local family=owner and OWNER_FAMILY[owner.kind]
+    if family and type(handle.owner_projectile)=='function'then
+        local okp,projectile=pcall(handle.owner_projectile,handle)
+        if okp and type(projectile)=='table'then
+            local link=info(swap.section,'link',FIRES_TEXTS.link,FIRES_TEXTS.open,FIRES_TEXTS.values_note)
+            link.link={key=family..'|'..owner.name,owner=owner.name,scope='attack:primary'}
+        end
+    end
+    if type(handle.stats)~='function'then return sections end
+    local oks,stats=pcall(handle.stats,handle)
+    if not oks or type(stats)~='table'then return sections end
+    if type(stats.consumers)=='number'then
+        for _,s in ipairs(sections)do for _,r in ipairs(s.rows)do if r.link then r.link.consumers=stats.consumers end end end
+    end
+    local flight=join('Projectile',feed)
+    for _,f in ipairs(FIRES_FLIGHT)do
+        local v=type(stats.flight)=='table'and stats.flight[f.key]
+        if v~=nil and v~=false then info(flight,'flight.'..f.key,f.label,number_text(v),nil,units['projectile.'..f.key])end
+    end
+    local hit=join('Damage',feed..' direct hit')
+    local d=type(stats.direct_damage)=='table'and stats.direct_damage
+    if d then
+        for _,f in ipairs(FIRES_DAMAGE)do
+            if d[f.key]~=nil then info(hit,'damage.'..f.key,f.label,number_text(d[f.key]),nil,units['damage.'..f.key])end
+        end
+        for i,s in ipairs(type(d.statuses)=='table'and d.statuses or{})do
+            if type(s)=='table'and s.status then
+                info(join(hit,'Status'),'damage.status_'..i,'Status '..i,util.humanize(s.status)
+                    ..(type(s.strength)=='number'and(' ('..util.format(s.strength)..')')or''))
+            end
+        end
+    end
+    for _,phase in ipairs({'impact','expiry'})do
+        local e=type(stats[phase])=='table'and stats[phase]
+        if e then
+            local section=join('Explosion',feed,util.humanize(phase))
+            info(section,phase..'.name','Explosion',tostring(e.label or e.name or'-'))
+            for _,f in ipairs(FIRES_EXPLOSION)do
+                if e[f.key]~=nil then
+                    info(section,phase..'.'..f.key,f.label,number_text(e[f.key]),nil,units['explosion.'..f.key])
+                end
+            end
+            local ed=type(e.damage)=='table'and e.damage
+            for _,f in ipairs(ed and FIRES_EXPLOSION_DAMAGE or{})do
+                if ed[f.key]~=nil then
+                    info(section,phase..'.damage.'..f.key,f.label,number_text(ed[f.key]),nil,
+                        units['explosion.damage.'..f.key])
+                end
+            end
+        end
+    end
+    return sections
+end
+
 ------------------------------------------------------------------------------------------------- catalogue --
 local Catalog={};Catalog.__index=Catalog
 
@@ -2588,7 +2792,39 @@ function Catalog:open(object)
             section.rows[#section.rows+1]=row
         end
     end
+    -- the rows each projectile swap sets aside while it names a donor ("What a swapped weapon fires"); a status slot's
+    -- strength and duration follow their slot
+    local swaps={}
+    for _,row in ipairs(object.rows)do
+        if row.swap_scope and row.editable and not swaps[row.swap_scope]then swaps[row.swap_scope]=row end
+    end
+    if next(swaps)then
+        object.swap_rows={}
+        for _,row in ipairs(object.rows)do
+            local c=row.status_child
+            local scope=row.fires_scope or(c and c.type_row and c.type_row.fires_scope)
+            local swap=scope and swaps[scope]
+            if swap and row~=swap then
+                row.fires_from=swap
+                swap.fires_rows=swap.fires_rows or{}
+                swap.fires_rows[#swap.fires_rows+1]=row
+            end
+            if swaps[row.swap_scope or'']==row then object.swap_rows[#object.swap_rows+1]=row end
+        end
+    end
     return object
+end
+-- The donor's sections of a swap row naming output `id` (built once per donor).
+function Catalog:donor_sections(object,swap,id)
+    object.donor_cache=object.donor_cache or{}
+    local key=tostring(swap.key)..'\0'..id
+    local cached=object.donor_cache[key]
+    if not cached then
+        local ok,sections=pcall(donor_sections,self.real_hd2,object,swap,id)
+        cached=ok and sections or{}
+        object.donor_cache[key]=cached
+    end
+    return cached
 end
 -- An object by its key, or by the key of a part it holds (a stratagem, weapon, backpack or vehicle of a composite).
 function Catalog:object(key)

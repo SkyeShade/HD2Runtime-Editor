@@ -63,7 +63,13 @@ function M.install(App)
         end
     end
     -- The toast after values were staged from a preset or a file.
-    function App.loaded_text(name,pending,missing)
+    -- (dropped: the values of own projectile rows left out because their weapon fires another one, App:stage_map)
+    function App.loaded_text(name,pending,missing,dropped)
+        if(dropped or 0)>0 then
+            return Lf('Loaded %s: %d pending, %d unknown fields skipped, %d values of a swapped weapon\'s own projectile '
+                ..'left out (HD2Runtime refuses them while it fires another projectile). Press Apply.',name,pending,missing,
+                dropped)
+        end
         if missing>0 then
             return Lf('Loaded %s: %d pending, %d unknown fields skipped. Press Apply.',name,pending,missing)
         end
@@ -72,8 +78,8 @@ function M.install(App)
     function App:load_preset(name)
         local values=self.presets:load(name)
         if not values then return end
-        local missing=self:stage_map(values,{kind='preset',name=name})
-        self:toast(App.loaded_text(name,self.pending_n,missing),missing>0 and C.pending or C.ok)
+        local missing,dropped=self:stage_map(values,{kind='preset',name=name})
+        self:toast(App.loaded_text(name,self.pending_n,missing,dropped),missing+dropped>0 and C.pending or C.ok)
     end
     -- The list index of a saved preset, of a shared file (by path) or of the first entry of a kind.
     function App:preset_index_where(test)
@@ -203,8 +209,8 @@ function M.install(App)
         end
         local p=open.preset
         if a=='LOAD'then
-            local missing=self:stage_map(p.values,{kind='preset',name=p.name})
-            self:toast(App.loaded_text(p.name,self.pending_n,missing),missing>0 and C.pending or C.ok)
+            local missing,dropped=self:stage_map(p.values,{kind='preset',name=p.name})
+            self:toast(App.loaded_text(p.name,self.pending_n,missing,dropped),missing+dropped>0 and C.pending or C.ok)
         elseif a=='ICON'then
             self:open_icon_picker({file=f.path},p.icon,p.name)
         else

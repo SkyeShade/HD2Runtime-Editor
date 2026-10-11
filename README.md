@@ -93,6 +93,18 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     stays greyed out until slot 1 holds a status (staged or applied), and a slot is emptied only once the slots after
     it are (resetting slot 1 resets the later ones you set). The editor applies them in that order, and an exported mod
     writes one damage row's statuses as one transaction (the GL-15 Evictor's blast with Gas and Gas Confusion).
+  - **What a swapped weapon fires.** While a projectile swap names a donor (pending or applied), HD2Runtime refuses the
+    weapon's own projectile, direct-hit, explosion and status rows (COMPOSITION_TARGET_CHANGED), so the page sets them
+    aside and shows **Fires** with the donor's name under Projectile type instead. With HD2Runtime 0.31.2 it adds the
+    donor's flight, direct hit and impact / expiry explosion as read-only rows ("Donor's projectile (vanilla)": the
+    game data, not live values), and an **Edit ...'s projectile** link to the owner weapon's page (an edit there is
+    shared with every weapon that fires it). Resetting the swap brings the own rows back. A pending own value is
+    dropped when the swap is staged; an applied one goes back to its default before the swap applies. Presets, the
+    saved session and exports leave such values out and say so. Mounted guns work the same way, per mount.
+  - **With HD2Runtime 0.31.2:** projectile swaps on the LAS-99 Quasar and RS-422 Railgun (every donor needs
+    allow_unverified_reference); the M-1000 Maxigun, GL-28 and the other hosts HD2Runtime keeps read-only show why
+    where the swap would be; the Quasar's **Cooling rate while overheated** (its lockout after an overheat: 100 /
+    this value, 6.66 = 15 s) right after its Cooling rate; the TX-41 Sterilizer's hellpod items and slots.
   - **Beam conversion** (HD2Runtime 0.31.0, `hd2.beam_conversion`; absent on older Runtimes): a projectile weapon's
     Beam Conversion group shows the verdict and caveats (a refused weapon only its reason), the layout and its
     multiplayer rule, the switch, its own rate, beams and pulse, and the interim per-weapon damage, AP and range rows
@@ -301,6 +313,7 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 - **Value fields:** calldown codes, mission uses, booleans, statuses, projectile swaps and terminal explosions over script choices, plus a mod's calldown code taken over and given back.
 - **UI:** the whole window, driven by scripted keys and clicks, including the picker, the code editor, Escape, the weapon filter, a mount swap, the Changes, Mods (with in-game options), Custom (tuning) and Settings tabs, a language switch, the traits editor and the menu sounds. With generated icons, every stratagem and booster must have one.
 - **Value fields** also cover filling the Liberator's empty rate slots (with its selector binding), the displayed traits and penetration (one at a time), and the steer watchdog.
+- **Projectile swaps** (`tests/lua/test_swaps.lua`): a staged and an applied swap set the own projectile rows aside and show the donor (its stats and the link to its owner's page with HD2Runtime 0.31.2); own values are dropped, taken back first, refused with the reason, left out of presets, the saved session and exports.
 - **Helpers:** the JSON reader (sliced), the mod managers' state, the localisation file format, and the interface text list. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
 
 ## License and credit

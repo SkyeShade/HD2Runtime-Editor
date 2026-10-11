@@ -293,6 +293,15 @@ local function release_dependents(self,row,value,from_reset)
             if other and(other.user or other.error)then self:reset(r)end
         end
     end
+    -- a projectile swap to a donor takes the editor's values of the weapon's own projectile rows back first: HD2Runtime
+    -- refuses those rows once the weapon fires another projectile (COMPOSITION_TARGET_CHANGED), its reset included, so
+    -- they go back while they still can (swap_wait holds the swap until they are back)
+    if row.swap_scope and catalog_module.donor_of(row,value)then
+        for _,r in ipairs(row.fires_rows or{})do
+            local other=self.slots[r.loc]
+            if other and(other.user or other.error)and not other.removing then self:reset(r)end
+        end
+    end
     if from_reset and row.pool_row and value=='unlimited'then
         local s=self.slots[row.pool_row.loc]
         if s and s.user and(s.target==catalog_module.EAGLE_REARM or s.target=='eagle_rearm')then
@@ -841,6 +850,31 @@ local function status_wait(self,slot)
     return true
 end
 
+-- Projectile swaps (editor/catalog.lua "What a swapped weapon fires"): HD2Runtime resolves a weapon's own projectile,
+-- damage and explosion rows through the projectile it fires, and refuses them while it fires a donor's
+-- (COMPOSITION_TARGET_CHANGED). So a value of yours on such a row waits while its swap goes back to the weapon's own
+-- projectile and is refused at once while the swap names a donor; a swap to a donor waits until those rows are back to
+-- their base (release_dependents takes them back). True while the slot must wait (or just failed).
+local function swap_wait(self,slot)
+    local row=slot.row
+    local swap=row.fires_from
+    if swap and slot.user then
+        local id=catalog_module.donor_of(swap,(self:value(swap)))
+        if id then
+            local owner=catalog_module.output_owner(id)
+            fail(self,slot,'COMPOSITION_TARGET_CHANGED: '..tostring(row.object and row.object.name or'the weapon')
+                ..' fires '..tostring(owner and owner.name or id)..' now, and HD2Runtime refuses its own projectile rows '
+                ..'while it does: reset "'..tostring(swap.label)..'" first')
+            return true
+        end
+        return self:state(swap)=='applying'
+    end
+    if row.swap_scope and slot.target~=nil and catalog_module.donor_of(row,slot.target)then
+        for _,r in ipairs(row.fires_rows or{})do if self:state(r)=='applying'then return true end end
+    end
+    return false
+end
+
 -- Drives every field one update further. Cheap when nothing changes.
 function Layer:tick(dt)
     self.clock=(self.clock or 0)+(dt or 0)
@@ -914,9 +948,11 @@ function Layer:tick(dt)
                 end
             end
         elseif(slot.phase=='hold'or slot.phase=='idle')and slot.dirty
-            and((slot.user and conversion_wait(self,slot))or rearm_wait(self,slot)or status_wait(self,slot))then
+            and((slot.user and conversion_wait(self,slot))or rearm_wait(self,slot)or status_wait(self,slot)
+                or swap_wait(self,slot))then
             -- a field that depends on another waits for it (or was refused): a beam conversion setting for its
-            -- conversion, the rearm pool and the mission uses for each other, a status slot for its neighbours
+            -- conversion, the rearm pool and the mission uses for each other, a status slot for its neighbours, a
+            -- weapon's own projectile rows and its projectile swap for each other
         elseif slot.phase=='hold'or slot.phase=='idle'then
             if slot.dirty then
                 local target=slot.target

@@ -424,12 +424,34 @@ function M.addon(catalog_module,entries,meta)
             table.insert(conversions[name],entry)
         end
     end
+    -- a weapon's own projectile rows next to a projectile swap to a donor: left out, with why (HD2Runtime refuses them
+    -- once the weapon fires the donor's projectile, COMPOSITION_TARGET_CHANGED; editor/catalog.lua "What a swapped
+    -- weapon fires")
+    local fires={}
+    for _,entry in ipairs(entries)do
+        local row=entry.row
+        local id=row and row.swap_scope and catalog_module.donor_of and catalog_module.donor_of(row,entry.value)
+        if id then fires[row]=id end
+    end
+    local set_aside={}
+    for _,entry in ipairs(entries)do
+        local swap=entry.row and entry.row.fires_from
+        if swap and fires[swap]then
+            set_aside[entry]=true
+            local owner=catalog_module.output_owner and catalog_module.output_owner(fires[swap])
+            skipped[#skipped+1]={entry=entry,why=tostring(entry.row.object and entry.row.object.name or'the weapon')
+                ..' fires '..tostring(owner and owner.name or fires[swap])..' in this export: HD2Runtime refuses the rows '
+                ..'of its own projectile while it does (COMPOSITION_TARGET_CHANGED)'}
+        end
+    end
     -- a damage row's status slots: one transaction, written where its first change is
     local slot_groups,in_group=status_groups(entries)
     for i,entry in ipairs(entries)do
         local name=entry.row and entry.row.conversion
         local text,why
-        if slot_groups[i]then
+        if set_aside[entry]then
+            -- (left out, above)
+        elseif slot_groups[i]then
             local list=slot_groups[i]
             text,why=M.status_operation(catalog_module,list,prefix..i)
             if not text then for _,e in ipairs(list)do skipped[#skipped+1]={entry=e,why=why}end end

@@ -241,19 +241,99 @@ function App:hidden_status_rows(object)
     end
     return hidden,sig or''
 end
--- An object's sections as shown (the mounts' weapons, the status durations that apply now) and a signature of what
--- decided them.
+-- Projectile swaps (editor/catalog.lua "What a swapped weapon fires"): the donor output a swap row names as the window
+-- shows it (a pending value first, else the applied one, or a mod's), or nil while it fires its own projectile.
+function App:fires(swap)
+    if not swap or not swap.swap_scope then return nil end
+    return catalog_module.donor_of(swap,(self:row_view(swap)))
+end
+-- The donor's name as the window shows it: the owner weapon's own (translated) name when the catalogue has it.
+function App:donor_name(id)
+    local owner=catalog_module.output_owner(id)
+    if not owner then return tostring(id)end
+    local object=self.catalog:object('sp|'..tostring(owner.name))or self.catalog:object('pw|'..tostring(owner.name))
+    return object and util.display_name(object)or tostring(owner.name)
+end
+-- Why a row the swap sets aside takes no value of its own now (nil when it can): HD2Runtime refuses the rows reached
+-- through the weapon's own projectile while it fires another one. Going back to its base value is always allowed.
+function App:fires_block(row)
+    local swap=row.fires_from
+    local id=swap and self:fires(swap)
+    if not id then return nil end
+    return Lf('the weapon fires %s now: HD2Runtime refuses its own projectile rows while it does '
+        ..'(COMPOSITION_TARGET_CHANGED). Reset "%s" to edit them again',self:donor_name(id),L(swap.label))
+end
+function App:fires_refusal(row,value)
+    local why=self:fires_block(row)
+    if not why or util.same(value,(self.layer:base(row)))then return nil end
+    return why
+end
+-- The rows the page sets aside while a swap names a donor (those that hold a pending, applied or failed value of yours
+-- stay, locked, so they can be reset), the donor's sections, and a signature of both. present: the rows the page shows
+-- (a mount that holds another weapon shows that weapon's rows, not its own swap).
+function App:fires_sections(object,present)
+    local hide,add,sig
+    for _,swap in ipairs(object.swap_rows or{})do
+        local id=present[swap]and self:fires(swap)
+        if id then
+            sig=(sig and(sig..';')or'')..swap.key..'='..id
+            for _,r in ipairs(swap.fires_rows or{})do
+                local _,source,state=self:row_view(r)
+                if source~='pending'and source~='editor'and state~='error'then
+                    hide=hide or{}
+                    hide[r]=true
+                else sig=sig..','..r.key end
+            end
+            add=add or{}
+            for _,section in ipairs(self.catalog:donor_sections(object,swap,id))do add[#add+1]=section end
+        end
+    end
+    return hide,add,sig or''
+end
+-- An object's sections as shown (the mounts' weapons, the status durations that apply now, what a swapped weapon
+-- fires) and a signature of what decided them.
 function App:effective_sections(object)
     local hidden,hsig=self:hidden_status_rows(object)
     local sections,sig=self:mount_sections(object)
-    if not hidden then return sections,sig end
+    local present={}
+    if object.swap_rows then
+        for _,section in ipairs(sections)do for _,r in ipairs(section.rows)do present[r]=true end end
+    end
+    local fhide,fadd,fsig=self:fires_sections(object,present)
+    if fhide then
+        hidden=hidden or{}
+        for r in pairs(fhide)do hidden[r]=true end
+    end
+    if not hidden and not fadd then return sections,sig end
     local out={}
     for _,section in ipairs(sections)do
         local rows={}
-        for _,r in ipairs(section.rows)do if not hidden[r]then rows[#rows+1]=r end end
+        for _,r in ipairs(section.rows)do if not(hidden and hidden[r])then rows[#rows+1]=r end end
         if#rows>0 then out[#out+1]={label=section.label,group=section.group,rows=rows}end
     end
-    return out,sig..'|'..hsig
+    for _,section in ipairs(fadd or{})do out[#out+1]=section end
+    return out,sig..'|'..hsig..'|'..fsig
+end
+-- The name of the page a link row points to (translated as the object list shows it).
+function App:link_name(row)
+    local object=row.link and self.catalog:object(row.link.key)
+    return object and util.display_name(object)or tostring(row.link and row.link.owner)
+end
+-- A row's label as shown: "Edit EAT-17 Expendable Anti-Tank's projectile" for a link, else its label translated.
+function App:row_label(row)
+    if row.link then return Lf('Edit %s\'s projectile',self:link_name(row))end
+    return L(row.label)
+end
+-- Opens the page a link row points to (the donor's owner weapon), at its first projectile row when it is shown.
+function App:open_link(row)
+    local link=row.link
+    local object=link and self.catalog:object(link.key)
+    if not object then self:toast(L('That field is not in the editor catalogue'),C.dim);return end
+    self.catalog:open(object)
+    for _,r in ipairs(object.rows)do
+        if r.fires_scope==link.scope and r.editable and self:reveal(r)then return end
+    end
+    if self:goto_object(object)then self.view,self.focus='browse','objects'end
 end
 -- A mount that holds another weapon shows THAT weapon's rows (its own catalogued vehicle weapon, edited through its home
 -- vehicle) instead of the slot's original weapon, whose records the Runtime refuses to write while the slot holds
@@ -586,6 +666,7 @@ function App:stage(row,value,origin)
     local staged=self:stage_value(row,value,origin)
     -- accepted: any value staged on another row of the same bytes gives way to it
     if staged then self:unstage_siblings(row)end
+    if staged and row.swap_scope then self:swap_staged(row,origin)end
     if staged and self.pending[row.key]then
         local names=self:shared_names(row)
         if names then self:toast(Lf('Shared value: this also changes %s',names),C.pending)end
@@ -598,7 +679,7 @@ function App:stage(row,value,origin)
     return staged
 end
 function App:stage_value(row,value,origin)
-    local refused=self:slot_refusal(row,value)
+    local refused=self:slot_refusal(row,value)or self:fires_refusal(row,value)
     if refused then self:toast(Lf('%s: %s',L(row.label),refused),C.error);return false end
     if row.kind then
         if self.ctx.choices==false then
@@ -639,6 +720,28 @@ function App:stage_value(row,value,origin)
     self.pending[row.key]={row=row,value=held,origin=origin}
     return true
 end
+-- A swap now naming a donor: the pending values of the rows it sets aside are dropped (HD2Runtime would refuse them),
+-- and those applied go back to their base when it applies, before the swap itself (editor/layer.lua). Said once.
+function App:swap_staged(swap,origin)
+    local id=self:fires(swap)
+    if not id then return end
+    local dropped,applied=0,0
+    for _,r in ipairs(swap.fires_rows or{})do
+        if self.pending[r.key]then self.pending[r.key]=nil;self.pending_n=self.pending_n-1;dropped=dropped+1 end
+        local _,source=self.layer:value(r)
+        if source=='editor'then applied=applied+1 end
+    end
+    if origin and origin.kind=='preset'then return dropped,applied end
+    local name=self:donor_name(id)
+    if dropped>0 then
+        self:toast(Lf('Fires %s: %d pending values of its own projectile dropped (HD2Runtime refuses them while it does)',
+            name,dropped),C.pending)
+    elseif applied>0 then
+        self:toast(Lf('Fires %s: on Apply, %d values of its own projectile go back to their defaults first',name,applied),
+            C.pending)
+    end
+    return dropped,applied
+end
 function App:unstage(row)
     if self.pending[row.key]then
         self.pending[row.key]=nil;self.pending_n=self.pending_n-1
@@ -651,9 +754,10 @@ function App:unstage(row)
     end
     return false
 end
+-- Returns how many values are missing, and how many were left out because their weapon fires another projectile.
 function App:stage_map(map,origin)
     local missing=0
-    local staged={}
+    local staged,swaps,rest={},{},{}
     for _,key in ipairs(util.sorted_keys(map))do
         local stored=map[key]
         if App.is_custom_key(key)then
@@ -661,12 +765,24 @@ function App:stage_map(map,origin)
             if self:apply_custom_value(key,stored)then self.layer:touch(key)else missing=missing+1 end
         else
             local row,value=self:decode_value(key,stored)
-            if row and value~=nil then staged[#staged+1]={row=row,value=value}else missing=missing+1 end
+            if row and value~=nil then
+                local item={row=row,value=value}
+                if row.swap_scope then swaps[#swaps+1]=item else rest[#rest+1]=item end
+            else missing=missing+1 end
         end
+    end
+    -- projectile swaps first: the rows of a weapon's own projectile follow what it fires. A value for one of them on a
+    -- weapon that fires a donor (in these values, or already) is left out: HD2Runtime refuses it
+    -- (COMPOSITION_TARGET_CHANGED), and a swap staged after it would drop it anyway
+    for _,item in ipairs(swaps)do self:stage(item.row,item.value,origin)end
+    local dropped=0
+    for _,item in ipairs(rest)do
+        if item.row.fires_from and self:fires(item.row.fires_from)then dropped=dropped+1
+        else staged[#staged+1]=item end
     end
     -- (status slot 1 before slot 2: the slots fill in order)
     for _,item in ipairs(slot_order(staged,function(x)return x.row end))do self:stage(item.row,item.value,origin)end
-    return missing
+    return missing,dropped
 end
 function App:apply()
     if self.pending_n==0 then self:toast(L('Nothing to apply'),C.dim);return end
@@ -745,11 +861,13 @@ end
 
 ---------------------------------------------------------------------------------------------- editing --
 function App:begin_edit(row,text,fresh)
+    -- (a link row opens the page it points to)
+    if row and row.link then return self:open_link(row)end
     if not row or not row.editable then
         if row then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error)end
         return
     end
-    local blocked=self:slot_block(row)
+    local blocked=self:slot_block(row)or self:fires_block(row)
     if blocked then self:toast(Lf('%s: %s',L(row.label),blocked),C.error);return end
     if row.kind=='code'then return self:open_code(row)end
     if row.kind=='modes'then return self:open_modes(row)end
@@ -1646,7 +1764,8 @@ function App:draw_fields(y0,h)
                     for s,idx in ipairs(selectable)do if idx==index then self.field=s end end
                     self.focus='fields'
                     local r=items[index].row
-                    if ux>=x0+FX.box and ux<=x0+FX.box+FX.box_w then self:begin_edit(r,nil,true)end
+                    -- (a link opens its page wherever it is clicked)
+                    if r.link or ux>=x0+FX.box and ux<=x0+FX.box+FX.box_w then self:begin_edit(r,nil,true)end
                 end}
                 actions[i]=action
             end
@@ -1657,11 +1776,17 @@ function App:draw_fields(y0,h)
             elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
             local cy=y+rh/2
             local indent=(item.depth or 0)*20
-            -- (a status slot whose earlier slot is empty is greyed out until that one holds a status)
-            local open=row.editable and not self:slot_block(row)
-            cv:text(L(row.label),x+FX.label+indent,cy,{size=SZ.label,colour=open and(selected and C.text or C.dim)or C.faint,
-                max=FX.default_right-FX.label-90-indent})
-            cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
+            -- (a status slot whose earlier slot is empty is greyed out until that one holds a status; a row a projectile
+            -- swap sets aside stays locked while it is shown, holding a value of yours to reset)
+            local fires_lock=self:fires_block(row)
+            local open=row.editable and not self:slot_block(row)and not fires_lock or row.link~=nil
+            -- (a donor's row has no default of the weapon's own: its label takes that column)
+            local wide=row.link or row.fires_info
+            cv:text(self:row_label(row),x+FX.label+indent,cy,{size=SZ.label,colour=open and(selected and C.text or C.dim)
+                or C.faint,max=wide and(FX.box-FX.label-16-indent)or(FX.default_right-FX.label-90-indent)})
+            if not wide then
+                cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
+            end
             -- value box
             local value,source,state,holder,err=self:row_view(row)
             local editing=self.edit and self.edit.row==row
@@ -1690,7 +1815,9 @@ function App:draw_fields(y0,h)
             -- still says why it failed)
             local bxr=x+lw+FX.badge_right
             if state=='error'then chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
+            elseif row.link then chip(cv,L('LINK'),bxr,cy,C.gold,C.gold_wash,'right')
             elseif not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
+            elseif fires_lock then chip(cv,L('LOCKED'),bxr,cy,C.faint,C.line,'right')
             elseif not open then chip(cv,L('IN ORDER'),bxr,cy,C.faint,C.line,'right')
             elseif source=='pending'then chip(cv,L('PENDING'),bxr,cy,C.pending,C.pending_soft,'right')
             elseif state=='applying'and self.layer:removing(row)then chip(cv,L('REMOVING'),bxr,cy,C.pending,C.pending_soft,'right')
@@ -1721,6 +1848,17 @@ function App:draw_status(y,h)
         local x=18
         if err then
             cv:text(Lf('Error: %s',tostring(err)),x,cy,{size=SZ.small,colour=C.error,max=maxw})
+            return
+        end
+        if row.link then
+            local name=self:link_name(row)
+            cv:text(Lf('Enter opens %s: an edit there changes %s and every weapon that fires its projectile (%d in all)',
+                name,name,row.link.consumers or 1),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
+            return
+        end
+        local locked=self:fires_block(row)
+        if locked and row.editable then
+            cv:text(Lf('Locked for now: %s',locked),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
             return
         end
         if not row.editable then

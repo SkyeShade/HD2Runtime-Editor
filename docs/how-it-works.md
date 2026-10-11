@@ -186,6 +186,28 @@ The log is read with `io.open`:
 
 Each line is classified by keywords (error, warning, ok, editor, perf, info) for its colour and the filters. **OPEN LOG FILE** and **SHOW IN FOLDER** use `ShellExecuteW`.
 
+## Projectile swaps: what the weapon fires
+
+HD2Runtime resolves a weapon's own projectile, direct-hit damage, impact / expiry explosion and status rows through
+the projectile the weapon fires. After a swap it refuses them (`COMPOSITION_TARGET_CHANGED`), its reset included.
+
+- **Scopes.** The catalogue tags those rows with `fires_scope` (`attack:<role>`; `function:programmable` for the
+  AC-8 / GR-8 / RL-77 feed; a mount's own `<weapon>|attack:primary`) and the swap row with `swap_scope`. Player
+  weapons tag the rows targeted through `weapon:attack(role):projectile()`; support and mounted weapons go by the
+  field's linkage (`projectile`, `projectile_damage`, `projectile_explosion*`, a status of those). `Catalog:open`
+  links them (`row.fires_from`, `swap.fires_rows`, `object.swap_rows`). Sentries' stratagem attack rows are not
+  tagged.
+- **The page.** `App:fires_sections` hides a swap's rows while it names a donor (`catalog.donor_of`: an output handle
+  that is not the weapon's own), except those holding a pending, applied or failed value of yours, shown locked
+  (`App:fires_block`: only their reset is accepted). `Catalog:donor_sections` adds "Fires" next to the swap and, with
+  `hd2.attack_output(id):stats()` (0.31.2), the donor's vanilla flight, direct hit and explosions as info rows, and a
+  link row when `:owner_projectile()` returns a handle (`App:open_link` opens the owner's page).
+- **Order.** Staging a swap to a donor drops the pending values of its rows. In the layer, `release_dependents` resets
+  the applied ones and `swap_wait` holds the swap until they are back; a value of yours on such a row waits while the
+  swap goes back to the own projectile, and is refused at once while it names a donor. Presets stage swaps first and
+  leave such values out (counted in the load message); the saved session keeps them saved but does not apply them;
+  exports skip them with the reason.
+
 ## Mount swaps
 
 A vehicle's mount row (kind `reference`, field `mount.weapon`, target `hd2.vehicle(name):mount(slot)`) offers the
