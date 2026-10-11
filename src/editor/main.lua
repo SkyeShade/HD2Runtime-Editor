@@ -144,7 +144,7 @@ function M.start(hd2,id)
     local ui_icons
     if type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
         ui_icons={}
-        for _,name in ipairs({'mod','edited','pending'})do
+        for _,name in ipairs({'mod','edited','pending','error'})do
             local ok,handle=pcall(hd2.resources.image,'ui_'..name)
             if ok and handle then ui_icons[name]=handle end
         end

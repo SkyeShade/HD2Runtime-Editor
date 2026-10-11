@@ -280,11 +280,11 @@ function App:row_view(row)
     return value,source,state,holder,err
 end
 
--- Objects with pending, active or mod-written fields (refreshed when the layer or ledger change).
+-- Objects with pending, active, failed or mod-written fields (refreshed when the layer or ledger change).
 function App:markers()
     local key=self.layer.version..':'..self.ledger.version..':'..self.pending_n
     if self.marker_key==key then return self.marker_cache end
-    local m={pending={},editor={},mod={},row_pending={},loc_editor={},loc_mod={},category={}}
+    local m={pending={},editor={},mod={},error={},row_pending={},loc_editor={},loc_mod={},loc_error={},category={}}
     local function in_category(object,kind)
         local category=object and object.category
         if not category then return end
@@ -314,6 +314,16 @@ function App:markers()
             m.editor[slot.row.object.key]=true
             in_category(slot.row.object,'editor')
         end
+        -- a refused or failed value marks its field, its object and its category as an edit does (and, on shared
+        -- bytes, every object that shows them)
+        if slot.error and slot.row and slot.row.object then
+            m.loc_error[loc]=true
+            for _,r in ipairs(self.catalog:siblings(slot.row))do
+                if r.object then m.error[r.object.key]=true;in_category(r.object,'error')end
+            end
+            m.error[slot.row.object.key]=true
+            in_category(slot.row.object,'error')
+        end
     end
     for loc,claims in pairs(self.ledger.by_loc)do
         for _,claim in ipairs(claims)do
@@ -341,13 +351,14 @@ function App:header_marks(item,m)
         if m.row_pending[row.key]then marks.pending=true end
         if m.loc_editor[row.loc]then marks.editor=true end
         if m.loc_mod[row.loc]then marks.mod=true end
+        if m.loc_error[row.loc]then marks.error=true end
     end
     item.marks,item.marks_key=marks,m.key
     return marks
 end
--- Draws the markers right to left from x (pending orange hourglass piece, edited by you yellow pencil piece, set by a
--- mod blue piece), centred on cy; returns the x left of them. The glyphs fill about half of their square (x 25% to
--- 76%), so the squares overlap: one glyph width and a small gap apart.
+-- Draws the markers right to left from x (an error: red exclamation piece; pending: orange hourglass piece; edited by
+-- you: yellow pencil piece; set by a mod: blue piece), centred on cy; returns the x left of them. The glyphs fill about
+-- half of their square (x 25% to 76%), so the squares overlap: one glyph width and a small gap apart.
 function App:draw_marks(marks,x,cy,size)
     local cv=self.canvas
     local step=math.floor(size*0.62+0.5)
@@ -361,6 +372,7 @@ function App:draw_marks(marks,x,cy,size)
         x=left+size-step
         first=false
     end
+    if marks.error then mark('error',C.error)end
     if marks.pending then mark('pending',C.pending)end
     if marks.editor then mark('edited',C.gold)end
     if marks.mod then mark('mod',C.mod)end
@@ -1363,10 +1375,10 @@ function App:draw_objects(y0,h)
             if self:draw_icon(object,x+18,y+5,rh-10)then tx=x+18+rh end
             cv:text(util.display_name(object),tx,y+15,{size=SZ.label,colour=selected and C.text or C.dim,max=w-56-(tx-x)})
             cv:text(util.display_subtitle(object)or'',tx,y+31,{size=SZ.tiny,colour=C.faint,max=w-56-(tx-x)})
-            -- markers, right to left: pending (orange hourglass piece), edited by you (yellow pencil piece), set by
-            -- a mod (blue piece)
+            -- markers, right to left: an error (red exclamation piece), pending (orange hourglass piece), edited by
+            -- you (yellow pencil piece), set by a mod (blue piece)
             self:draw_marks({pending=markers.pending[object.key],editor=markers.editor[object.key],
-                mod=markers.mod[object.key]},x+w-10,y+rh/2,34)
+                mod=markers.mod[object.key],error=markers.error[object.key]},x+w-10,y+rh/2,34)
         end})
 end
 
@@ -1495,6 +1507,7 @@ function App:draw_fields(y0,h)
             local edge=C.box_edge
             local colour=C.text
             if editing then edge=C.box_focus
+            elseif state=='error'and source~='pending'then edge=C.error
             elseif source=='pending'then edge,colour=C.pending,C.pending
             elseif source=='editor'then edge,colour=C.gold_dim,C.gold
             elseif source=='mod'then colour=C.mod end
@@ -1511,11 +1524,12 @@ function App:draw_fields(y0,h)
             end
             local unit=util.unit(row.unit)
             if unit then cv:text(unit,x+FX.unit,cy,{size=SZ.tiny,colour=C.faint,max=56})end
-            -- source badge
+            -- source badge (an error first: a refused value on a field that is locked or waiting for its order now
+            -- still says why it failed)
             local bxr=x+lw+FX.badge_right
-            if not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
+            if state=='error'then chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
+            elseif not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
             elseif not open then chip(cv,L('IN ORDER'),bxr,cy,C.faint,C.line,'right')
-            elseif state=='error'then chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
             elseif source=='pending'then chip(cv,L('PENDING'),bxr,cy,C.pending,C.pending_soft,'right')
             elseif state=='applying'then chip(cv,L('APPLYING'),bxr,cy,C.gold,C.gold_soft,'right')
             elseif source=='editor'then chip(cv,L('EDITED'),bxr,cy,C.gold,C.gold_wash,'right')

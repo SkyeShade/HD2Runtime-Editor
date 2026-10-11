@@ -88,7 +88,7 @@ local app=require('mods/skyeshade/hd2runtime_editor/editor/ui/app').new({hd2=fak
         return true
     end,
     hold_hotkey=function(on)H_hotkey.held=on end,
-    ui_icons={mod={image='ui_mod'},edited={image='ui_edited'},pending={image='ui_pending'}},id='mods/skyeshade/hd2runtime_editor',
+    ui_icons={mod={image='ui_mod'},edited={image='ui_edited'},pending={image='ui_pending'},error={image='ui_error'}},id='mods/skyeshade/hd2runtime_editor',
     strings=require('mods/skyeshade/hd2runtime_editor/editor/strings'),
     sounds={played={},tick=function()end,play=function(kind)H_sounds[#H_sounds+1]=kind end},
     -- the mod manager's list: one HD2Runtime mod (by its addon) and one asset mod
