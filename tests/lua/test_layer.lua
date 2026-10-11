@@ -155,6 +155,37 @@ do
     cat:check_owners(other)
     cat.real_hd2=real
     for _,r in ipairs(other.rows)do check(not r.foreign,'no inspect: nothing locked')end
+    -- bytes HD2Runtime keeps no claim for (a booster table) read 'changed', no owner, no reason, even when the editor
+    -- wrote them: such a field the editor (or an HD2Runtime mod) holds stays editable; one nothing explains is locked
+    -- with the value the game holds
+    local booster=cat:object('bo|Integrated Extinguishers')
+    if booster then
+        cat:open(booster)
+        local burn=booster.rows[1]
+        assert(layer:set(burn,0.9))
+        check(settle(burn)=='active','booster value applied')
+        local function changed(held)
+            for _,r in ipairs(booster.rows)do r.editable,r.foreign,r.reason=true,nil,nil end
+            booster.owners_checked=nil
+            cat.real_hd2=setmetatable({inspect=function(req)
+                local result={fields={}}
+                for i,f in ipairs(req.fields)do result.fields[i]={field=f.field,state='changed',value=0.9}end
+                req.on_result(result)
+                return {}
+            end},{__index=real})
+            cat:check_owners(booster,held)
+            cat.real_hd2=real
+        end
+        local function held(r)return layer:slot_of(r)~=nil end
+        changed(held)
+        check(burn.editable==true and not burn.foreign,'the editor\'s own booster value is not locked')
+        changed(function()return false end)
+        check(burn.editable==false and burn.reason:find('0.9',1,true)and burn.reason:find('another mod',1,true),
+            'an unexplained value is locked with what the game holds: '..tostring(burn.reason))
+        for _,r in ipairs(booster.rows)do r.editable,r.foreign,r.reason=true,nil,nil end
+        layer:reset(burn)
+        check(settle(burn)=='idle','booster value reset')
+    end
 end
 out[#out+1]='foreign values locked'
 return table.concat(out,'\n')

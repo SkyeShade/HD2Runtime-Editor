@@ -125,10 +125,21 @@ function App:object()
     local object=list[self.obj]
     if object then
         self.catalog:open(object)
-        -- values another mod (not HD2Runtime) owns are locked once the Runtime has read them (catalog check_owners)
-        if self.catalog.check_owners then pcall(self.catalog.check_owners,self.catalog,object)end
+        -- values another mod (not HD2Runtime) owns are locked once the Runtime has read them (catalog check_owners);
+        -- never one the editor or an HD2Runtime mod holds
+        if self.catalog.check_owners and not object.owners_checked then
+            self.held_by_runtime=self.held_by_runtime or function(row)return self:held_by_runtime_fn(row)end
+            pcall(self.catalog.check_owners,self.catalog,object,self.held_by_runtime)
+        end
     end
     return object
+end
+-- Whether HD2Runtime holds a field's bytes as far as the editor knows: the editor's own ensure on them (held, being
+-- applied or taken over) or a value an HD2Runtime mod applied (the ledger's claims).
+function App:held_by_runtime_fn(row)
+    local slot=self.layer.slots[row.loc]
+    if slot and(slot.watch or slot.next_watch or slot.user)then return true end
+    return#self.ledger:holders(row.loc)>0
 end
 -- The selected object's flat field list: {{section=label} | {row=row}}, and the indices of rows.
 function App:is_open(object,key)return self.expanded[object.key..'\0'..key]==true end

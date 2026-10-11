@@ -2349,7 +2349,12 @@ local function handle_key(handle)
     table.sort(parts)
     return table.concat(parts,'|')
 end
-function Catalog:check_owners(object)
+-- held(row): whether HD2Runtime itself holds the field's bytes as far as the editor knows (the editor's own ensure, or a
+-- value an HD2Runtime mod applied). Bytes without a native record identity (booster tables, entity deltas: HD2Runtime's
+-- core/shared_records keeps no claim for them) are reported 'changed' with no owner and no reason even when an
+-- HD2Runtime operation wrote them, so such a field is locked only when nothing in HD2Runtime explains its value: an
+-- applied booster edit was shown LOCKED, its own value taken for another mod's.
+function Catalog:check_owners(object,held)
     local hd2=self.real_hd2
     if object.owners_checked or type(hd2)~='table'or type(hd2.inspect)~='function'then return end
     object.owners_checked=true
@@ -2374,7 +2379,9 @@ function Catalog:check_owners(object)
         pcall(hd2.inspect,{target=g.target,fields=g.fields,on_result=function(result)
             for i,f in ipairs(result.fields or{})do
                 local row=g.rows[i]
-                if row and(f.state=='foreign'or f.state=='changed')then
+                local untracked=f.state=='changed'and f.owner==nil and f.reason==nil
+                local ours=untracked and type(held)=='function'and select(2,pcall(held,row))==true
+                if row and not ours and(f.state=='foreign'or f.state=='changed')then
                     row.editable=false
                     row.foreign=true
                     -- foreign: a value (or a whole component table another mod moved: no value then); changed with
@@ -2385,6 +2392,11 @@ function Catalog:check_owners(object)
                             or'')..'; HD2Runtime leaves it as it is'
                     elseif f.owner=='unknown'then
                         row.reason='another mod (not HD2Runtime) changed the data of this item; HD2Runtime leaves it as it is'
+                    elseif untracked then
+                        -- (no claim to name: neither the editor nor an HD2Runtime mod applied a value here)
+                        row.reason='the game holds '..(f.value~=nil and util.format(f.value)or'another value')
+                            ..' here, not the reviewed '..util.value_text(row.vanilla)..', and no HD2Runtime mod applied '
+                            ..'it: another mod (not HD2Runtime) changed it; HD2Runtime leaves it as it is'
                     else
                         row.reason='its game data is not as HD2Runtime reviewed it'..(f.reason and(' ('
                             ..util.plain(tostring(f.reason),160)..')')or'')
