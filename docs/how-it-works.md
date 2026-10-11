@@ -105,6 +105,15 @@ after 20 s shows an error with the ensure's state (`status`, `runs`, `rebinds`, 
 `debug()` settle state) instead of applying forever. Every editor ensure's status
 changes (`on_status`) and every steer are written to `HD2Runtime.log`.
 
+HD2Runtime runs one guarded operation at a time (`runtime/exclusive.lua`); the others report `queued`, and each
+operation takes a few updates (a fresh discovery, capture and re-read). So a preset of 300 fields takes about 20 to 30
+seconds to be written, whatever the editor does: it registers one ensure per field so that each refusal stays on its
+own field (a transaction or plan of many fields is all or nothing, and one CONFLICT would block and stop maintaining
+every field in it). The time a steer's operation spends `queued` behind others does not count towards the 4 s and 20 s
+above (a 300-field preset re-applied over held fields queued steers past 20 s, and they were shown failed although
+they applied afterwards). At most 16 fields start their ensure in one update (registering 300 at once, each with its
+bind-time proof, cost one frame of about 60 ms); the rest start on the next updates, shown applying meanwhile.
+
 If the stuck field still holds its original value, the stuck ensure is cancelled instead and the value is written
 directly by a fresh ensure (as above).
 

@@ -52,6 +52,17 @@ local FAILED={rejected=true,blocked=true,cancelled=true,unavailable=true}
 -- there, at most READOPTS times. A steer that started but has not confirmed after GIVE_UP seconds is shown as an error
 -- with the ensure's state. Every editor ensure's status changes, and these decisions, are written to HD2Runtime.log.
 local STALL,GIVE_UP,READOPTS=4,20,2
+-- HD2Runtime runs one guarded operation at a time (runtime/exclusive.lua); the others report 'queued'. Time an ensure's
+-- operation spends queued behind them is not the steer's: a preset re-applied over 300 held fields queued its steers
+-- for more than GIVE_UP seconds, and 15 were shown failed that the Runtime applied afterwards.
+local function queued(w)
+    if type(w)~='table'or type(w.debug)~='function'then return false end
+    local ok,d=pcall(w.debug)
+    return ok and type(d)=='table'and d.child=='queued'
+end
+-- At most this many fields start an ensure in one update: registering 300 at once (each with its bind-time proof) cost
+-- one 53-64 ms frame. The Runtime resolves them one at a time anyway (3-6 updates each), so the cap costs no time.
+local ADOPTS_PER_TICK=16
 local function watch_state(w)
     if type(w)~='table'then return 'no operation'end
     local text='status='..tostring(w.status)..' runs='..tostring(w.runs)..' rebinds='..tostring(w.rebinds)
@@ -760,6 +771,7 @@ function Layer:tick(dt)
         if step_group(self,self.groups[i])then table.remove(self.groups,i)end
     end
     -- A snapshot: adopting a field can add the slots of a mod operation's other fields.
+    local adopts=0
     local list={}
     for _,slot in pairs(self.slots)do list[#list+1]=slot end
     for _,slot in ipairs(list)do
@@ -776,6 +788,7 @@ function Layer:tick(dt)
                 slot.dirty=not util.same(slot.target,slot.held)
                 self:changed()
             else
+                if queued(w)then slot.steer_started=(slot.steer_started or 0)+(dt or 0)end
                 local waited=(self.clock or 0)-(slot.steer_started or 0)
                 local settled=w.rebinds~=nil and w.rebinds~=slot.rebinds_at
                 if waited>=STALL and not settled and not slot.stalled and not slot.nudged
@@ -821,19 +834,24 @@ function Layer:tick(dt)
             -- conversion, the rearm pool and the mission uses for each other, a status slot for its neighbours
         elseif slot.phase=='hold'or slot.phase=='idle'then
             if slot.dirty then
-                slot.dirty=false
                 local target=slot.target
                 if target==nil then
+                    slot.dirty=false
                     if not slot.watch then self.slots[slot.loc]=nil end
                 elseif slot.phase=='hold'and util.same(slot.held,target)then
+                    slot.dirty=false
                     release_if_done(self,slot)
                 elseif slot.phase=='idle'and not slot.user and util.same(target,hold(slot.row,self:base(slot.row)))then
+                    slot.dirty=false
                     self.slots[slot.loc]=nil
                 elseif slot.watch and slot.handle and self:covers(slot.handle,target)then
+                    slot.dirty=false
                     self:steer(slot)
-                else
+                elseif adopts<ADOPTS_PER_TICK then
+                    slot.dirty,adopts=false,adopts+1
                     self:adopt(slot)
                 end
+                -- (else: more fields than one update registers; this one starts on the next, still applying)
             elseif slot.phase=='hold'then
                 if slot.watch and FAILED[slot.watch.status]then
                     local w=slot.watch

@@ -201,7 +201,8 @@ class EditorTests(unittest.TestCase):
             lua_host._lua_string((LUA / 'test_layer_values.lua').as_posix()),
             lua_host._lua_string((LUA / 'sim.lua').as_posix())))
         for line in ('calldown code ok', 'mission uses ok', 'boolean ok', 'status ok', 'projectile swap ok',
-                     'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'direct first edit ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'skipped steer settled again ok', 'disable sentinel ok', 'helldiver fields ok', 'armor stats ok', 'armor perks ok', 'mod code takeover ok', 'base value is a reset ok', 'turret limits ok'):
+                     'terminal explosion ok', 'refusals ok', 'rate slots with selector binding ok', 'direct first edit ok', 'armory traits ok', 'displayed penetration ok', 'steer watchdog ok', 'skipped steer settled again ok', 'disable sentinel ok', 'helldiver fields ok', 'armor stats ok', 'armor perks ok', 'mod code takeover ok', 'base value is a reset ok', 'turret limits ok', 'queued steer ok',
+                     'registration cap ok'):
             self.assertIn(line, result)
         # HD2Runtime 0.31.0: a weapon without a fire-mode selector binds it with its second mode (when the Runtime
         # under test offers the binding)

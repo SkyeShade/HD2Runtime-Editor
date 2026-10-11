@@ -126,6 +126,66 @@ check(state=='idle'and util.same(layer:value(wd),wd.vanilla),'the reset applied 
 layer:reset(wd)
 settle(wd)
 out[#out+1]='steer watchdog ok'
+-- a steer queued behind other guarded operations (HD2Runtime runs one at a time) is not a stalled one: however long it
+-- waits, it is neither taken over nor given up, and it completes when its operation runs
+do
+    local q=row_of('pw|AR-11 Arbitrator',function(r)return r.field=='weapon.horizontal_spread'end)
+    run(1)
+    assert(layer:set(q,10))
+    check(settle(q)=='active','queued field active')
+    local slot=layer:slot_of(q)
+    local real=slot.watch
+    local fake={status='running',runs=real.runs,rebinds=real.rebinds,recoveries=0,cancel=function()end,
+        debug=function()return {child='queued'}end}
+    slot.watch=fake
+    local mark=#layer.history
+    assert(layer:set(q,12))
+    run(30)
+    check(layer:state(q)=='applying','still applying after 30 s queued: '..tostring((select(2,layer:state(q)))))
+    for i=mark+1,#layer.history do
+        check(not layer.history[i]:find('fresh ensure')and not layer.history[i]:find('not confirmed'),
+            'no takeover or give-up while queued: '..layer.history[i])
+    end
+    -- its operation runs: the steer completes
+    fake.status,fake.runs='waiting',real.runs+1
+    run(1)
+    check(layer:state(q)=='active'and layer:value(q)==12,'the queued steer completed')
+    slot.watch=real
+    run(1)
+    layer:reset(q)
+    check(settle(q)=='idle','queued field released')
+end
+out[#out+1]='queued steer ok'
+-- many fields at once: at most ADOPTS_PER_TICK (16) start their ensure in one update, the rest on the next ones, all
+-- shown applying meanwhile, and every one applies
+do
+    local list,used={},{}
+    for _,name in ipairs({'pw|AR-23 Liberator','pw|AR-11 Arbitrator','pw|BR-14 Adjudicator','pw|P-19 Redeemer',
+        'pw|AR-61 Tenderizer','pw|SG-225 Breaker'})do
+        local o=cat:object(name)
+        if o then cat:open(o)end
+        for _,r in ipairs(o and o.rows or{})do
+            if not r.kind and r.editable and type(r.vanilla)=='number'and#list<40 and not r.shared and not used[r.loc]
+                and not layer:slot_of(r)and not r.conversion_enabled and not r.conversion and r.disabled_value==nil then
+                local v=util.representable(r.vanilla+1,r.integer,r.storage)
+                if v and(not r.max or v<=r.max)and(not r.min or v>=r.min)then list[#list+1]={row=r,v=v};used[r.loc]=true end
+            end
+        end
+    end
+    check(#list>20,'enough fields: '..#list)
+    run(1)
+    for _,item in ipairs(list)do assert(layer:set(item.row,item.v))end
+    layer:tick(0)
+    local started=0
+    for _,item in ipairs(list)do if layer:slot_of(item.row).phase=='adopt'then started=started+1 end end
+    check(started==16,'16 ensures started in the first update: '..started)
+    local _,applying=layer:counts()
+    check(applying==#list,'every field shown applying: '..applying)
+    for _,item in ipairs(list)do check(settle(item.row)=='active','applied: '..item.row.key)end
+    for _,item in ipairs(list)do layer:reset(item.row)end
+    for _,item in ipairs(list)do settle(item.row)end
+end
+out[#out+1]='registration cap ok'
 
 -- a steer the ensure skips (live r52-r55: its settle found the signature it applied last) is settled again: the
 -- editor forgets the applied signature on every steer, and once more with a diagnostic when it still stalls
