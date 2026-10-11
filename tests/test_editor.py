@@ -215,6 +215,9 @@ class EditorTests(unittest.TestCase):
         result = lua_host.run('local f=assert(loadfile(%s)) return f()' % lua_host._lua_string(
             (LUA / 'test_runtime_rows.lua').as_posix()))
         self.assertIn('beam conversion ok', result)
+        pods = lua_host.RUNTIME / 'domains' / 'pod_payload_authoring.lua'
+        if pods.is_file() and 'EAT-411 Leveller pod' in pods.read_text(encoding='utf-8'):
+            self.assertIn('empty hellpod slots ok', result)
         if (lua_host.RUNTIME / 'domains' / 'status_effect_writes.lua').is_file():
             for line in ('beam swaps ok', 'beam fire mode ok', 'team reload ok', 'derived heat ok',
                          'mounted sections ok', 'ammunition swap ok'):

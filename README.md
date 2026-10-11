@@ -170,7 +170,7 @@ What each field shows:
 | `REMOVING` (orange) | Being reset: shown until HD2Runtime has the default value back (REVERT ALL counts them) |
 | `EDITED` (yellow) | Your value is live |
 | `ERROR` (red) | HD2Runtime refused the change; the status bar says why, and the ERRORS badge (Ctrl+E) lists every one |
-| `LOCKED` | Read-only: the status bar says why (HD2Runtime's reason, another mod owns it, or more than 3 decimals) |
+| `LOCKED` | Read-only: the status bar says why ("Read-only in HD2Runtime" with HD2Runtime's own reason, another mod owns it, or more than 3 decimals) |
 | `INFO` | A fact, not a value: a beam conversion's verdict, caveats and layout |
 
 The status bar shows the selected field's id and range, whether it is **SHARED** (other weapons or objects use the same record), whether its effect is unverified in game, and which mod set it.

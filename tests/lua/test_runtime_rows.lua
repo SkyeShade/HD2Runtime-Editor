@@ -297,6 +297,26 @@ do
         out[#out+1]='sterilizer note ok'
     end
 end
+-- hellpods: an empty slot is shown as Empty (hd2.pickup('empty') raises; every empty slot used to be left out), and a
+-- rack HD2Runtime publishes read-only is locked with its own reason, not as another mod's value
+do
+    local P=has('pod_payload_authoring')and require('hd2runtime/domains/pod_payload_authoring')
+    local rack=P and P.racks and P.racks['EAT-411 Leveller pod']
+    local second=rack and rack.slots and(rack.slots['2']or rack.slots[2])
+    if type(second)=='table'and second.current=='empty'then
+        local slot2=find(rows('sp|EAT-411 Leveller'),function(r)return r.key:find('payload.slot_2',1,true)end)
+        check(slot2 and slot2.editable and slot2.vanilla=='empty'and catalog.text(slot2,'empty')=='Empty',
+            'EAT-411 empty slot 2 shown: '..tostring(slot2 and catalog.text(slot2,slot2.vanilla)))
+        out[#out+1]='empty hellpod slots ok'
+    end
+    local tx=P and P.racks and P.racks['TX-41 Sterilizer pod']
+    if type(tx)=='table'and tx.writable==false then
+        local count=find(rows('sp|TX-41 Sterilizer'),function(r)return r.field=='payload.spawn_count'end)
+        check(count and not count.editable and count.reason==tx.reason and not count.foreign and not count.editor_lock,
+            'TX-41 Items spawned locked with the Runtime reason')
+        out[#out+1]='read-only hellpod ok'
+    end
+end
 -- the localisation template's catalogue part: every object name, section, group and field label it shows, once
 do
     local texts,seen=cat:texts(),{}

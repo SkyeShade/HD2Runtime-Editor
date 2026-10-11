@@ -408,6 +408,7 @@ return {
     'range %s to %s, whole numbers',
     'Rate and pulse',
     'RATE-OF-FIRE MODES',
+    'Read-only in HD2Runtime: %s',
     'reading',
     'Reading %s: %d%%',
     'reading the mod manager...',

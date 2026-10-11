@@ -215,6 +215,7 @@ local function make_row(object,spec)
         local held=util.representable(row.vanilla,integer,spec.storage)
         if held==nil then
             row.editable,row.reason=false,'its default '..tostring(row.vanilla)..' needs more than 3 decimals'
+            row.editor_lock=true
         else row.held_vanilla=held end
     end
     return row
@@ -927,13 +928,19 @@ local function support_rows(hd2,object,entry)
     local base_code='hd2.support_weapon('..string.format('%q',name)..')'
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
-        if f.editable and f.type=='projectile_reference'and t.path=='attack'then
+        if f.type=='projectile_reference'and t.path=='attack'and not f.deprecated then
+            -- (a swap HD2Runtime publishes read-only is shown locked with its reason, where a player looks for it)
             local role=t.attack or'primary'
-            rows[#rows+1]=source_row(object,{id='attack.projectile@'..role,label='Projectile',
+            local row=source_row(object,{id='attack.projectile@'..role,label='Projectile',
                 section=join('Projectile',role_label(role),'Swap'),descriptor=f,field='attack.projectile',
                 code=base_code..':projectile_source('..string.format('%q',role)..')',
                 source=function()return hd2.support_weapon(name):projectile_source(role)end,
                 options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
+            if not f.editable and row.editable then
+                row.editable,row.reason=false,tostring(f.reason or'read-only in this HD2Runtime')
+                row.vanilla,row.kind,row.labels='own','reference',{{value='own',label='Own projectile'}}
+            end
+            rows[#rows+1]=row
         elseif f.editable and f.type=='beam_reference'then
             rows[#rows+1]=source_row(object,{id='attack.beam',label='Beam',section='Beam · Swap',descriptor=f,
                 field='attack.beam',code=base_code..':beam_source()',
@@ -1766,8 +1773,10 @@ local function pod_rows(hd2,object,rack)
         if type(slot)=='table'then
             local index=i
             local current=slot.current
+            -- (an empty slot is 'empty', which is not a pickup: hd2.pickup('empty') raises, and every empty slot was
+            -- left out, the EAT-411's active second slot too)
             local expect=function()
-                if current then return hd2.pickup(current)end
+                if current and current~='empty'then return hd2.pickup(current)end
                 return 'empty'
             end
             local ok,vanilla=pcall(expect)

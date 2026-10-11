@@ -1622,8 +1622,12 @@ function App:draw_status(y,h)
         end
         if not row.editable then
             -- (an information row, such as a beam conversion's verdict or caveat, is not a lock)
+            -- a field HD2Runtime itself publishes read-only says so (not a lock by another mod: that reason names one)
             local reason=L(tostring(row.reason))
-            cv:text(row.info and Lf('Note: %s',reason)or Lf('Locked: %s',reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
+            local text=row.info and Lf('Note: %s',reason)
+                or(row.foreign or row.editor_lock)and Lf('Locked: %s',reason)
+                or Lf('Read-only in HD2Runtime: %s',reason)
+            cv:text(text,x,cy,{size=SZ.small,colour=C.faint,max=maxw})
             return
         end
         local blocked=self:slot_block(row)
