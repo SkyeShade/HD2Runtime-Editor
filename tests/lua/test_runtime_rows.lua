@@ -127,7 +127,11 @@ if has_0_31_1 then
         'G-4 Gas third status: '..tostring(third.section))
     local offered={}
     for _,o in ipairs(third.labels or{})do offered[o.value]=true end
-    check(offered.none and offered.fire and not offered.acid_storm,'G-4 Gas third status choices')
+    -- (acid_storm only where the Runtime's status catalogue makes it attachable: HD2Runtime 0.31.2)
+    local SC=has('status_catalog')and require('hd2runtime/domains/status_catalog')
+    local storm=SC and SC.statuses and SC.statuses.acid_storm
+    check(offered.none and offered.fire and(offered.acid_storm or false)==(storm and storm.attachable==true or false),
+        'G-4 Gas third status choices')
     check(peacemaker and hit and flak,('0.31.1 rows on %s: Peacemaker %s, Spear direct hit %s, AC-8 flak %s'):format(
         version,tostring(peacemaker~=nil),tostring(hit~=nil),tostring(flak~=nil)))
 end
@@ -167,6 +171,9 @@ do
         for _,r in ipairs(rows('ve|TD-110 Maelstrom'))do if r.group then groups[r.group]=true end end
         check(groups['Weapon · Driver gun']and groups['Weapon · Missile pods (slot 3)']
             and groups['Weapon · Missile pods (slot 4)']and not groups['Weapon · Slot 3'],'Maelstrom mounts named')
+        check(groups['Weapon · Main cannon']and not groups['Weapon · Attach tank gun'],'Maelstrom main cannon named')
+        local mount=find(rows('ve|TD-110 Maelstrom'),function(r)return r.mount_slot=='slot_0'end)
+        check(not mount or mount.label=='Main cannon','Maelstrom main mount row: '..tostring(mount and mount.label))
         local bastion=rows('ve|TD-220 Bastion MK XVI')
         local mg=find(bastion,function(r)return r.group=='Weapon · Coaxial MG'and r.field=='weapon.capacity'end)
         check(find(bastion,function(r)return r.group=='Weapon · Cannon'end),'Bastion cannon named')
