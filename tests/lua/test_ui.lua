@@ -1416,6 +1416,77 @@ do
     assert(note,'Settings says the game names need a newer Runtime')
     util.game_name,util.names_version,H.app.ctx.game_names=nil,nil,nil
 end
+-- the errors list: a refused value marks its field (ERROR), its object and its category with the red piece; the ERRORS
+-- badge (a click) or Ctrl+E lists it with the value, the Runtime's code and reason and where it came from; Enter opens
+-- the field in BROWSE with its group opened; Ins writes the list to the log and shows LOGS
+do
+    local o=H.catalog:object('pw|GL-15 Evictor');H.catalog:open(o)
+    local s={}
+    for _,r in ipairs(o.rows)do
+        if r.status_slot and r.field:find('^explosion%.')then s[r.status_slot.kind..r.status_slot.n]=r end
+    end
+    if s.type2 then
+        H.app:discard()
+        -- slot 2 without slot 1, as a preset could ask for it: refused with STATUS_SLOT_GAP when it would apply
+        assert(H.layer:set(s.type2,'gas_confusion',{kind='preset',name='Gas kit'}))
+        settle(1)
+        local _,_,errors=H.layer:counts()
+        assert(errors==1 and H.layer:state(s.type2)=='error','one error: '..tostring(errors))
+        local m=H.app:markers()
+        assert(m.error[o.key]and m.loc_error[s.type2.loc]and m.category[o.category].error,'object and category marked')
+        H.app:set_view('browse')
+        local d=step({},nil,'71_error_markers')
+        local icon,badge=false,nil
+        for _,item in ipairs(d.items)do
+            if item.k=='i'and item.image=='ui_error'then icon=true end
+            if item.k=='t'and item.s=='1 ERROR'then badge=item end
+        end
+        assert(icon and badge,'the red error piece and the badge are drawn')
+        -- Ctrl+E opens the list
+        step({'E'},{down={'CTRL'}})
+        assert(H.app.errors_popup,'Ctrl+E opens the errors list')
+        d=step({},nil,'72_errors_list')
+        local texts={}
+        for _,item in ipairs(d.items)do if item.k=='t'then texts[#texts+1]=item.s end end
+        local all=table.concat(texts,'\n')
+        assert(all:find('STATUS_SLOT_GAP',1,true)and all:find('Preset: Gas kit',1,true)
+            and all:find(H.app:text(s.type2,'gas_confusion'),1,true)and all:find(s.type2.label,1,true),
+            'the list shows code, source, value and field: '..all:sub(1,800))
+        -- Enter: the field in BROWSE, its group and section opened, the row selected
+        step({'ENTER'})
+        assert(not H.app.errors_popup and H.app.view=='browse'and H.app.focus=='fields','opened in BROWSE')
+        local row=H.app:focused_row()
+        assert(row and row.key==s.type2.key,'the failed row is selected: '..tostring(row and row.key))
+        assert(H.app:object()==o,'its object is selected')
+        d=step({},nil,'73_error_field')
+        local chip=false
+        for _,item in ipairs(d.items)do if item.k=='t'and item.s=='ERROR'then chip=true end end
+        assert(chip,'the field shows its ERROR chip')
+        -- the badge, clicked
+        for _,item in ipairs(d.items)do if item.k=='t'and item.s=='1 ERROR'then badge=item end end
+        step({},{mouse={x=badge.x+4,y=badge.y,left=false}})
+        step({},{mouse={x=badge.x+4,y=badge.y,left=true}})
+        step({},{mouse={x=badge.x+4,y=badge.y,left=false}})
+        assert(H.app.errors_popup,'a click on the badge opens the list')
+        -- Ins: written to the log, LOGS shown on its Errors filter
+        local logged={}
+        local log=H.app.ctx.log
+        H.app.ctx.log=function(text)logged[#logged+1]=text end
+        step({'INSERT'})
+        H.app.ctx.log=log
+        assert(not H.app.errors_popup and H.app.view=='logs'and H.app.log_filter=='error','shown in LOGS')
+        assert(#logged==2 and logged[2]:find('STATUS_SLOT_GAP',1,true)and logged[2]:find('Gas kit',1,true),
+            'one line per error: '..tostring(logged[2]))
+        H.app.log_filter=nil
+        -- Esc closes it; resetting the field clears the error and the markers
+        H.app:open_errors();step({'ESCAPE'})
+        assert(not H.app.errors_popup and H.app.view=='logs','Esc closes only the list')
+        H.layer:reset(s.type2)
+        settle(1)
+        assert(select(3,H.layer:counts())==0 and not H.app:markers().error[o.key],'reset: no error left')
+        H.app:set_view('browse')
+    end
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

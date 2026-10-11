@@ -72,7 +72,7 @@ function M.install(App)
     function App:load_preset(name)
         local values=self.presets:load(name)
         if not values then return end
-        local missing=self:stage_map(values)
+        local missing=self:stage_map(values,{kind='preset',name=name})
         self:toast(App.loaded_text(name,self.pending_n,missing),missing>0 and C.pending or C.ok)
     end
     -- The list index of a saved preset, of a shared file (by path) or of the first entry of a kind.
@@ -203,7 +203,7 @@ function M.install(App)
         end
         local p=open.preset
         if a=='LOAD'then
-            local missing=self:stage_map(p.values)
+            local missing=self:stage_map(p.values,{kind='preset',name=p.name})
             self:toast(App.loaded_text(p.name,self.pending_n,missing),missing>0 and C.pending or C.ok)
         elseif a=='ICON'then
             self:open_icon_picker({file=f.path},p.icon,p.name)

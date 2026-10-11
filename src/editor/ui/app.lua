@@ -14,6 +14,7 @@ local export_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/export_vie
 local search_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/search_view')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local presets_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/presets_view')
+local errors_view=require('mods/skyeshade/hd2runtime_editor/editor/ui/errors_view')
 local L=i18n.L
 local Lf=i18n.Lf
 local C,SZ=theme.colour,theme.size
@@ -343,7 +344,7 @@ function App:markers()
     self.marker_key,self.marker_cache=key,m
     return m
 end
--- What a collapsible header's rows hold: {pending, editor, mod} (cached on the item per marker state).
+-- What a collapsible header's rows hold: {pending, editor, mod, error} (cached on the item per marker state).
 function App:header_marks(item,m)
     if item.marks_key==m.key then return item.marks end
     local marks={}
@@ -454,9 +455,11 @@ local function slot_order(list,row_of)
     return out
 end
 App.slot_order=slot_order
-function App:stage(row,value)
+-- origin: where the value comes from, kept with the pending value and the applied field for the errors list
+-- ({kind = 'preset', name} | {kind = 'session'}; a personal edit when nil).
+function App:stage(row,value,origin)
     if not row.editable then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error);return false end
-    local staged=self:stage_value(row,value)
+    local staged=self:stage_value(row,value,origin)
     -- accepted: any value staged on another row of the same bytes gives way to it
     if staged then self:unstage_siblings(row)end
     if staged and self.pending[row.key]then
@@ -470,7 +473,7 @@ function App:stage(row,value)
     end
     return staged
 end
-function App:stage_value(row,value)
+function App:stage_value(row,value,origin)
     local refused=self:slot_refusal(row,value)
     if refused then self:toast(Lf('%s: %s',L(row.label),refused),C.error);return false end
     if row.kind then
@@ -488,7 +491,7 @@ function App:stage_value(row,value)
             return true
         end
         if not existing then self.pending_n=self.pending_n+1 end
-        self.pending[row.key]={row=row,value=value}
+        self.pending[row.key]={row=row,value=value,origin=origin}
         return true
     end
     local held=util.representable(value,row.integer,row.storage)
@@ -509,7 +512,7 @@ function App:stage_value(row,value)
         return true
     end
     if not existing then self.pending_n=self.pending_n+1 end
-    self.pending[row.key]={row=row,value=held}
+    self.pending[row.key]={row=row,value=held,origin=origin}
     return true
 end
 function App:unstage(row)
@@ -524,7 +527,7 @@ function App:unstage(row)
     end
     return false
 end
-function App:stage_map(map)
+function App:stage_map(map,origin)
     local missing=0
     local staged={}
     for _,key in ipairs(util.sorted_keys(map))do
@@ -538,14 +541,14 @@ function App:stage_map(map)
         end
     end
     -- (status slot 1 before slot 2: the slots fill in order)
-    for _,item in ipairs(slot_order(staged,function(x)return x.row end))do self:stage(item.row,item.value)end
+    for _,item in ipairs(slot_order(staged,function(x)return x.row end))do self:stage(item.row,item.value,origin)end
     return missing
 end
 function App:apply()
     if self.pending_n==0 then self:toast(L('Nothing to apply'),C.dim);return end
     local n,failed=0,0
     for key,p in pairs(self.pending)do
-        local ok,why=self.layer:set(p.row,p.value)
+        local ok,why=self.layer:set(p.row,p.value,p.origin)
         if ok then self.pending[key]=nil;n=n+1 else failed=failed+1;self:toast(Lf('%s: %s',L(p.row.label),tostring(why)),C.error)end
     end
     self.pending_n=failed
@@ -775,6 +778,7 @@ function App:handle_keys(f)
     if self.moder then return self:handle_modes_keys(f)end
     if self.rater then return self:handle_rates_keys(f)end
     if self.traiter then return self:handle_traits_keys(f)end
+    if self.errors_popup then return self:handle_errors_keys(f)end
     if self.confirm then
         if k.ENTER or k.INSERT then self:confirm_yes()
         elseif k.ESCAPE or k.BACKSPACE or k.DELETE then self.confirm=nil end
@@ -843,6 +847,8 @@ function App:handle_keys(f)
         self.focus='objects'
         return
     end
+    -- Ctrl+E: the errors list (the header's ERRORS badge)
+    if f.ctrl and self:key_down_once('E')then self:open_errors();return end
     if self.view=='browse'then self:handle_browse_keys(f)
     elseif self.view=='search'then self:handle_search_keys(f)
     elseif self.view=='changes'then self:handle_changes_keys(f)
@@ -875,7 +881,8 @@ App.DEFAULT_HOTKEY='F8'
 M.DEFAULT_HOTKEY=App.DEFAULT_HOTKEY
 function App:hotkey()return tostring(self.ctx.hotkey or App.DEFAULT_HOTKEY)end
 -- Why a chord cannot open and close the editor, or nil: the keys the editor reads while open (with any modifier),
--- the keys it types with (unless Ctrl or Alt is held), Ctrl+F (search) and Alt+F4. name: an hd2.input key name.
+-- the keys it types with (unless Ctrl or Alt is held), Ctrl+F (search), Ctrl+E (errors) and Alt+F4. name: an hd2.input
+-- key name.
 function App.hotkey_refusal_fn(...)return M.hotkey_refusal(...)end
 function M.hotkey_refusal(name,ctrl,shift,alt)
     for _,nav in ipairs(input_module.NAV)do
@@ -885,6 +892,7 @@ function M.hotkey_refusal(name,ctrl,shift,alt)
         return Lf('%s types text in the editor: hold Ctrl or Alt with it',name)
     end
     if ctrl and not alt and not shift and name=='F'then return L('Ctrl+F searches in the editor')end
+    if ctrl and not alt and not shift and name=='E'then return L('Ctrl+E opens the errors list in the editor')end
     if name=='F10'and not ctrl and not alt and not shift then return L('F10 opens the HD2Runtime settings')end
     if alt and name=='F4'then return L('Alt+F4 closes the game')end
     return nil
@@ -1148,13 +1156,21 @@ function App:draw_header()
     cv:hit(P.w-50,12,36,34,self.btn_close)
     local rx=P.w-62
     local active,applying,errors=self.layer:counts()
-    -- status chips right to left, each only while it clears the tabs
-    local function status(text,fg,bg)
+    -- status chips right to left, each only while it clears the tabs; one with an action is a button
+    local function status(text,fg,bg,action)
         local w=cv:measure(text,SZ.tiny,'title')+14
         if rx-w<tabs_end then return end
+        if action then
+            if self.hover==action then cv:frame(rx-w-2,h/2-12,w+4,24,fg,4)end
+            cv:hit(rx-w-4,h/2-14,w+8,28,action)
+        end
         rx=rx-chip(cv,text,rx,h/2,fg,bg,'right')-8
     end
-    if errors>0 then status(errors..' '..(errors==1 and L('ERROR')or L('ERRORS')),C.error,C.error_soft)end
+    -- the errors badge opens the errors list (also Ctrl+E)
+    self.btn_errors=self.btn_errors or{click=function()self:open_errors()end}
+    if errors>0 then
+        status(errors..' '..(errors==1 and L('ERROR')or L('ERRORS')),C.error,C.error_soft,self.btn_errors)
+    end
     if applying>0 then
         local pulse=0.55+0.45*math.abs(math.sin(self.time*4))
         status(L('APPLYING')..' '..applying,{255,199,44,math.floor(255*pulse)},C.gold_soft)
@@ -1739,12 +1755,34 @@ function App:goto_object(object)
     end
     return false
 end
+-- Opens a field in BROWSE: its object selected, the group and section holding it opened, the row selected and scrolled
+-- into view. True when the row is shown on its page (a row of a mount's original weapon is not while the mount holds
+-- another weapon: then only the object is selected).
 function App:reveal(row)
     local object=row.object
     self:goto_object(object)
-    local items,selectable=self:field_items(self.catalog:open(object))
-    for s,index in ipairs(selectable)do if items[index].row==row then self.field=s end end
-    self.view,self.focus='browse','fields'
+    self.catalog:open(object)
+    local function same(r)return r==row or(r.key~=nil and r.key==row.key)end
+    for _,section in ipairs((self:effective_sections(object)))do
+        for _,r in ipairs(section.rows)do
+            if same(r)and section.group then
+                self:toggle(object,'g|'..section.group,true)
+                self:toggle(object,'s|'..section.group..'|'..section.label,true)
+            end
+        end
+    end
+    local items,selectable=self:field_items(object)
+    local found
+    for s,index in ipairs(selectable)do
+        local r=items[index].row
+        if r and same(r)then self.field,found=s,index;break end
+    end
+    if not found then self.field=1 end
+    -- (the selected row a few rows from the top: the list keeps it in view from there)
+    self.field_scroll=found and math.max(0,found-5)or 0
+    self.field_scroll_selected=nil
+    self.view,self.focus='browse',found and'fields'or'objects'
+    return found~=nil
 end
 ---------------------------------------------------------------------------------------------- presets view --
 function App:current_values()
@@ -1895,6 +1933,7 @@ function App:draw()
     self:draw_footer(P.h-theme.footer_h,theme.footer_h)
     cv:rect(0,0,3,P.h,C.rail,7)
     self:draw_confirm()
+    self:draw_errors()
     self:draw_picker()
     self:draw_code()
     self:draw_modes()
@@ -1906,5 +1945,6 @@ views.install(App)
 export_view.install(App)
 search_view.install(App)
 presets_view.install(App)
+errors_view.install(App)
 
 return M

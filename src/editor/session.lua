@@ -30,7 +30,7 @@ function Session:restore()
             local row,value=app:decode_value(key,stored)
             if not row then why='no editable row now'
             elseif value==nil then why='the saved value cannot be read now'
-            else ok,why=layer:set(row,value)end
+            else ok,why=layer:set(row,value,{kind='session'})end
         end
         -- every saved value is carried: a restored one that the Runtime refuses later stays saved as well
         self.carried[key]=stored

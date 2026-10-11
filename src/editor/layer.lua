@@ -205,6 +205,17 @@ function Layer:counts()
     return active,applying,errors
 end
 function Layer:busy()local _,applying=self:counts();return applying>0 end
+-- Every field whose value was refused or failed: {{row, slot, value (asked for), reason, code, origin, time}}.
+function Layer:errors()
+    local out={}
+    for _,slot in pairs(self.slots)do
+        if slot.error and slot.row then
+            out[#out+1]={row=slot.row,slot=slot,value=slot.failed_value,reason=slot.error,code=slot.failed_code,
+                origin=slot.origin,time=slot.failed_at}
+        end
+    end
+    return out
+end
 -- The user's applied values, {row key = value} (for the saved session and presets).
 function Layer:overrides()
     local out={}
@@ -253,8 +264,9 @@ local function release_dependents(self,row,value,from_reset)
         if s and(s.user or s.error)then self:reset(r)end
     end
 end
--- Ask for the user's value on a field. False and why when the value cannot be held exactly.
-function Layer:set(row,value)
+-- Ask for the user's value on a field. False and why when the value cannot be held exactly. origin: where the value
+-- came from, for the errors list ({kind = 'edit' | 'preset' | 'session' | 'mod', name}); a personal edit by default.
+function Layer:set(row,value,origin)
     local held=hold(row,value)
     if held==nil then
         if row.kind then return false,'not a value this field takes'end
@@ -290,6 +302,7 @@ function Layer:set(row,value)
     end
     local slot=slot_for(self,row)
     slot.user,slot.target,slot.error,slot.dirty=true,held,nil,true
+    slot.origin=origin or{kind='edit'}
     release_dependents(self,row,held)
     self:touch(row.key)
     self:changed()
@@ -429,8 +442,17 @@ function Layer:register(row,handle)
     return watch
 end
 
-local function fail(self,slot,why)
+-- The Runtime's code of a stopped operation (its result's code: CONFLICT, VALIDATION_FAILED ...), or nil.
+local function code_of(w)
+    local result=type(w)=='table'and w.result
+    local code=type(result)=='table'and result.code or(type(w)=='table'and w.code)
+    return type(code)=='string'and code~=''and code or nil
+end
+-- A field's value was refused or failed: the error (with the value asked for, the Runtime's code when it gave one and
+-- the time, for the errors list), and the field back to what it held.
+local function fail(self,slot,why,code)
     slot.error=util.plain(why or'the operation was refused',300)
+    slot.failed_value,slot.failed_code,slot.failed_at=slot.target,code,self.clock or 0
     slot.dirty,slot.readopts,slot.nudged=false,nil,nil
     if slot.watch then
         slot.phase='hold'
@@ -496,6 +518,7 @@ function Layer:adopt(slot)
                             else
                                 local m=slot_for(self,mrow)
                                 m.target,m.base_kind=value,'ensure'
+                                m.origin=m.origin or{kind='mod',name=claim.mod}
                                 local started=begin(m,value,{value})
                                 if not started then whole=false end
                             end
@@ -546,10 +569,11 @@ local function release_if_done(self,slot)
 end
 
 local function step_group(self,group)
-    local done,failed=true,nil
+    local done,failed,code=true,nil,nil
     for _,s in ipairs(group.slots)do
         local w=s.next_watch
-        if FAILED[w.status]then failed=failed or(w.error or w.status)
+        if FAILED[w.status]then
+            if not failed then failed,code=w.error or w.status,code_of(w)end
         elseif not(w.status=='waiting'and(w.runs or 0)>=1)then done=false end
     end
     if failed then
@@ -559,7 +583,7 @@ local function step_group(self,group)
             s.phase=s.watch and'hold'or'idle'
         end
         local first=group.slots[1]
-        if first then fail(self,first,failed)end
+        if first then fail(self,first,failed,code)end
         for i=2,#group.slots do
             local s=group.slots[i]
             if not s.watch and s.row.mirror then self.slots[s.loc]=nil end
@@ -745,7 +769,7 @@ function Layer:tick(dt)
             local w=slot.watch
             if FAILED[w.status]then
                 slot.watch=nil
-                fail(self,slot,w.error or w.status)
+                fail(self,slot,w.error or w.status,code_of(w))
             elseif w.status=='waiting'and(w.runs or 0)>slot.mark then
                 slot.readopts,slot.nudged=nil,nil
                 slot.held,slot.phase=slot.steering,'hold'
@@ -814,7 +838,7 @@ function Layer:tick(dt)
                 if slot.watch and FAILED[slot.watch.status]then
                     local w=slot.watch
                     slot.watch=nil
-                    fail(self,slot,'the editor ensure stopped: '..tostring(w.error or w.status))
+                    fail(self,slot,'the editor ensure stopped: '..tostring(w.error or w.status),code_of(w))
                 else
                     release_if_done(self,slot)
                 end

@@ -18,6 +18,7 @@ require('mods/skyeshade/hd2runtime_editor/editor/json')
 require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
 require('mods/skyeshade/hd2runtime_editor/editor/ui/search_view')
+require('mods/skyeshade/hd2runtime_editor/editor/ui/errors_view')
 -- Generated for this build (optional; never committed): the game's own stratagem and booster icons
 -- (tools/game_icons.py), the installed mods' own icons (tools/mod_icons.py) and pictures for presets
 -- (tools/preset_icons.py).

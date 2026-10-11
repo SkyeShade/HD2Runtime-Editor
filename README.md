@@ -13,6 +13,11 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - Other mods replace game files directly, so what they change cannot be read; their name, description and any Lua addons are shown.
   - A field a mod sets names the mod and, when its in-game options drive it, the options page.
 - **Your changes in one place.** The Changes tab lists every value the editor applied or has pending (never your mods' own). Enter jumps to the field. Each change has a **RESET** button (or Backspace) that resets it right away, to the mod's value if a mod set one, else to the game's. Del or a right-click stages that reset for the next Apply instead.
+- **Errors at a glance.** A value the Runtime refused marks its field (ERROR), its object, its closed groups and its
+  category with a red piece. The **ERRORS** badge in the title bar (or Ctrl+E) lists every failed field: the object, the
+  field, the value asked for, the Runtime's code and reason, and where the value came from (your edit, a preset, the
+  saved session, or a mod's value the editor took over). Enter or a click opens the field in Browse; Ins writes the
+  list to the log and shows it in Logs.
 - **Setting the default is a reset.** Editing a field back to its base value (the mod's value over a mod, else the game's) resets the field instead of holding an editor value equal to it. This also applies to presets and the restored session. A pending change like that shows as PENDING RESET.
 - **Export your changes as a mod.** The Export tab is a three-step wizard. Pick which changes to include, give the mod a name, version, author, description and an HD2 Arsenal image from your PC, then press Export. It writes a mod ZIP, ready for your mod manager, in ModBuilder's layout (see [Exporting a mod](#exporting-a-mod)). The values are also saved as a preset.
 - **The log, live.** The Logs tab follows `HD2Runtime.log` as it is written, coloured by kind (errors red, warnings orange, applied values green, the editor's own lines gold), with filters and buttons to open the file or its folder.
