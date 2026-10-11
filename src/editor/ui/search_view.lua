@@ -1,9 +1,10 @@
 -- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
--- SEARCH: one box over everything the editor can edit. Objects (weapons, stratagems, sentries, vehicles, backpacks,
--- boosters, armor, enemies ...) match by name and subtitle in every category; from three letters, fields match too,
--- by object, section and label (over the objects the background index has opened: all of them within seconds).
--- Every word must appear, in any order. Enter or a click opens the object in BROWSE, or goes to the field.
+-- SEARCH: one box over everything the editor can edit, by object: weapons (primary, secondary, support), grenades,
+-- stratagems of every kind, sentries, vehicles, backpacks, boosters, armor, enemies ... match by name and subtitle in
+-- every category; a word of four letters or more also matches the start of a category's name ("boost" lists every
+-- booster). Individual fields are not listed. Every word must appear, in any order. Enter or a click opens the object
+-- in BROWSE.
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
@@ -11,7 +12,7 @@ local C,SZ=theme.colour,theme.size
 local L=i18n.L
 local M={}
 
-local LIMIT_OBJECTS,LIMIT_FIELDS=200,300
+local LIMIT_OBJECTS=300
 
 -- The words of a query, lower case.
 local function words(text)
@@ -40,62 +41,54 @@ function M.install(App)
         end
         return out
     end
-    -- The results for a query: {{kind='object'|'field', object, row, label, sub}}, objects first.
+    -- Whether a query word names a category: four letters or more, the start of one of its words ("boost", "prim").
+    local function names_category(word,label)
+        if#word<4 then return false end
+        for part in label:lower():gmatch('%a+')do if part:sub(1,#word)==word then return true end end
+        return false
+    end
+    -- The results for a query: {{kind='object', object, label, sub}}, names that start with the first word first.
     function App:search_results(text)
         local s=state(self)
-        local key=tostring(text)..'|'..tostring(self.catalog.indexed)
-        -- again while the index grows (it opens a few objects each frame)
-        if s.key==key and(self.catalog.indexed or self.time-(s.at or 0)<1)then return s.results end
+        local key=tostring(text)
+        if s.key==key then return s.results end
         local list=words(text)
-        local results={}
+        local results,seen={},{}
         if#list>0 then
-            local objects,fields={},{}
             for _,c in ipairs(categories())do
                 for _,object in ipairs((self.catalog:objects(c.id))or{})do
                     object.search_text=object.search_text
-                        or(object.name..' '..tostring(object.subtitle or'')..' '..c.label..' '..c.group):lower()
-                    if#objects<LIMIT_OBJECTS and matches(object.search_text,list)then
-                        objects[#objects+1]={kind='object',object=object,label=object.name,
+                        or(object.name..' '..tostring(object.subtitle or'')):lower()
+                    local ok=not seen[object.key]
+                    for _,w in ipairs(list)do
+                        if not ok then break end
+                        ok=object.search_text:find(w,1,true)~=nil or names_category(w,c.label)
+                            or names_category(w,c.group)
+                    end
+                    if ok and#results<LIMIT_OBJECTS then
+                        seen[object.key]=true
+                        results[#results+1]={kind='object',object=object,label=object.name,
                             sub=c.label..(object.subtitle and('  ·  '..object.subtitle)or''),
                             prefix=object.name:lower():sub(1,#list[1])==list[1]}
                     end
-                    if#table.concat(list,' ')>=3 and object.rows and#fields<LIMIT_FIELDS then
-                        for _,row in ipairs(object.rows)do
-                            row.search_text=row.search_text
-                                or(object.name..' '..tostring(row.section or'')..' '..tostring(row.group or'')..' '
-                                ..tostring(row.label)..' '..tostring(row.field or'')):lower()
-                            if matches(row.search_text,list)then
-                                fields[#fields+1]={kind='field',object=object,row=row,label=row.label,
-                                    sub=object.name..'  ·  '..tostring(row.group and(row.group..'  ·  ')or'')..tostring(row.section or'')}
-                                if#fields>=LIMIT_FIELDS then break end
-                            end
-                        end
-                    end
                 end
             end
-            -- names that start with the first word first, then by name
-            table.sort(objects,function(a,b)
+            table.sort(results,function(a,b)
                 if a.prefix~=b.prefix then return a.prefix end
                 return a.label:lower()<b.label:lower()
             end)
-            for _,r in ipairs(objects)do results[#results+1]=r end
-            for _,r in ipairs(fields)do results[#results+1]=r end
         end
-        s.key,s.results,s.at=key,results,self.time
+        s.key,s.results=key,results
         return results
     end
-    -- Opens a result in BROWSE: the object (fields pane on its first field), or the field itself.
+    -- Opens a result in BROWSE: its category (filters cleared) with the object selected.
     function App:search_open(result)
         if not result then return end
-        if result.kind=='field'then self:reveal(result.row)
-        else
-            local object=result.object
-            for i,item in ipairs(self.categories)do if item.id==object.category then self.cat=i end end
-            self.search,self.filter_key=nil,nil
-            for i,o in ipairs(self:objects())do if o==object then self.obj=i end end
-            self.field,self.field_scroll=1,0
-            self.view,self.focus='browse','objects'
+        if not self:goto_object(result.object)and self.ctx.log then
+            self.ctx.log('search: '..tostring(result.object.key)..' is not listed in its category')
         end
+        self.field,self.field_scroll=1,0
+        self.view,self.focus='browse','objects'
         self:sound('open')
     end
     function App:handle_search_keys(f)
@@ -128,20 +121,15 @@ function M.install(App)
         local bx,by,bw,bh=20,y0+18,W-40,40
         cv:rect(bx,by,bw,bh,C.box,3)
         cv:frame(bx,by,bw,bh,C.box_focus,4)
-        local shown=s.text~=''and s.text or L('Search every weapon, stratagem, sentry, vehicle, armor, enemy and field...')
+        local shown=s.text~=''and s.text or L('Search every weapon, grenade, stratagem, booster, vehicle, armor and enemy...')
         local tw=cv:text(shown,bx+14,by+bh/2,{size=SZ.label,colour=s.text~=''and C.text or C.faint,max=bw-28,z=6})
         if s.text~=''and math.floor(self.time*2)%2==0 then cv:rect(bx+16+tw,by+10,2,bh-20,C.gold,6)end
         local results=self:search_results(s.text)
         s.index=math.max(1,math.min(s.index,math.max(1,#results)))
-        local n_obj,n_field=0,0
-        for _,r in ipairs(results)do if r.kind=='object'then n_obj=n_obj+1 else n_field=n_field+1 end end
         local info
-        if s.text==''then info=L('Type to search. Every word must match, in any order. Fields match from three letters.')
+        if s.text==''then info=L('Type to search. Every word must match, in any order.')
         elseif#results==0 then info=L('Nothing matches "%s".'):format(s.text)
-        else
-            info=L('%d objects, %d fields'):format(n_obj,n_field)
-            if not self.catalog.indexed then info=info..'   '..L('(still indexing every field...)')end
-        end
+        else info=L('%d results'):format(#results)end
         cv:text(info,bx,by+bh+18,{size=SZ.small,colour=C.faint,max=bw})
         -- the results
         local ly=by+bh+34
@@ -149,7 +137,9 @@ function M.install(App)
         self:list({x=0,y=ly,w=W,h=y0+h-ly-6,count=#results,row_h=40,selected=s.index,scroll_key='gsearch_scroll',
             focused=true,actions=self.search_actions,
             click=function(i)
-                if s.index==i then self:search_open(results[i])else s.index=i end
+                -- one click opens it (a first click that only selected looked like it did nothing)
+                s.index=i
+                self:search_open(results[i])
             end,
             draw=function(i,x,y,w,rh)
                 local r=results[i]
@@ -157,19 +147,9 @@ function M.install(App)
                 if selected then cv:rect(x+8,y+2,w-16,rh-4,C.select,2);cv:rect(x+8,y+2,3,rh-4,C.gold,3)
                 elseif self.hover==self.search_actions[i]then cv:rect(x+8,y+2,w-16,rh-4,C.hover,2)end
                 local tx=x+24
-                if r.kind=='object'then
-                    if self:draw_icon(r.object,x+20,y+5,rh-10)then tx=x+20+rh end
-                else
-                    chip(cv,L('FIELD'),x+20,y+rh/2,C.faint,C.line)
-                    tx=x+80
-                end
-                cv:text(r.kind=='field'and L(r.label)or r.label,tx,y+14,{size=SZ.label,colour=selected and C.text or C.dim,max=w*0.5})
-                cv:text(r.sub or'',tx,y+30,{size=SZ.tiny,colour=C.faint,max=w*0.6})
-                if r.kind=='field'then
-                    local value=self:row_view(r.row)
-                    cv:text(r.row.editable and self:text(r.row,value)or L('locked'),x+w-24,y+rh/2,
-                        {size=SZ.label,colour=r.row.editable and C.gold or C.faint,align='right',max=220})
-                end
+                if self:draw_icon(r.object,x+20,y+5,rh-10)then tx=x+20+rh end
+                cv:text(r.label,tx,y+14,{size=SZ.label,colour=selected and C.text or C.dim,max=w*0.6})
+                cv:text(r.sub or'',tx,y+30,{size=SZ.tiny,colour=C.faint,max=w*0.7})
             end})
     end
 end

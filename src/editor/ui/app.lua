@@ -1088,9 +1088,13 @@ function App:list(opts)
         if opts.click then
             local action=opts.actions and opts.actions[i]
             if not action then
-                action={click=function()opts.click(i)end}
+                action={}
                 if opts.actions then opts.actions[i]=action end
             end
+            -- the action is kept (hover compares it) but its click is this frame's: a click made once and kept called
+            -- the list's FIRST frame's handler, and the search tab opened row i of an earlier query
+            local click=opts.click
+            action.click=function()click(i)end
             action.scroll=nil
             cv:hit(opts.x,y,opts.w,opts.row_h,action)
         end
@@ -1604,13 +1608,24 @@ function App:open_mod_write(mod,index)
     if not row then self:toast(L('That field is not in the editor catalogue'),C.dim);return end
     self:reveal(row)
 end
-function App:reveal(row)
-    local object=row.object
+-- Selects an object in BROWSE: its category, with that category's name filter and weapon-type chip cleared (a chip
+-- left on "Shotgun" hid the Liberator, and the old selection index showed another weapon). True when it was found.
+function App:goto_object(object)
     for i,item in ipairs(self.categories)do
         if item.id==object.category then self.cat=i end
     end
-    self.search,self.filter_key=nil,nil
-    for i,o in ipairs(self:objects())do if o==object then self.obj=i end end
+    self.search,self.filter_key,self.filtered=nil,nil,nil
+    if self.weapon_group then self.weapon_group[object.category]=nil end
+    -- (the object list scrolls it into view: its last seen selection is forgotten)
+    self.obj_scroll_selected=nil
+    for i,o in ipairs(self:objects())do
+        if o==object or o.key==object.key then self.obj=i;return true end
+    end
+    return false
+end
+function App:reveal(row)
+    local object=row.object
+    self:goto_object(object)
     local items,selectable=self:field_items(self.catalog:open(object))
     for s,index in ipairs(selectable)do if items[index].row==row then self.field=s end end
     self.view,self.focus='browse','fields'

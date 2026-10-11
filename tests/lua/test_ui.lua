@@ -1136,8 +1136,9 @@ do
     H.app.wheel_checked=nil
     assert(H.app.hotkey_refusal_fn('F10',false,false,false):find('HD2Runtime',1,true),'F10 is HD2Runtime\'s')
 end
--- SEARCH: typing finds objects in every category (a weapon, a sentry, a vehicle) and, from three letters, fields;
--- Enter opens the object in BROWSE, or goes to the field; Escape clears the query first
+-- SEARCH: typing finds objects (never single fields) in every category (a weapon, a sentry, a vehicle, the boosters by
+-- their category's name); Enter or one click opens the object in BROWSE, whatever filter BROWSE was left on;
+-- Escape clears the query first
 do
     H.app:set_view('search')
     local function type_text(text)
@@ -1158,22 +1159,57 @@ do
     assert(vehicle and results[1]==vehicle,'the vehicle is the first result')
     step({'ENTER'})
     assert(H.app.view=='browse'and H.app:object()==vehicle.object,'Enter opens it in BROWSE')
-    -- fields: every word, any order
+    -- only objects: "liberator projectile" lists no field
     H.catalog:index_step(100000)
     H.app:set_view('search')
     step({'DELETE'})
-    type_text('liberator fire rate')
+    type_text('liberator')
     results=H.app:search_results(H.app.gsearch.text)
-    local field
-    for _,r in ipairs(results)do
-        if r.kind=='field'and r.row.field=='weapon.fire_rate'and r.object.name=='AR-23 Liberator'then field=r end
+    for _,r in ipairs(results)do assert(r.kind=='object','only objects are listed: '..tostring(r.label))end
+    local liberator
+    for i,r in ipairs(results)do if r.label=='AR-23 Liberator'then liberator=i end end
+    assert(liberator,'the Liberator is found')
+    -- the reported bug: BROWSE left on a weapon type the Liberator is not (a "Shotgun" chip) opened another weapon
+    local primary
+    for _,c in ipairs(H.app.categories)do if c.id=='primary'then primary=c end end
+    local groups=H.app:weapon_groups('primary')or{}
+    local other
+    for _,g in ipairs(groups)do
+        if g~='All'and g~=results[liberator].object.subtitle then other=g;break end
     end
-    assert(field,'a field is found by its object and label')
-    step({},nil,'65_search_fields')
-    for i,r in ipairs(results)do if r==field then H.app.gsearch.index=i end end
+    if other then H.app:set_weapon_group('primary',other)end
+    H.app.search={text='breaker'}
+    H.app.gsearch.index=liberator
     step({'ENTER'})
-    assert(H.app.view=='browse'and H.app:focused_row()==field.row,'Enter goes to the field')
+    assert(H.app.view=='browse'and H.app:object()==results[liberator].object,
+        'Enter opens the Liberator, whatever filter BROWSE was on: '..tostring(H.app:object()and H.app:object().name))
+    -- one click opens a result, of THIS query: the rows' actions persist across frames, and a click kept from an
+    -- earlier query's first frame opened that query's row (the player's report: "it brings me to another weapon")
     H.app:set_view('search')
+    step({'DELETE'})
+    type_text('sentry')
+    step({})
+    step({'DELETE'})
+    type_text('maelstrom')
+    results=H.app:search_results(H.app.gsearch.text)
+    H.app.search_actions[1].click()
+    assert(H.app.view=='browse'and H.app:object()==results[1].object,'one click opens a row of this query: '
+        ..tostring(H.app:object()and H.app:object().name))
+    -- a category by name, from four letters; two letters match names only
+    H.app:set_view('search')
+    step({'DELETE'})
+    type_text('boost')
+    results=H.app:search_results(H.app.gsearch.text)
+    local boosters=0
+    for _,r in ipairs(results)do if r.object.category=='boosters'then boosters=boosters+1 end end
+    assert(boosters>=10,'"boost" lists the boosters: '..boosters)
+    step({'DELETE'})
+    type_text('ar')
+    results=H.app:search_results(H.app.gsearch.text)
+    for _,r in ipairs(results)do
+        assert((r.object.name..' '..tostring(r.object.subtitle or'')):lower():find('ar',1,true),
+            '"ar" matches names only: '..r.label)
+    end
     step({'ESCAPE'})
     assert(H.app.view=='search'and H.app.gsearch.text=='','Escape clears the query first')
 end
