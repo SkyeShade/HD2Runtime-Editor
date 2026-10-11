@@ -164,7 +164,7 @@ What each field shows:
 | `PENDING` (orange) | Your staged change; press Apply |
 | `APPLYING` | Being written through HD2Runtime |
 | `EDITED` (yellow) | Your value is live |
-| `ERROR` | HD2Runtime refused the change; the status bar says why |
+| `ERROR` (red) | HD2Runtime refused the change; the status bar says why, and the ERRORS badge (Ctrl+E) lists every one |
 | `LOCKED` | Read-only: the status bar says why (HD2Runtime's reason, another mod owns it, or more than 3 decimals) |
 | `INFO` | A fact, not a value: a beam conversion's verdict, caveats and layout |
 
