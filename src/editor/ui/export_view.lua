@@ -15,6 +15,7 @@ local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 local C,SZ=theme.colour,theme.size
 local L=i18n.L
+local Lf=i18n.Lf
 local M={}
 
 local FIELDS={{key='name',label='Name',limit=40},{key='version',label='Version',limit=16},
@@ -68,12 +69,12 @@ function M.install(App)
         meta.minimum=tostring(self.ctx.minimum or'0.30.0')
         meta.editor_version=self.ctx.version
         local ok,result=pcall(export.build,catalog_module,entries,meta)
-        if not ok then self:toast(L('Export failed: %s'):format(tostring(result)),C.error);return end
+        if not ok then self:toast(Lf('Export failed: %s',tostring(result)),C.error);return end
         local base=export.folder()
-        if not base then self:toast(L('Export failed: %s'):format('no %USERPROFILE%'),C.error);return end
+        if not base then self:toast(Lf('Export failed: %s','no %USERPROFILE%'),C.error);return end
         local folder=base..'\\'..export.safe_name(meta.name)..'-'..meta.version
         local okw,zip=pcall(export.write,result,folder,win.mkdir)
-        if not okw then self:toast(L('Export failed: %s'):format(tostring(zip)),C.error);return end
+        if not okw then self:toast(Lf('Export failed: %s',tostring(zip)),C.error);return end
         -- a preset with exactly the exported values, to load them again later
         local preset=self.presets:unique_name(meta.name..' '..meta.version)
         local saved=self.presets:available()and self.presets:save(preset,self:encode_values(values))
@@ -97,10 +98,10 @@ function M.install(App)
         meta.sdk=meta.minimum
         meta.editor_version=self.ctx.version
         local ok,result=pcall(modbuilder.save,catalog_module,entries,meta,win.mkdir)
-        if not ok then self:toast(L('Not saved to ModBuilder: %s'):format(tostring(result)),C.error);return end
+        if not ok then self:toast(Lf('Not saved to ModBuilder: %s',tostring(result)),C.error);return end
         self.presets:set_setting('export_author',meta.author)
         self.mb_list,self.mb_key=nil,nil
-        self:toast(L('%s ModBuilder project "%s" (%d changes). Reopen ModBuilder\'s project list to see it.'):format(
+        self:toast(Lf('%s ModBuilder project "%s" (%d changes). Reopen ModBuilder\'s project list to see it.',
             result.updated and L('Updated the')or L('Saved the'),result.name,result.count),C.ok)
         if self.ctx.log then self.ctx.log('saved the ModBuilder project '..result.path)end
         self:sound('apply')
@@ -109,7 +110,7 @@ function M.install(App)
     function App:export_browse(path)
         local x=state(self)
         local entries,why=win.list(path)
-        if not entries then self:toast(L('Cannot list %s: %s'):format(path,tostring(why)),C.error);return end
+        if not entries then self:toast(Lf('Cannot list %s: %s',path,tostring(why)),C.error);return end
         local shown={}
         for _,e in ipairs(entries)do
             local ext=(e.name:match('%.(%w+)$')or''):lower()
@@ -125,7 +126,7 @@ function M.install(App)
         local job,why=win.pick_file({title=L('Choose the HD2 Arsenal image'),
             filter=L('Images')..' (*.png, *.jpg)|*.png;*.jpg;*.jpeg|',folder=(win.places()[1]or{}).path})
         if job then x.picking=job;return end
-        self:toast(L('The Windows file dialog did not open (%s); browsing in game'):format(tostring(why)),C.dim)
+        self:toast(Lf('The Windows file dialog did not open (%s); browsing in game',tostring(why)),C.dim)
         self:export_browse((win.places()[1]or{}).path or'C:\\')
     end
     -- Picks up the dialog's answer (called every frame while it is open).
@@ -138,9 +139,9 @@ function M.install(App)
         x.picking=nil
         if result then
             local ext=(result:match('%.(%w+)$')or''):lower()
-            if not IMAGE_TYPES[ext]then self:toast(L('Not a PNG or JPEG image: %s'):format(result),C.error);return end
+            if not IMAGE_TYPES[ext]then self:toast(Lf('Not a PNG or JPEG image: %s',result),C.error);return end
             x.meta.image=result
-            self:toast(L('Arsenal image: %s'):format(result:match('([^\\]+)$')or result),C.ok)
+            self:toast(Lf('Arsenal image: %s',result:match('([^\\]+)$')or result),C.ok)
         end
     end
     function App:export_browser_pick(e)
@@ -151,7 +152,7 @@ function M.install(App)
         else
             x.meta.image=b.path..'\\'..e.name
             x.browser=nil
-            self:toast(L('Arsenal image: %s'):format(e.name),C.ok)
+            self:toast(Lf('Arsenal image: %s',e.name),C.ok)
         end
     end
     local function parent(path)return path:match('^(.*)\\[^\\]+$')end
@@ -183,7 +184,7 @@ function M.install(App)
             if field.limit then
                 local text=x.meta[field.key]or''
                 for _,ch in ipairs(f.chars)do if#text<field.limit then text=text..ch end end
-                if k.BACKSPACE then text=text:sub(1,-2)end
+                if k.BACKSPACE then text=util.drop_last(text)end
                 x.meta[field.key]=text
             elseif k.ENTER then
                 self:export_pick_image()
@@ -229,7 +230,7 @@ function M.install(App)
         self.export_next_btn=self.export_next_btn or{click=function()self:export_next()end}
         button(self,L('ALL'),W-452,top-6,90,32,'normal',self.export_all)
         button(self,L('NONE'),W-352,top-6,90,32,'normal',self.export_none)
-        button(self,L('NEXT  %d'):format(n),W-252,top-6,232,32,n>0 and'primary'or'disabled',self.export_next_btn)
+        button(self,Lf('NEXT  %d',n),W-252,top-6,232,32,n>0 and'primary'or'disabled',self.export_next_btn)
         if#list==0 then
             cv:text(L('No editor changes yet. Edit fields in Browse first.'),20,top+50,{size=SZ.label,colour=C.dim})
             return
@@ -250,7 +251,7 @@ function M.install(App)
                 cv:frame(rx+22,ry+9,16,16,on and C.gold or C.line_strong,4)
                 if on then cv:rect(rx+26,ry+13,8,8,C.inverse,6)end
                 self:draw_icon(e.row.object,rx+48,ry+4,rh-8)
-                cv:text(e.row.object.name,rx+48+rh,ry+rh/2,{size=SZ.small,colour=on and C.text or C.faint,max=280})
+                cv:text(util.display_name(e.row.object),rx+48+rh,ry+rh/2,{size=SZ.small,colour=on and C.text or C.faint,max=280})
                 cv:text(L(e.row.label),rx+360,ry+rh/2,{size=SZ.small,colour=on and C.dim or C.faint,max=lw-700})
                 cv:text(self:text(e.row,e.value),rx+lw-130,ry+rh/2,{size=SZ.label,colour=on and C.gold or C.faint,
                     align='right',max=200})
@@ -263,7 +264,7 @@ function M.install(App)
         local W=theme.panel.w
         local n=0
         for _,e in ipairs(list)do if x.selected[e.row.key]then n=n+1 end end
-        cv:text(L('How the mod appears in your mod manager. %d changes will be exported.'):format(n),20,top+10,
+        cv:text(Lf('How the mod appears in your mod manager. %d changes will be exported.',n),20,top+10,
             {size=SZ.small,colour=C.faint,max=W-40})
         self.export_field_actions=self.export_field_actions or{}
         local y=top+40
@@ -304,14 +305,14 @@ function M.install(App)
         local risky=0
         for _,e in ipairs(list)do if x.selected[e.row.key]and e.row.risk=='gameguard'then risky=risky+1 end end
         if risky>0 then
-            cv:text(L('%d of these changes write game.dll\'s own data (armor classes, damage curve): GameGuard was reported to close the game after them.')
-                :format(risky),200,y+66,{size=SZ.small,colour=C.error,max=W-440})
+            cv:text(Lf('%d of these changes write game.dll\'s own data (armor classes, damage curve): GameGuard was reported to close the game after them.',
+                risky),200,y+66,{size=SZ.small,colour=C.error,max=W-440})
         end
         local version_ok=tostring(x.meta.version):match('^%d+%.%d+%.%d+$')~=nil
         if not version_ok then cv:text(L('The version must look like 1.0.0'),200,y+4,{size=SZ.small,colour=C.error})end
-        cv:text(L('Resource id: %s'):format('mods/'..export.slug(x.meta.author)..'/'..export.slug(x.meta.name)),200,y+26,
+        cv:text(Lf('Resource id: %s','mods/'..export.slug(x.meta.author)..'/'..export.slug(x.meta.name)),200,y+26,
             {size=SZ.small,colour=C.faint,max=W-440})
-        cv:text(L('Saved to: %s'):format((export.folder()or'?')..'\\'..export.safe_name(x.meta.name)..'-'..x.meta.version),
+        cv:text(Lf('Saved to: %s',(export.folder()or'?')..'\\'..export.safe_name(x.meta.name)..'-'..x.meta.version),
             200,y+46,{size=SZ.small,colour=C.faint,max=W-440})
         self.export_back=self.export_back or{click=function()self.exporter.step='pick'end}
         self.export_go=self.export_go or{click=function()self:export_run()end}
@@ -393,19 +394,19 @@ function M.install(App)
         local W=theme.panel.w
         local d=x.done
         cv:text(L('EXPORT SUCCESSFUL!'),W/2,top+80,{size=30,font='title',colour=C.ok,align='center'})
-        cv:text(L('%d changes exported as %s'):format(d.count,d.resource),W/2,top+124,{size=SZ.label,colour=C.text,align='center'})
+        cv:text(Lf('%d changes exported as %s',d.count,d.resource),W/2,top+124,{size=SZ.label,colour=C.text,align='center'})
         cv:text(d.zip,W/2,top+152,{size=SZ.small,colour=C.dim,align='center',max=W-80})
         if d.preset then
-            cv:text(L('Saved as the preset "%s" too, to load these values again later.'):format(d.preset),W/2,top+176,
+            cv:text(Lf('Saved as the preset "%s" too, to load these values again later.',d.preset),W/2,top+176,
                 {size=SZ.small,colour=C.faint,align='center',max=W-80})
         end
         if#d.skipped>0 then
-            cv:text(L('%d changes could not be exported: %s'):format(#d.skipped,tostring(d.skipped[1].why)),W/2,top+200,
+            cv:text(Lf('%d changes could not be exported: %s',#d.skipped,tostring(d.skipped[1].why)),W/2,top+200,
                 {size=SZ.small,colour=C.error,align='center',max=W-80})
         end
         self.export_open=self.export_open or{click=function()
             local ok,why=win.open(self.exporter.done.folder)
-            if not ok then self:toast(L('Could not open it: %s'):format(tostring(why)),C.error)end
+            if not ok then self:toast(Lf('Could not open it: %s',tostring(why)),C.error)end
         end}
         self.export_reveal=self.export_reveal or{click=function()win.reveal(self.exporter.done.zip)end}
         self.export_again=self.export_again or{click=function()self.exporter.step,self.exporter.done='pick',nil end}

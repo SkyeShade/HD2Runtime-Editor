@@ -14,13 +14,21 @@ local logfile=require('mods/skyeshade/hd2runtime_editor/editor/logfile')
 local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
 local C,SZ=theme.colour,theme.size
 local L=i18n.L
+local Lf=i18n.Lf
 local M={}
 
 local function clamp_index(i,n)if n<=0 then return 1 end return math.max(1,math.min(n,i))end
 local LIST_W=430
 
--- Words of `text` in lines no wider than `w` (canvas units).
+-- Words of `text` in lines no wider than `w` (canvas units). The overlay's own wrap when it has one (HD2Runtime 0.31.0+
+-- d:wrap: also between CJK characters, which have no spaces, measured as d:text draws them); else at spaces.
 local function wrap(cv,text,w,size,max_lines)
+    local d=cv.d
+    if d and type(d.wrap)=='function'then
+        local s=cv.s or 1
+        local ok,lines=pcall(d.wrap,d,(tostring(text or''):gsub('%s+',' ')),w*s,{size=size*s,lines=max_lines})
+        if ok and type(lines)=='table'then return lines end
+    end
     local lines,line={},''
     for word in tostring(text or''):gsub('%s+',' '):gmatch('%S+')do
         local test=line==''and word or(line..' '..word)
@@ -82,7 +90,7 @@ function M.install(App)
         if entry.state=='pending'then self:unstage(entry.row);self:toast(L('Pending change removed'),C.dim);return end
         local base=self.layer:base(entry.row)
         self:stage(entry.row,base)
-        self:toast(L('Staged: back to %s (press Apply)'):format(self:text(entry.row,base)),C.pending)
+        self:toast(Lf('Staged: back to %s (press Apply)',self:text(entry.row,base)),C.pending)
     end
     -- Resets one change now, as RESET TO DEFAULTS does for every field: its pending value is dropped and an applied
     -- editor value goes back to the base (the mod's value, or the game's when no mod set it).
@@ -95,7 +103,7 @@ function M.install(App)
         if reset then self.save_session=true end
         local base,holder=self.layer:base(row)
         if reset or dropped then
-            self:toast(L('%s: back to %s'):format(L(row.label),self:text(row,base))
+            self:toast(Lf('%s: back to %s',L(row.label),self:text(row,base))
                 ..(holder and(' ('..L('the mod value')..')')or''),C.gold)
         end
     end
@@ -120,7 +128,7 @@ function M.install(App)
         cv:text(L('CHANGES'),20,y0+24,{size=20,font='title',colour=C.text})
         local active,applying,errors=self.layer:counts()
         cv:text(L('Values the editor applied or has pending (your mods\' own values are in Mods).')..'   '
-            ..L('%d active, %d pending, %d applying, %d failed'):format(active,self.pending_n,applying,errors),
+            ..Lf('%d active, %d pending, %d applying, %d failed',active,self.pending_n,applying,errors),
             20,y0+47,{size=SZ.small,colour=C.faint,max=W-300})
         self.btn_revert_all=self.btn_revert_all or{click=function()self:ask('reset')end}
         button(self,L('REVERT ALL'),W-216,y0+16,196,34,(#list>0)and'danger'or'disabled',self.btn_revert_all)
@@ -153,7 +161,7 @@ function M.install(App)
                 selected_row(self,cv,x,y,lw,rh,i==self.change_index,action)
                 local cy=y+rh/2
                 self:draw_icon(e.row.object,x+18,y+4,rh-8)
-                cv:text(e.row.object.name,x+18+rh,cy,{size=SZ.small,colour=C.dim,max=300-rh})
+                cv:text(util.display_name(e.row.object),x+18+rh,cy,{size=SZ.small,colour=C.dim,max=300-rh})
                 cv:text(L(e.row.label),x+330,cy,{size=SZ.small,colour=C.text,max=lw-330-450})
                 local base=self.layer:base(e.row)
                 cv:text(self:text(e.row,base),x+lw-420,cy,{size=SZ.small,colour=C.faint,align='right',max=150})
@@ -297,8 +305,8 @@ function M.install(App)
         for _,m in ipairs(mods)do if m.runtime and not m.self then nrt=nrt+1 end end
         cv:text(L('INSTALLED MODS'),18,y0+20,{size=SZ.heading,font='title',colour=C.faint})
         local note=inst==nil and L('reading the mod manager...')
-            or(inst.source and L('%d mods, %d HD2Runtime (from %s)'):format(#mods,nrt,inst.source=='echelon'and'Echelon'or'HD2 Arsenal')
-            or L('%d HD2Runtime mods (no mod manager state found)'):format(nrt))
+            or(inst.source and Lf('%d mods, %d HD2Runtime (from %s)',#mods,nrt,inst.source=='echelon'and'Echelon'or'HD2 Arsenal')
+            or Lf('%d HD2Runtime mods (no mod manager state found)',nrt))
         cv:text(note,LIST_W-18,y0+20,{size=SZ.tiny,colour=C.faint,align='right',max=LIST_W-170})
         self.mod_actions=self.mod_actions or{}
         -- the list with a header above each group: HD2Runtime mods, then the others
@@ -348,8 +356,8 @@ function M.install(App)
         local sub
         if mod.self then sub=L('HD2R Editor itself')
         elseif mod.runtime then
-            sub=mod.resource..'   '..L('%d operations, %d values applied'):format(#mod.operations,mod.applied)
-                ..(mod.refused>0 and('   '..L('%d refused'):format(mod.refused))or'')
+            sub=mod.resource..'   '..Lf('%d operations, %d values applied',#mod.operations,mod.applied)
+                ..(mod.refused>0 and('   '..Lf('%d refused',mod.refused))or'')
         else sub=(#(mod.addons or{})>0 and L('A Lua mod that does not use HD2Runtime')or L('An asset mod (it replaces game files)'))end
         cv:text(sub,x0+78,y0+50,{size=SZ.small,colour=C.faint,max=w-100})
         -- rows: description, options, writes, refused operations
@@ -357,13 +365,13 @@ function M.install(App)
         for _,line in ipairs(wrap(cv,mod.description,w-60,SZ.small,4))do rows[#rows+1]={text=line}end
         if not mod.runtime then
             rows[#rows+1]={text=L('HD2Runtime cannot read what this mod changes: it replaces game files directly.'),faint=true}
-            if#(mod.addons or{})>0 then rows[#rows+1]={text=L('Lua addons: %s'):format(table.concat(mod.addons,', ')),faint=true}end
+            if#(mod.addons or{})>0 then rows[#rows+1]={text=Lf('Lua addons: %s',table.concat(mod.addons,', ')),faint=true}end
         end
         for _,page in ipairs(mod.pages or{})do
-            rows[#rows+1]={heading=L('IN-GAME OPTIONS: %s'):format(page.title or page.id)}
+            rows[#rows+1]={heading=Lf('IN-GAME OPTIONS: %s',page.title or page.id)}
             for _,o in ipairs(page.options or{})do rows[#rows+1]={option=o,page=page}end
             if#(page.operations or{})>0 then
-                rows[#rows+1]={text=L('Drives: %s'):format(table.concat(page.operations,', ')),faint=true}
+                rows[#rows+1]={text=Lf('Drives: %s',table.concat(page.operations,', ')),faint=true}
             end
         end
         if#(mod.writes or{})>0 then rows[#rows+1]={heading=L('VALUES APPLIED')}end
@@ -390,19 +398,19 @@ function M.install(App)
                         for k,v in ipairs(o.values)do if util.same(v,value)then value=o.choices[k]end end
                     end
                     local range=o.kind=='slider'and(o.min and o.max and(util.format(o.min)..' – '..util.format(o.max)))
-                        or(o.kind=='choice'and o.choices and L('%d choices'):format(#o.choices))or''
+                        or(o.kind=='choice'and o.choices and Lf('%d choices',#o.choices))or''
                     cv:text(range,x+lw-200,cy,{size=SZ.tiny,colour=C.faint,align='right',max=140})
-                    local text=type(value)=='boolean'and(value and L('On')or L('Off'))or util.value_text(value)
+                    local text=util.value_label(value)
                     local fg=o.state=='ready'and C.gold or C.faint
                     chip(cv,util.plain(text,28),x+lw-18,cy,fg,o.state=='ready'and C.gold_wash or C.line,'right')
                 elseif item.claim then
                     if self.hover==self.write_actions[i]then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
                     local claim=item.claim
                     cv:text(claim.text,x+30,cy,{size=SZ.small,colour=C.dim,max=lw-340})
-                    cv:text(util.value_text(claim.value),x+lw-210,cy,{size=SZ.label,colour=C.mod,align='right',max=150})
+                    cv:text(util.value_label(claim.value),x+lw-210,cy,{size=SZ.label,colour=C.mod,align='right',max=150})
                     local slot=self.layer.slots[claim.loc]
                     if slot and slot.user then
-                        chip(cv,L('EDITOR')..' '..util.plain(util.value_text(slot.target),24),x+lw-18,cy,C.gold,C.gold_wash,'right')
+                        chip(cv,L('EDITOR')..' '..util.plain(util.value_label(slot.target),24),x+lw-18,cy,C.gold,C.gold_wash,'right')
                     elseif slot and slot.watch then chip(cv,L('HELD BY EDITOR'),x+lw-18,cy,C.faint,C.line,'right')
                     else chip(cv,L('ACTIVE'),x+lw-18,cy,C.mod,C.mod_soft,'right')end
                 elseif item.op then
@@ -524,7 +532,7 @@ function M.install(App)
         self.layer:touch('custom|'..tostring(entry.id)..'|'..field)
         self.save_session=true
         if ok then
-            self:toast(L('%s: %s set to %s (from the next call)'):format(entry.label or entry.id,L(field),
+            self:toast(Lf('%s: %s set to %s (from the next call)',entry.label or entry.id,L(field),
                 unlimited and L('unlimited')or util.format(value)),C.ok)
             self:sound('apply')
         else self:toast(tostring(why),C.error);self:sound('error')end
@@ -536,7 +544,7 @@ function M.install(App)
             api.untune(entry.id)
             for _,field in ipairs({'cooldown','uses'})do self.layer:touch('custom|'..tostring(entry.id)..'|'..field)end
             self.save_session=true
-            self:toast(L('%s: back to its own cooldown and uses'):format(entry.label or entry.id),C.dim)
+            self:toast(Lf('%s: back to its own cooldown and uses',entry.label or entry.id),C.dim)
             self.custom_cache=nil
         end
     end
@@ -549,7 +557,7 @@ function M.install(App)
         local edit=self.custom_edit
         if edit then
             for _,ch in ipairs(f.chars)do if ch:match('[%d%.%-]')and#edit.buffer<8 then edit.buffer=edit.buffer..ch end end
-            if k.BACKSPACE then edit.buffer=edit.buffer:sub(1,-2)end
+            if k.BACKSPACE then edit.buffer=util.drop_last(edit.buffer)end
             if k.ESCAPE or k.DELETE then self.custom_edit=nil
             elseif k.ENTER or k.TAB then
                 local v=tonumber(edit.buffer)
@@ -621,7 +629,7 @@ function M.install(App)
         if not e then return end
         self:draw_custom_icon(e,x0+20,y0+12,48)
         cv:text(e.label or e.id,x0+80,y0+24,{size=20,font='title',colour=C.text,max=w-100})
-        cv:text(tostring(e.id)..'   '..L('by %s'):format(tostring(e.owner))..'   '..(function(t)
+        cv:text(tostring(e.id)..'   '..Lf('by %s',tostring(e.owner))..'   '..(function(t)
             if t=='offensive'then return L('Offensive')elseif t=='defensive'then return L('Defensive')end
             return L('Support')
         end)(self:custom_tone(e)),x0+80,y0+47,{size=SZ.small,colour=C.faint,max=w-100})
@@ -646,7 +654,7 @@ function M.install(App)
             local value=e[field.key]
             local registered=e.registered and e.registered[field.key]
             local disabled=field.key=='uses'and e.eagle_uses~=nil
-            cv:text(L(field.label)..(disabled and('  ('..L('an Eagle: %d per rearm'):format(e.eagle_uses)..')')or''),x0+22,y+15,
+            cv:text(L(field.label)..(disabled and('  ('..Lf('an Eagle: %d per rearm',e.eagle_uses)..')')or''),x0+22,y+15,
                 {size=SZ.label,colour=C.text,max=w-320})
             cv:text(registered and util.format(registered)or L('unlimited'),x0+w-200,y+15,{size=SZ.small,colour=C.faint,align='right'})
             local text=self.custom_edit and focused and(self.custom_edit.buffer..'_')
@@ -676,7 +684,7 @@ function M.install(App)
             {L('Kind'),tostring(e.kind or'-')},
             {L('Carrier group'),tostring(e.group or'-')},
             {L('Carrier'),e.carrier and e.carrier.name or L('not allocated yet')},
-            {L('State'),tostring(e.state or'-')..(e.calls and e.calls>0 and('   '..L('%d calls this mission'):format(e.calls))or'')},
+            {L('State'),tostring(e.state or'-')..(e.calls and e.calls>0 and('   '..Lf('%d calls this mission',e.calls))or'')},
         }
         if e.pod and e.pod.items then
             local items={}
@@ -740,7 +748,7 @@ function M.install(App)
         local ok,why
         if folder then ok,why=win.reveal(path)else ok,why=win.open(path)end
         if ok then self:toast(folder and L('Opened the log folder')or L('Opened the log file'),C.ok)
-        else self:toast(L('Could not open it: %s'):format(tostring(why)),C.error)end
+        else self:toast(Lf('Could not open it: %s',tostring(why)),C.error)end
     end
     function App:draw_logs(y0,h)
         local cv=self.canvas
@@ -787,7 +795,7 @@ function M.install(App)
         cv:rect(follow and fx+30 or fx+14,fy+4,14,14,follow and C.inverse or C.dim,4)
         cv:text(L('Follow the end'),fx+56,fy+11,{size=SZ.small,colour=C.dim})
         cv:hit(fx+12,fy,160,22,self.log_follow_action)
-        cv:text(L('%d lines'):format(n),W-20,fy+11,{size=SZ.tiny,colour=C.faint,align='right'})
+        cv:text(Lf('%d lines',n),W-20,fy+11,{size=SZ.tiny,colour=C.faint,align='right'})
         -- the lines
         local ly=fy+32
         local detail_h=70
@@ -847,12 +855,12 @@ function M.install(App)
             for _,l in ipairs(self:languages())do if l.name==name then missing=l.undrawable or 0 end end
             if missing>0 then
                 -- the game's text shows '?' for a character the font has no glyph for
-                self:toast((i18n.drawing()=='game_fonts'
-                    and L('Language: %s. %d of its characters are in none of the game fonts (shown as ?).')
-                    or L('Language: %s. %d of its characters cannot be drawn yet (shown as ?): the HD2Runtime font has Latin letters only.'))
-                    :format(i18n.language(),missing),C.pending)
+                self:toast(i18n.drawing()=='game_fonts'
+                    and Lf('Language: %s. %d of its characters are in none of the game fonts (shown as ?).',i18n.language(),missing)
+                    or Lf('Language: %s. %d of its characters cannot be drawn yet (shown as ?): the HD2Runtime font has Latin letters only.',
+                        i18n.language(),missing),C.pending)
             else
-                self:toast(L('Language: %s'):format(i18n.language()),C.ok)
+                self:toast(Lf('Language: %s',i18n.language()),C.ok)
             end
             self.tab_actions=nil
         else self:toast(tostring(why),C.error)end
@@ -901,7 +909,7 @@ function M.install(App)
         cv:text(('%d%%'):format(math.floor(now*100+0.5)),x+470,y,{size=SZ.label,colour=C.text,align='center'})
         button(self,'+',x+510,y-13,30,26,now<theme.UI_SCALES[#theme.UI_SCALES]and'normal'or'disabled',self.btn_scale_up)
         if math.floor(shown*100+0.5)<math.floor(now*100+0.5)then
-            cv:text(L('(%d%% fits this screen)'):format(math.floor(shown*100+0.5)),x+552,y,{size=SZ.tiny,colour=C.faint})
+            cv:text(Lf('(%d%% fits this screen)',math.floor(shown*100+0.5)),x+552,y,{size=SZ.tiny,colour=C.faint})
         end
         y=y+34
         -- the key that opens and closes the editor
@@ -919,7 +927,7 @@ function M.install(App)
             self.btn_hotkey_default)
         y=y+34
         cv:text(capturing and L('Press the new key, or Ctrl / Shift / Alt with it. Esc cancels.')
-            or L('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.'):format(self:hotkey()),
+            or Lf('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.',self:hotkey()),
             x,y+4,{size=SZ.tiny,colour=capturing and C.gold or C.faint,max=W-48})
         -- HD2Runtime's own settings panel (F10: its language, the messages it shows), HD2Runtime 0.31.1
         -- hd2.ui.open_settings: the editor closes first, so the two windows never share the cursor
@@ -949,6 +957,11 @@ function M.install(App)
         -- language
         y=y+40
         cv:text(L('LANGUAGE'),x,y,{size=SZ.heading,font='title',colour=C.gold})
+        -- none picked yet: the game's language when there is a file for it (main.lua, i18n.use_game_language)
+        if self.presets:setting('language',nil)==nil then
+            cv:text(L('None picked: the game\'s language when there is a file for it. Pick one to keep it.'),x+150,y,
+                {size=SZ.tiny,colour=C.faint,max=W-x-174})
+        end
         y=y+24
         local langs=self:languages()
         self.language_actions=self.language_actions or{}
@@ -965,10 +978,10 @@ function M.install(App)
             cv:rect(x,y+6,14,14,current and C.gold or C.line_strong,3)
             cv:text(lang.name,x+26,y+13,{size=SZ.label,colour=current and C.text or C.dim})
             if(lang.undrawable or 0)>0 then
-                cv:text(L('%d characters cannot be drawn yet (%s)'):format(lang.undrawable,table.concat(lang.sample or{},' ')),
+                cv:text(Lf('%d characters cannot be drawn yet (%s)',lang.undrawable,table.concat(lang.sample or{},' ')),
                     x+552,y+13,{size=SZ.tiny,colour=C.pending,max=W-x-560})
             end
-            cv:text(lang.file and L('%d texts, %s'):format(lang.count,lang.file)or L('built in'),x+540,y+13,
+            cv:text(lang.file and Lf('%d texts, %s',lang.count,lang.file)or L('built in'),x+540,y+13,
                 {size=SZ.tiny,colour=C.faint,align='right'})
             cv:hit(x-8,y-2,560,28,action)
             y=y+30
@@ -980,11 +993,16 @@ function M.install(App)
         self.btn_reload_lang=self.btn_reload_lang or{click=function()
             self.language_cache=nil
             local n=#self:languages()-1
-            self:toast(L('Found %d language files'):format(n),C.ok)
+            self:toast(Lf('Found %d language files',n),C.ok)
         end}
         self.btn_template=self.btn_template or{click=function()
-            local path,why=i18n.write_template(self.ctx.strings or{})
-            if path then self:toast(L('Wrote %s'):format(path),C.ok)else self:toast(tostring(why),C.error)end
+            -- the interface texts, then every name, section and field the catalogue shows (opens the whole catalogue)
+            local ok,texts=pcall(function()return self.catalog:texts()end)
+            if not ok and self.ctx.log then self.ctx.log('template: the catalogue texts are missing: '..tostring(texts))end
+            local path,why=i18n.write_template(self.ctx.strings or{},ok and texts or nil,
+                'Names, sections and fields of the catalogue (HD2Runtime '..tostring(self.hd2 and(self.hd2.version_label
+                    or self.hd2.version)or'?')..')')
+            if path then self:toast(Lf('Wrote %s',path),C.ok)else self:toast(tostring(why),C.error)end
         end}
         button(self,L('RELOAD LANGUAGES'),x,y+40,200,34,'normal',self.btn_reload_lang)
         button(self,L('WRITE TEMPLATE'),x+212,y+40,200,34,'normal',self.btn_template)

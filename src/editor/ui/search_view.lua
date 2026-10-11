@@ -8,6 +8,7 @@
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
+local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local C,SZ=theme.colour,theme.size
 local L=i18n.L
 local M={}
@@ -43,33 +44,43 @@ function M.install(App)
     end
     -- Whether a query word names a category: four letters or more, the start of one of its words ("boost", "prim").
     local function names_category(word,label)
+        -- (a CJK word has no letters %a finds: a translated category matches by its start, from two characters)
         if#word<4 then return false end
         for part in label:lower():gmatch('%a+')do if part:sub(1,#word)==word then return true end end
+        if word:byte(1)>=0xC0 and label:lower():find(word,1,true)then return true end
         return false
     end
     -- The results for a query: {{kind='object', object, label, sub}}, names that start with the first word first.
     function App:search_results(text)
         local s=state(self)
-        local key=tostring(text)
+        -- (a language switch changes the names shown and matched)
+        local key=tostring(text)..'\0'..i18n.language()
         if s.key==key then return s.results end
         local list=words(text)
         local results,seen={},{}
         if#list>0 then
             for _,c in ipairs(categories())do
+                local clabel,cgroup=L(c.label),L(c.group)
                 for _,object in ipairs((self.catalog:objects(c.id))or{})do
-                    object.search_text=object.search_text
-                        or(object.name..' '..tostring(object.subtitle or'')):lower()
+                    -- the English name and subtitle, and the ones shown (translated): either matches
+                    local name,sub=util.display_name(object),util.display_subtitle(object)
+                    if object.search_language~=i18n.language()then
+                        object.search_language=i18n.language()
+                        object.search_text=(object.name..' '..tostring(object.subtitle or'')..' '..name..' '
+                            ..tostring(sub or'')):lower()
+                    end
                     local ok=not seen[object.key]
                     for _,w in ipairs(list)do
                         if not ok then break end
                         ok=object.search_text:find(w,1,true)~=nil or names_category(w,c.label)
-                            or names_category(w,c.group)
+                            or names_category(w,c.group)or names_category(w,clabel)or names_category(w,cgroup)
                     end
                     if ok and#results<LIMIT_OBJECTS then
                         seen[object.key]=true
-                        results[#results+1]={kind='object',object=object,label=object.name,
-                            sub=c.label..(object.subtitle and('  ·  '..object.subtitle)or''),
-                            prefix=object.name:lower():sub(1,#list[1])==list[1]}
+                        results[#results+1]={kind='object',object=object,label=name,
+                            sub=clabel..(sub and('  ·  '..sub)or''),
+                            prefix=name:lower():sub(1,#list[1])==list[1]
+                                or object.name:lower():sub(1,#list[1])==list[1]}
                     end
                 end
             end
@@ -97,7 +108,7 @@ function M.install(App)
         for _,ch in ipairs(f.chars)do
             if#s.text<40 then s.text=s.text..ch;s.index,s.scroll_to=1,true end
         end
-        if k.BACKSPACE then s.text=s.text:sub(1,-2);s.index=1 end
+        if k.BACKSPACE then s.text=util.drop_last(s.text);s.index=1 end
         if k.DELETE then s.text='';s.index=1 end
         local results=self:search_results(s.text)
         if k.UP then s.index=math.max(1,s.index-1)end
@@ -128,8 +139,8 @@ function M.install(App)
         s.index=math.max(1,math.min(s.index,math.max(1,#results)))
         local info
         if s.text==''then info=L('Type to search. Every word must match, in any order.')
-        elseif#results==0 then info=L('Nothing matches "%s".'):format(s.text)
-        else info=L('%d results'):format(#results)end
+        elseif#results==0 then info=i18n.Lf('Nothing matches "%s".',s.text)
+        else info=i18n.Lf('%d results',#results)end
         cv:text(info,bx,by+bh+18,{size=SZ.small,colour=C.faint,max=bw})
         -- the results
         local ly=by+bh+34

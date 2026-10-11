@@ -225,13 +225,16 @@ The icons are derived from Arrowhead's artwork. They are git-ignored and only en
 
 ## Localisation
 
-Every interface text goes through one lookup. To translate the editor:
+Every text the window shows goes through one lookup: the interface, and the catalogue's object names (weapons,
+stratagems, enemies ...), subtitles, sections, groups, field labels and value labels. To translate the editor:
 
-1. In game, open **Settings** and press **WRITE TEMPLATE**. It writes `template.txt` (every interface text) into `%LOCALAPPDATA%\HD2REditor\localization\`.
-2. Copy it to a new name ending in `.txt`, set the `@language` line, and write each translation after ` = `. Keep `%d` and `%s` where they are. Lines without a translation are ignored, and field names may be added too.
-3. Press **RELOAD LANGUAGES**, then pick the language. The choice is saved.
+1. In game, open **Settings** and press **WRITE TEMPLATE**. It writes `template.txt` into `%LOCALAPPDATA%\HD2REditor\localization\`: every interface text, then every name, section and field the catalogue of your HD2Runtime shows.
+2. Copy it to a new name ending in `.txt`, set the `@language` line, and write each translation after ` = `. Keep `%d` and `%s` where they are (a translation that breaks them shows the English text). Lines without a translation are ignored. A section such as `Explosion · Primary impact` is also translated part by part (`Explosion`, `Primary impact`). A text that contains ` = ` itself works too.
+3. Press **RELOAD LANGUAGES**, then pick the language. The choice is saved. Until you pick one, the editor uses the file for the game's language (HD2Runtime 0.31.1: the game's, or the one set in HD2Runtime's F10 Language), found by an optional `@code cn` line, its file name (`cn.txt`, `zh-cn.txt`, `de.txt` ...) or its `@language` name.
 
-`src/editor/strings.lua` lists the interface texts; `py tools/locale_strings.py` regenerates it, and a test keeps it current.
+The search finds an object by its English name and by its translated one.
+
+`src/editor/strings.lua` lists the interface texts; `py tools/locale_strings.py` regenerates it, and a test keeps it current. `py tools/locale_strings.py --template FILE` writes the complete template offline (needs the game's `lua51.dll` and an HD2Runtime checkout, as the tests do).
 
 ## UI art
 

@@ -151,4 +151,13 @@ else
     check(not hit and not flak,'no 0.31.1 rows without the Runtime fields')
     out[#out+1]='no 0.31.1 rows ok'
 end
+-- the localisation template's catalogue part: every object name, section, group and field label it shows, once
+do
+    local texts,seen=cat:texts(),{}
+    for _,t in ipairs(texts)do check(not seen[t],'text listed twice: '..t);seen[t]=true end
+    for _,t in ipairs({'AR-23 Liberator','Health & Armor','Damage Zones','Fire rate','Support weapon','Explosion'})do
+        check(seen[t],'template text missing: '..t)
+    end
+    out[#out+1]='catalogue texts ok ('..#texts..')'
+end
 return table.concat(out,'\n')

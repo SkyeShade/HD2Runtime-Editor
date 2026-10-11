@@ -207,21 +207,23 @@ make_value_row=function(object,spec)
 end
 M.make_value_row=make_value_row
 
--- A row's value as text (its own labels first).
+-- A row's value as the window shows it, in the player's language (its own labels first).
+local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 function M.text(row,value)
+    local L=i18n.L
     for _,item in ipairs(row.labels or{})do
-        if util.same(item.value,value)then return item.label end
+        if util.same(item.value,value)then return L(item.label)end
     end
     if row.kind=='traits'and type(value)=='table'then
-        if#value==0 then return'None'end
+        if#value==0 then return L('None')end
         local names={}
         for i,id in ipairs(value)do
             names[i]=id
-            for _,t in ipairs(row.traits or{})do if t.value==id then names[i]=t.label end end
+            for _,t in ipairs(row.traits or{})do if t.value==id then names[i]=L(t.label)end end
         end
         return table.concat(names,', ')
     end
-    return util.value_text(value)
+    return util.value_label(value)
 end
 -- The value a request expects (vanilla; references build their own handle).
 function M.expect(row)
@@ -2337,6 +2339,43 @@ function Catalog:import_index()
     end
     self.import_lookup=lookup
     return lookup
+end
+-- Every text the window can show from the catalogue, for the localisation template (editor/i18n.lua write_template):
+-- category labels, object names, subtitles and details, sections, groups (and each " · " part of them), field labels,
+-- value labels, traits, notes and reasons. Opens the whole catalogue first. Sorted, each text once.
+function Catalog:texts()
+    while not self:index_step(500)do end
+    local seen,out={},{}
+    local function add(text)
+        if type(text)~='string'then return end
+        text=text:gsub('^%s+',''):gsub('%s+$','')
+        if text==''or seen[text]or text:find('[\r\n]')or not text:find('%a')then return end
+        seen[text]=true
+        out[#out+1]=text
+    end
+    local function add_parts(text)
+        add(text)
+        if type(text)=='string'and text:find(' · ',1,true)then
+            for part in(text..' · '):gmatch('(.-) · ')do add(part)end
+        end
+    end
+    for _,group in ipairs(M.GROUPS)do
+        add(group.label)
+        for _,item in ipairs(group.items)do
+            add(item.label)
+            for _,object in ipairs((self:objects(item.id))or{})do
+                add(object.name);add(object.subtitle);add(object.detail)
+                for _,section in ipairs(object.sections or{})do add_parts(section.label);add_parts(section.group)end
+                for _,row in ipairs(object.rows or{})do
+                    add(row.label);add(row.note);add(row.reason)
+                    for _,l in ipairs(row.labels or{})do add(l.label)end
+                    for _,t in ipairs(row.traits or{})do add(t.label)end
+                end
+            end
+        end
+    end
+    table.sort(out,function(a,b)return a:lower()<b:lower()end)
+    return out
 end
 -- The other rows that write a row's native bytes, on other objects (a value shared by several weapons, enemies or
 -- stratagems: changing one changes them all). {row, ...}; complete once the index is built (index_step).

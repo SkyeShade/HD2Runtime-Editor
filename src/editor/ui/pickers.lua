@@ -6,6 +6,7 @@ local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local L=require('mods/skyeshade/hd2runtime_editor/editor/i18n').L
+local Lf=require('mods/skyeshade/hd2runtime_editor/editor/i18n').Lf
 local C,SZ=theme.colour,theme.size
 local M={}
 
@@ -59,7 +60,7 @@ function M.install(App)
         local items={}
         if row.kind=='uses'then
             if row.unlimited or row.vanilla=='unlimited'then
-                items[#items+1]={value='unlimited',label='Unlimited',sub='type 0 or -1'}
+                items[#items+1]={value='unlimited',label='Unlimited',sub='type 0 or -1'}     -- (translated when drawn)
             end
             for n=row.min or 1,row.max or 100 do items[#items+1]={value=n,label=tostring(n)}end
             return items
@@ -72,7 +73,7 @@ function M.install(App)
     end
     function App:open_picker(row,filter)
         local ok,items=pcall(self.picker_items,self,row)
-        if not ok then self:toast(L('Could not list values: ')..tostring(items),C.error);return end
+        if not ok then self:toast(Lf('Could not list values: %s',tostring(items)),C.error);return end
         if#items==0 then self:toast(L('No values are available for this field'),C.dim);return end
         local current=self:row_view(row)
         local index=1
@@ -92,7 +93,8 @@ function M.install(App)
             return
         end
         for i,item in ipairs(p.items)do
-            local hay=(item.label..' '..(item.sub or'')):lower()
+            -- the English label and the one shown (translated): either matches
+            local hay=(item.label..' '..(item.sub or'')..' '..L(item.label)..' '..L(item.sub or'')):lower()
             if q==''or hay:find(q,1,true)then p.shown[#p.shown+1]=i end
         end
         p.cursor=1
@@ -112,7 +114,7 @@ function M.install(App)
     function App:handle_picker_keys(f)
         local p,k=self.picker,f.keys
         for _,ch in ipairs(f.chars)do if#p.filter<32 then p.filter=p.filter..ch;self:picker_filter()end end
-        if k.BACKSPACE and#p.filter>0 then p.filter=p.filter:sub(1,-2);self:picker_filter()end
+        if k.BACKSPACE and#p.filter>0 then p.filter=util.drop_last(p.filter);self:picker_filter()end
         local n=#p.shown
         local function move(d)if n>0 then p.cursor=math.max(1,math.min(n,p.cursor+d))end end
         if k.UP then move(-1)end
@@ -137,8 +139,8 @@ function M.install(App)
         cv:frame(x,y,w,h,C.line_strong,10)
         cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
-        cv:text(string.upper(p.row.label),x+24,y+30,{size=18,font='title',colour=C.text,max=w-90,z=11})
-        cv:text(p.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
+        cv:text(string.upper(L(p.row.label)),x+24,y+30,{size=18,font='title',colour=C.text,max=w-90,z=11})
+        cv:text(util.display_name(p.row.object),x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
         close_button(self,cv,x,y,w,function()self.picker=nil end)
         -- filter
         local fy=y+74
@@ -170,9 +172,9 @@ function M.install(App)
             local selected=s==p.cursor
             local action={click=function()p.cursor=s;self:picker_choose()end}
             if selected then cv:rect(x+12,ry+2,w-24,rh-4,C.select,10);cv:rect(x+12,ry+2,3,rh-4,C.gold,11)end
-            cv:text(item.label,x+28,ry+(item.sub and 14 or rh/2),{size=SZ.label,colour=selected and C.text or C.dim,
+            cv:text(L(item.label),x+28,ry+(item.sub and 14 or rh/2),{size=SZ.label,colour=selected and C.text or C.dim,
                 max=w-180,z=12})
-            if item.sub then cv:text(item.sub,x+28,ry+30,{size=SZ.tiny,colour=C.faint,max=w-180,z=12})end
+            if item.sub then cv:text(L(item.sub),x+28,ry+30,{size=SZ.tiny,colour=C.faint,max=w-180,z=12})end
             if util.same(item.value,p.current)then
                 self.chip_fn(cv,L('CURRENT'),x+w-28,ry+rh/2,C.gold,C.gold_wash,'right',10)
             elseif util.same(item.value,p.row.vanilla)then
@@ -187,7 +189,7 @@ function M.install(App)
             cv:rect(x+w-10,ly,3,rows*rh,C.line,11)
             cv:rect(x+w-10,ly+(rows*rh-th)*t,3,th,C.gold,12)
         end
-        cv:text(L('↑↓ choose   Enter / Tab select   Type to filter   Esc / Del close   ')..n..' of '..#p.items,
+        cv:text(Lf('↑↓ choose   Enter / Tab select   Type to filter   Esc / Del close   %d of %d',n,#p.items),
             x+24,y+h-26,{size=SZ.tiny,colour=C.faint,max=w-48,z=11})
     end
 
@@ -202,9 +204,10 @@ function M.install(App)
         for _,n in ipairs(natives())do
             local other=code_key(n.code)
             if n.name~=self.coder.row.object.name then
-                if other==key then notes[#notes+1]={'Same code as '..n.name..' (written with the unverified acknowledgement)',C.pending}
+                if other==key then
+                    notes[#notes+1]={Lf('Same code as %s (written with the unverified acknowledgement)',L(n.name)),C.pending}
                 elseif #key>0 and(other:sub(1,#key+1)==key..','or key:sub(1,#other+1)==other..',')then
-                    if#notes<3 then notes[#notes+1]={'Overlaps '..n.name..' ('..util.code_text(n.code)..')',C.faint}end
+                    if#notes<3 then notes[#notes+1]={Lf('Overlaps %s (%s)',L(n.name),util.code_text(n.code)),C.faint}end
                 end
             end
         end
@@ -214,7 +217,11 @@ function M.install(App)
         local c=self.coder
         self.coder=nil
         if not c then return end
-        if#c.code<(c.row.min_length or 1)then self:toast(L('A code needs at least ')..(c.row.min_length or 1)..' direction',C.error);return end
+        if#c.code<(c.row.min_length or 1)then
+            local n=c.row.min_length or 1
+            self:toast(n==1 and L('A code needs at least 1 direction')or Lf('A code needs at least %d directions',n),C.error)
+            return
+        end
         self:stage(c.row,c.code)
     end
     function App:handle_code_keys(f)
@@ -241,7 +248,7 @@ function M.install(App)
         cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
         cv:text(L('CALLDOWN CODE'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
-        cv:text(c.row.object.name,x+24,y+54,{size=SZ.small,colour=C.faint,max=w-120,z=11})
+        cv:text(util.display_name(c.row.object),x+24,y+54,{size=SZ.small,colour=C.faint,max=w-120,z=11})
         close_button(self,cv,x,y,w,function()self.coder=nil end)
         -- the code as arrow tiles
         local max=c.row.max_length or 9
@@ -306,7 +313,7 @@ function M.install(App)
         if at then
             if#e.list>1 then table.remove(e.list,at)else self:toast(L('A weapon keeps at least one fire mode'),C.dim)end
         elseif#e.list<(e.row.max_modes or 4)then e.list[#e.list+1]=m
-        else self:toast(L('At most ')..(e.row.max_modes or 4)..' fire modes',C.dim)end
+        else self:toast(Lf('At most %d fire modes',e.row.max_modes or 4),C.dim)end
     end
     function App:modes_save()
         local e=self.moder
@@ -336,7 +343,7 @@ function M.install(App)
         cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
         cv:text(L('FIRE MODES'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
-        cv:text(e.row.object.name..'   '..#e.list..' of at most '..(e.row.max_modes or 4),x+24,y+54,
+        cv:text(util.display_name(e.row.object)..'   '..Lf('%d of at most %d',#e.list,e.row.max_modes or 4),x+24,y+54,
             {size=SZ.small,colour=C.faint,max=w-90,z=11})
         close_button(self,cv,x,y,w,function()self.moder=nil end)
         self.mode_rows=self.mode_rows or{}
@@ -353,7 +360,7 @@ function M.install(App)
             cv:rect(x+28,ry+11,18,18,at and C.gold or C.box,11)
             cv:frame(x+28,ry+11,18,18,at and C.gold or C.line_strong,11)
             if at then cv:text(tostring(at),x+37,ry+20,{size=SZ.tiny,font='title',colour=C.inverse,align='center',z=12})end
-            cv:text(util.humanize(m),x+60,ry+20,{size=SZ.label,colour=at and C.text or C.dim,z=12})
+            cv:text(L(util.humanize(m)),x+60,ry+20,{size=SZ.label,colour=at and C.text or C.dim,z=12})
             if has(e.row.vanilla,m)then cv:text(L('default'),x+w-28,ry+20,{size=SZ.tiny,colour=C.faint,align='right',z=12})end
             cv:hit(x+12,ry,w-24,40,action)
         end
@@ -378,7 +385,7 @@ function M.install(App)
         local at=has(e.list,id)
         if at then table.remove(e.list,at)
         elseif#e.list<(e.row.max_traits or 5)then e.list[#e.list+1]=id
-        else self:toast(L('At most %d traits'):format(e.row.max_traits or 5),C.dim)end
+        else self:toast(Lf('At most %d traits',e.row.max_traits or 5),C.dim)end
     end
     function App:traits_save()
         local e=self.traiter
@@ -417,7 +424,7 @@ function M.install(App)
         cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
         cv:text(L('DISPLAYED TRAITS'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
-        cv:text(e.row.object.name..'   '..L('%d of at most %d, in this order: %s'):format(#e.list,e.row.max_traits or 5,
+        cv:text(util.display_name(e.row.object)..'   '..Lf('%d of at most %d, in this order: %s',#e.list,e.row.max_traits or 5,
             catalog_module.text(e.row,e.list)),x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
         close_button(self,cv,x,y,w,function()self.traiter=nil end)
         self.trait_rows=self.trait_rows or{}
@@ -467,7 +474,7 @@ function M.install(App)
         if v==nil then return true end
         v=math.floor(v+0.5)
         if v~=0 and(v<(e.row.min or 1)or v>(e.row.max or 3000))then
-            self:toast(L('A rate is 0 (unused) or ')..(e.row.min or 1)..' to '..(e.row.max or 3000)..' rpm',C.error)
+            self:toast(Lf('A rate is 0 (unused) or %d to %d rpm',e.row.min or 1,e.row.max or 3000),C.error)
             return false
         end
         e.slots[e.cursor]=v
@@ -484,7 +491,7 @@ function M.install(App)
         for _,ch in ipairs(f.chars)do
             if ch:match('%d')then e.buffer=(e.buffer or'')..ch;if#e.buffer>5 then e.buffer=e.buffer:sub(1,5)end end
         end
-        if k.BACKSPACE then e.buffer=(e.buffer or tostring(e.slots[e.cursor])):sub(1,-2)end
+        if k.BACKSPACE then e.buffer=util.drop_last(e.buffer or tostring(e.slots[e.cursor]))end
         if k.DELETE then e.buffer=nil;e.slots[e.cursor]=0 end
         if k.UP or k.DOWN then
             if self:rates_commit()then e.cursor=math.max(1,math.min(3,e.cursor+(k.UP and-1 or 1)))end
@@ -504,7 +511,7 @@ function M.install(App)
         cv:rect(x,y,w,h,C.panel_alt,9);cv:frame(x,y,w,h,C.line_strong,10);cv:rect(x,y,w,3,C.gold,10)
         cv:hit(x,y,w,h,{})
         cv:text(L('RATE-OF-FIRE MODES'),x+24,y+30,{size=18,font='title',colour=C.text,z=11})
-        cv:text(e.row.object.name..'   0 = unused slot',x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
+        cv:text(util.display_name(e.row.object)..'   '..L('0 = unused slot'),x+24,y+54,{size=SZ.small,colour=C.faint,max=w-90,z=11})
         close_button(self,cv,x,y,w,function()self.rater=nil end)
         self.rate_rows=self.rate_rows or{}
         for i=1,3 do
@@ -517,8 +524,8 @@ function M.install(App)
             if selected then cv:rect(x+12,ry,w-24,44,C.select,10);cv:rect(x+12,ry,3,44,C.gold,11)
             elseif self.hover==action then cv:rect(x+12,ry,w-24,44,C.hover,10)end
             local slot=e.row.slots and e.row.slots[i]or tostring(i)
-            cv:text(L('Slot ')..string.upper(slot),x+28,ry+22,{size=SZ.label,colour=C.dim,z=12})
-            local text=(selected and e.buffer)or(e.slots[i]==0 and'unused'or util.format(e.slots[i]))
+            cv:text(Lf('Slot %s',string.upper(slot)),x+28,ry+22,{size=SZ.label,colour=C.dim,z=12})
+            local text=(selected and e.buffer)or(e.slots[i]==0 and L('unused')or util.format(e.slots[i]))
             cv:rect(x+w-200,ry+8,150,28,C.box,11)
             cv:frame(x+w-200,ry+8,150,28,selected and C.box_focus or C.box_edge,11)
             cv:text(text,x+w-60,ry+22,{size=SZ.label,colour=e.slots[i]==0 and not(selected and e.buffer)and C.faint or C.text,

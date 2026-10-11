@@ -1273,6 +1273,29 @@ do
         assert(sbeam and pulse and pulse.target_code:find('beam_source().target',1,true),'Laser Sentry beam swap and pulse')
     end
 end
+-- a translated catalogue (a Chinese file): names, subtitles, sections and values are shown translated, the search
+-- finds an object by its English and its translated name, and every frame stays inside the overlay's limits
+do
+    local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+    i18n.set({['AR-23 Liberator']='AR-23 解放者',['Assault Rifle']='突击步枪',Damage='伤害',Projectile='弹药',
+        On='开',Off='关',['%d fields']='%d 个字段',['Fire rate']='射速'},'中文')
+    H.app:set_view('browse')
+    local found
+    for _,r in ipairs(H.app:search_results('解放者'))do if r.object.name=='AR-23 Liberator'then found=r end end
+    assert(found and found.label=='AR-23 解放者','search by the translated name')
+    found=nil
+    for _,r in ipairs(H.app:search_results('liberator'))do if r.object.name=='AR-23 Liberator'then found=r end end
+    assert(found,'search by the English name')
+    H.app:goto_object(found.object)
+    local d=step({},nil,'64_translated_browse')
+    local shown={}
+    for _,item in ipairs(d.items)do if item.k=='t'then shown[#shown+1]=item.s end end
+    -- (a text the body font lacks characters of is drawn in runs: the Chinese part is a run of its own)
+    local all=table.concat(shown,'\n')
+    assert(all:find("解放者",1,true)and all:find("突击步枪",1,true),"translated name and subtitle shown: "..all:sub(1,600))
+    i18n.set({},'English')
+    step({},nil,'65_back_to_english')
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')

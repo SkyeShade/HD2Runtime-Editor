@@ -17,6 +17,7 @@ local modbuilder=require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 local preset_files=require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
 local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
 local L=i18n.L
+local Lf=i18n.Lf
 local C,SZ=theme.colour,theme.size
 local M={}
 local App={};App.__index=App
@@ -47,7 +48,8 @@ pickers.install(App)
 
 ------------------------------------------------------------------------------------------------- helpers --
 function App:toast(text,colour)
-    self.toast_msg={text=util.plain(text,150),colour=colour or C.text,time=self.time}
+    -- (the status bar fits it to its width; the byte limit only keeps a whole character at the end)
+    self.toast_msg={text=util.plain(text),colour=colour or C.text,time=self.time}
     if colour==C.error then self:sound('error')end
 end
 -- The options page (hd2.diagnostics.options, HD2Runtime r51) whose options drive a mod's operation, or nil.
@@ -109,11 +111,13 @@ function App:objects()
     if group=='All'then group=nil end
     local q=self.search and self.search.text~=''and self.search.text:lower()
     if not q and not group then return list end
-    local key=item.id..'\0'..(q or'')..'\0'..(group or'')
+    local key=item.id..'\0'..(q or'')..'\0'..(group or'')..'\0'..i18n.language()
     if self.filter_key==key then return self.filtered end
     local out={}
     for _,object in ipairs(list)do
-        local hay=(object.name..' '..(object.subtitle or'')):lower()
+        -- the English name and subtitle, and the ones shown (translated): either matches
+        local hay=(object.name..' '..(object.subtitle or'')..' '..util.display_name(object)..' '
+            ..(util.display_subtitle(object)or'')):lower()
         if(not q or hay:find(q,1,true))and(not group or object.subtitle==group)then out[#out+1]=object end
     end
     self.filter_key,self.filtered=key,out
@@ -367,7 +371,7 @@ end
 function App:shared_names(row,limit)
     local names,seen={},{}
     for _,other in ipairs(self.catalog:shared_with(row))do
-        local name=other.object and other.object.name
+        local name=other.object and util.display_name(other.object)
         if name and not seen[name]then seen[name]=true;names[#names+1]=name end
     end
     if#names==0 then return nil,0 end
@@ -378,17 +382,17 @@ function App:shared_names(row,limit)
     return table.concat(shown,', ')..(#names>limit and(' (+'..(#names-limit)..')')or''),#names
 end
 function App:stage(row,value)
-    if not row.editable then self:toast(row.label..': '..tostring(row.reason or'not editable'),C.error);return false end
+    if not row.editable then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error);return false end
     local staged=self:stage_value(row,value)
     -- accepted: any value staged on another row of the same bytes gives way to it
     if staged then self:unstage_siblings(row)end
     if staged and self.pending[row.key]then
         local names=self:shared_names(row)
-        if names then self:toast(L('Shared value: this also changes %s'):format(names),C.pending)end
+        if names then self:toast(Lf('Shared value: this also changes %s',names),C.pending)end
         -- once a session: the edits GameGuard was reported to react to
         if row.risk=='gameguard'and not self.gameguard_warned then
             self.gameguard_warned=true
-            self:toast(L('Careful: ')..L(catalog_module.GAMEGUARD_RISK),C.error)
+            self:toast(Lf('Careful: %s',L(catalog_module.GAMEGUARD_RISK)),C.error)
         end
     end
     return staged
@@ -396,13 +400,13 @@ end
 function App:stage_value(row,value)
     if row.kind then
         if self.ctx.choices==false then
-            self:toast(L('Editing ')..row.label..' needs HD2Runtime r50 (script choices)',C.error);return false
+            self:toast(Lf('Editing %s needs HD2Runtime r50 (script choices)',L(row.label)),C.error);return false
         end
         local current=self.layer:value(row)
         local existing=self.pending[row.key]
         if not util.same(current,value)then
             local ok,why=catalog_module.probe(row,value)
-            if not ok then self:toast(row.label..': '..tostring(why),C.error);return false end
+            if not ok then self:toast(Lf('%s: %s',L(row.label),tostring(why)),C.error);return false end
         end
         if util.same(current,value)then
             if existing then self.pending[row.key]=nil;self.pending_n=self.pending_n-1 end
@@ -414,14 +418,14 @@ function App:stage_value(row,value)
     end
     local held=util.representable(value,row.integer,row.storage)
     if held==nil then
-        self:toast(row.integer and'Whole numbers only'or'At most 3 decimals',C.error);return false
+        self:toast(row.integer and L('Whole numbers only')or L('At most 3 decimals'),C.error);return false
     end
-    if row.min and held<row.min then held=row.min;self:toast(L('Clamped to the minimum ')..util.format(row.min),C.pending)end
-    if row.max and held>row.max then held=row.max;self:toast(L('Clamped to the maximum ')..util.format(row.max),C.pending)end
+    if row.min and held<row.min then held=row.min;self:toast(Lf('Clamped to the minimum %s',util.format(row.min)),C.pending)end
+    if row.max and held>row.max then held=row.max;self:toast(Lf('Clamped to the maximum %s',util.format(row.max)),C.pending)end
     if row.disabled_value~=nil and held~=row.disabled_value and held<=0 then
         -- nothing between the disable value and 0 is valid: zero or below means disabled
         held=row.disabled_value
-        self:toast(L('%s disables it (a value above 0 enables it)'):format(util.format(row.disabled_value)),C.pending)
+        self:toast(Lf('%s disables it (a value above 0 enables it)',util.format(row.disabled_value)),C.pending)
     end
     local current=self.layer:value(row)
     local existing=self.pending[row.key]
@@ -455,16 +459,17 @@ function App:apply()
     local n,failed=0,0
     for key,p in pairs(self.pending)do
         local ok,why=self.layer:set(p.row,p.value)
-        if ok then self.pending[key]=nil;n=n+1 else failed=failed+1;self:toast(p.row.label..': '..tostring(why),C.error)end
+        if ok then self.pending[key]=nil;n=n+1 else failed=failed+1;self:toast(Lf('%s: %s',L(p.row.label),tostring(why)),C.error)end
     end
     self.pending_n=failed
-    if failed==0 then self:toast(L('Applying ')..n..(n==1 and' change'or' changes'),C.gold)end
+    if failed==0 then self:toast(n==1 and L('Applying 1 change')or Lf('Applying %d changes',n),C.gold)end
     self.save_session=true
 end
 function App:discard()
     local n=self.pending_n
     self.pending,self.pending_n={},0
-    self:toast(n>0 and('Discarded '..n..' pending '..(n==1 and'change'or'changes'))or'Nothing pending',C.dim)
+    self:toast(n>0 and(n==1 and L('Discarded 1 pending change')or Lf('Discarded %d pending changes',n))
+        or L('Nothing pending'),C.dim)
 end
 function App:reset_defaults()
     local n=self.layer:reset_all()+self:untune_custom_all()
@@ -472,8 +477,9 @@ function App:reset_defaults()
     if self.ctx.forget_saved then self.ctx.forget_saved()end
     self.pending,self.pending_n={},0
     self.save_session=true
-    self:toast(n>0 and('Returning '..n..(n==1 and' field'or' fields')..' to the mods\' and game values')
-        or'Nothing to reset: no editor values are active',n>0 and C.gold or C.dim)
+    self:toast(n>0 and(n==1 and L('Returning 1 field to the mods\' and game values')
+            or Lf('Returning %d fields to the mods\' and game values',n))
+        or L('Nothing to reset: no editor values are active'),n>0 and C.gold or C.dim)
 end
 -- Step for nudging a value: integers by 1, decimals by a tenth of their magnitude.
 local function nudge_step(row,value,shift,ctrl)
@@ -526,7 +532,7 @@ end
 ---------------------------------------------------------------------------------------------- editing --
 function App:begin_edit(row,text,fresh)
     if not row or not row.editable then
-        if row then self:toast(row.label..': '..tostring(row.reason or'not editable'),C.error)end
+        if row then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error)end
         return
     end
     if row.kind=='code'then return self:open_code(row)end
@@ -542,7 +548,7 @@ function App:commit_edit()
     if not e then return end
     local v=tonumber(e.buffer)
     if e.buffer==''then return end
-    if not v then self:toast('"'..e.buffer..'" is not a number',C.error);return end
+    if not v then self:toast(Lf('"%s" is not a number',e.buffer),C.error);return end
     self:stage(e.row,v)
 end
 function App:edit_chars(chars)
@@ -648,7 +654,7 @@ function App:handle_browse_keys(f)
             if k.ENTER then self:begin_edit(row,nil,true)end
             if k.BACKSPACE and not row.kind then
                 local text=util.format((self:row_view(row)))
-                self:begin_edit(row,text:sub(1,-2))
+                self:begin_edit(row,util.drop_last(text))
             end
             if k.DELETE then
                 if self:unstage(row)then self:toast(L('Pending change removed'),C.dim)
@@ -657,7 +663,7 @@ function App:handle_browse_keys(f)
                     if source=='editor'then
                         local base=self.layer:base(row)
                         self:stage(row,base)
-                        self:toast(L('Staged: back to ')..self:text(row,base)..' (press Apply)',C.pending)
+                        self:toast(Lf('Staged: back to %s (press Apply)',self:text(row,base)),C.pending)
                     end
                 end
             end
@@ -689,7 +695,7 @@ function App:handle_keys(f)
         if#f.chars>0 then self:edit_chars(f.chars)end
         if k.BACKSPACE then
             if self.edit.fresh then self.edit.buffer='';self.edit.fresh=false
-            else self.edit.buffer=self.edit.buffer:sub(1,-2)end
+            else self.edit.buffer=util.drop_last(self.edit.buffer)end
         end
         if k.ESCAPE or k.DELETE then self.edit=nil
         elseif k.ENTER or k.TAB then self:commit_edit()
@@ -704,7 +710,7 @@ function App:handle_keys(f)
         for _,ch in ipairs(f.chars)do
             if#self.search.text<32 then self.search.text=self.search.text..ch;self.obj=1;self.obj_scroll=0 end
         end
-        if k.BACKSPACE then self.search.text=self.search.text:sub(1,-2);self.obj=1;self.obj_scroll=0 end
+        if k.BACKSPACE then self.search.text=util.drop_last(self.search.text);self.obj=1;self.obj_scroll=0 end
         if k.ESCAPE or k.DELETE then self.search=nil;self.obj=1;self.obj_scroll=0;self.filter_key=nil end
         if k.ENTER or k.TAB or k.DOWN then if self.search then self.search.active=false end;self.focus='objects'end
         return
@@ -712,7 +718,7 @@ function App:handle_keys(f)
     if self.rename then
         local r=self.rename
         for _,ch in ipairs(f.chars)do if#r.text<40 then r.text=r.text..ch end end
-        if k.BACKSPACE then r.text=r.text:sub(1,-2)end
+        if k.BACKSPACE then r.text=util.drop_last(r.text)end
         if k.ESCAPE or k.DELETE then self.rename=nil
         elseif k.ENTER or k.TAB then self:finish_rename()end
         return
@@ -784,10 +790,10 @@ function App:hotkey()return tostring(self.ctx.hotkey or App.DEFAULT_HOTKEY)end
 function App.hotkey_refusal_fn(...)return M.hotkey_refusal(...)end
 function M.hotkey_refusal(name,ctrl,shift,alt)
     for _,nav in ipairs(input_module.NAV)do
-        if nav==name then return L('The editor already uses %s'):format(name)end
+        if nav==name then return Lf('The editor already uses %s',name)end
     end
     if not ctrl and not alt and(input_module.CHARS[name]or name:match('^%u$'))then
-        return L('%s types text in the editor: hold Ctrl or Alt with it'):format(name)
+        return Lf('%s types text in the editor: hold Ctrl or Alt with it',name)
     end
     if ctrl and not alt and not shift and name=='F'then return L('Ctrl+F searches in the editor')end
     if name=='F10'and not ctrl and not alt and not shift then return L('F10 opens the HD2Runtime settings')end
@@ -814,9 +820,9 @@ function App:set_hotkey(chord)
     if not self.ctx.set_hotkey then self:toast(L('This HD2Runtime cannot rebind the key'),C.error);return false end
     local ok,why,holder=self.ctx.set_hotkey(chord)
     if ok then
-        self:toast(L('The editor now opens and closes with %s'):format(self:hotkey()),C.ok)
+        self:toast(Lf('The editor now opens and closes with %s',self:hotkey()),C.ok)
     elseif why=='conflict'then
-        self:toast(L('%s is already used by %s'):format(chord,tostring(holder or L('another mod'))),C.error)
+        self:toast(Lf('%s is already used by %s',chord,tostring(holder or L('another mod'))),C.error)
     else
         self:toast(tostring(why),C.error)
     end
@@ -871,7 +877,7 @@ function App:confirm_yes()
     if c.kind=='reset'then self:reset_defaults()
     elseif c.kind=='delete_preset'then
         self.presets:delete(c.data)
-        self:toast(L('Deleted preset ')..c.data,C.dim)
+        self:toast(Lf('Deleted preset %s',c.data),C.dim)
         self.preset_index=clamp_index(self.preset_index-1,#self.presets:list()+1)
     elseif c.kind=='overwrite_preset'then self:save_preset(c.data,true)end
 end
@@ -1259,8 +1265,8 @@ function App:draw_objects(y0,h)
         ..tostring(item and self.weapon_group and self.weapon_group[item.id]or'')
     if self.obj_actions_key~=akey then self.obj_actions,self.obj_actions_key={},akey end
     if#objects==0 then
-        local msg=self.objects_error and('Unavailable on this Runtime: '..self.objects_error)
-            or(self.search and'No match'or'Nothing here')
+        local msg=self.objects_error and Lf('Unavailable on this Runtime: %s',self.objects_error)
+            or(self.search and L('No match')or L('Nothing here'))
         cv:text(msg,x0+20,ly+20,{size=SZ.small,colour=C.faint,max=OBJ_W-40})
     end
     self:list({x=x0,y=ly,w=OBJ_W-1,h=y0+h-ly-6,count=#objects,row_h=theme.list_row_h+8,selected=self.obj,
@@ -1276,8 +1282,8 @@ function App:draw_objects(y0,h)
             elseif self.hover==(self.obj_actions[i])then cv:rect(x+8,y+2,w-16,rh-4,C.hover,2)end
             local tx=x+22
             if self:draw_icon(object,x+18,y+5,rh-10)then tx=x+18+rh end
-            cv:text(object.name,tx,y+15,{size=SZ.label,colour=selected and C.text or C.dim,max=w-56-(tx-x)})
-            cv:text(object.subtitle or'',tx,y+31,{size=SZ.tiny,colour=C.faint,max=w-56-(tx-x)})
+            cv:text(util.display_name(object),tx,y+15,{size=SZ.label,colour=selected and C.text or C.dim,max=w-56-(tx-x)})
+            cv:text(util.display_subtitle(object)or'',tx,y+31,{size=SZ.tiny,colour=C.faint,max=w-56-(tx-x)})
             -- markers, right to left: pending (orange hourglass piece), edited by you (yellow pencil piece), set by
             -- a mod (blue piece)
             self:draw_marks({pending=markers.pending[object.key],editor=markers.editor[object.key],
@@ -1300,7 +1306,7 @@ function App:draw_fields(y0,h)
     -- object header
     local hx=x0+20
     if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end
-    cv:text(object.name,hx,y0+24,{size=20,font='title',colour=C.text,max=w-40-(hx-x0)})
+    cv:text(util.display_name(object),hx,y0+24,{size=20,font='title',colour=C.text,max=w-40-(hx-x0)})
     local items,selectable=self:field_items(object)
     local markers=self:markers()
     local edited=0
@@ -1308,11 +1314,12 @@ function App:draw_fields(y0,h)
         local _,source=self:row_view(row)
         if source=='pending'or source=='editor'then edited=edited+1 end
     end
-    local sub=(object.subtitle and(object.subtitle..'   ')or'')..(object.detail and object.detail~=''and(object.detail..'   ')or'')
-        ..#object.rows..' fields'
-        ..(edited>0 and('   '..edited..' edited')or'')
+    local subtitle=util.display_subtitle(object)
+    local sub=(subtitle and(subtitle..'   ')or'')..(object.detail and object.detail~=''and(L(object.detail)..'   ')or'')
+        ..Lf('%d fields',#object.rows)
+        ..(edited>0 and('   '..Lf('%d edited',edited))or'')
     cv:text(sub,hx,y0+47,{size=SZ.small,colour=C.faint,max=w-40-(hx-x0)})
-    if object.error then cv:text(L('Could not read: ')..object.error,x0+20,y0+70,{size=SZ.small,colour=C.error,max=w-40})end
+    if object.error then cv:text(Lf('Could not read: %s',object.error),x0+20,y0+70,{size=SZ.small,colour=C.error,max=w-40})end
     -- column titles
     local hy=y0+66
     cv:rect(x0,hy,w,22,C.header,2)
@@ -1368,12 +1375,12 @@ function App:draw_fields(y0,h)
                 if item.depth==0 then
                     cv:text(string.upper(L(item.header)),x+indent+20,cy,{size=SZ.small,font='title',colour=C.gold,
                         max=lw-indent-170-reserve})
-                    cv:text(L('%d parts · %d fields'):format(item.subs,item.count),right,cy,
+                    cv:text(Lf('%d parts · %d fields',item.subs,item.count),right,cy,
                         {size=SZ.tiny,colour=C.faint,align='right'})
                 else
                     cv:text(L(item.header),x+indent+20,cy,{size=SZ.label,colour=selected and C.text or C.dim,
                         max=lw-indent-150-reserve})
-                    cv:text(L('%d fields'):format(item.count),right,cy,{size=SZ.tiny,colour=C.faint,align='right'})
+                    cv:text(Lf('%d fields',item.count),right,cy,{size=SZ.tiny,colour=C.faint,align='right'})
                 end
                 return
             end
@@ -1454,22 +1461,29 @@ function App:draw_status(y,h)
         local parts={}
         local x=18
         if err then
-            cv:text(L('Error: ')..err,x,cy,{size=SZ.small,colour=C.error,max=maxw})
+            cv:text(Lf('Error: %s',tostring(err)),x,cy,{size=SZ.small,colour=C.error,max=maxw})
             return
         end
         if not row.editable then
             -- (an information row, such as a beam conversion's verdict or caveat, is not a lock)
-            cv:text((row.info and L('Note: ')or L('Locked: '))..tostring(row.reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
+            local reason=L(tostring(row.reason))
+            cv:text(row.info and Lf('Note: %s',reason)or Lf('Locked: %s',reason),x,cy,{size=SZ.small,colour=C.faint,max=maxw})
             return
         end
         local range
-        if row.kind=='code'then range=(row.min_length or 1)..' to '..(row.max_length or 9)..' directions'
-        elseif row.kind=='uses'then range=(row.unlimited and'unlimited, or 'or'')..(row.min or 1)..' to '..(row.max or 100)
-        elseif row.kind=='reference'then range='Enter to pick a donor'
-        elseif row.kind then range='Enter to choose, ←→ to step'
-        else range=(row.min or row.max)and('range '..util.format(row.min or-math.huge)..' to '..util.format(row.max))or'no published range'end
+        if row.kind=='code'then range=Lf('%d to %d directions',row.min_length or 1,row.max_length or 9)
+        elseif row.kind=='uses'then
+            range=row.unlimited and Lf('unlimited, or %d to %d',row.min or 1,row.max or 100)
+                or Lf('%d to %d',row.min or 1,row.max or 100)
+        elseif row.kind=='reference'then range=L('Enter to pick a donor')
+        elseif row.kind then range=L('Enter to choose, ←→ to step')
+        elseif row.min or row.max then
+            local lo,hi=util.format(row.min or-math.huge),util.format(row.max)
+            range=row.integer and Lf('range %s to %s, whole numbers',lo,hi)or Lf('range %s to %s',lo,hi)
+        else range=L('no published range')end
+        if row.integer and(row.kind or not(row.min or row.max))then range=Lf('%s, whole numbers',range)end
         x=x+cv:text(tostring(row.field),x,cy,{size=SZ.small,colour=C.dim,max=260})+16
-        x=x+cv:text(range..(row.integer and', whole numbers'or''),x,cy,{size=SZ.small,colour=C.faint,max=240})+14
+        x=x+cv:text(range,x,cy,{size=SZ.small,colour=C.faint,max=240})+14
         local shared_names,shared_n=self:shared_names(row,2)
         if row.shared or shared_n>0 then x=x+chip(cv,L('SHARED'),x,cy,C.pending,C.pending_soft)+6 end
         if row.risk=='gameguard'then x=x+chip(cv,L('GAMEGUARD RISK'),x,cy,C.error,C.error_soft)+6 end
@@ -1480,7 +1494,7 @@ function App:draw_status(y,h)
             return
         end
         if shared_names and not base_holder then
-            x=x+10+cv:text(L('also changes %s'):format(shared_names),x+10,cy,
+            x=x+10+cv:text(Lf('also changes %s',shared_names),x+10,cy,
                 {size=SZ.small,colour=C.pending,max=math.max(40,maxw-x-10)})
         end
         if row.note and not base_holder and not shared_names then
@@ -1489,8 +1503,8 @@ function App:draw_status(y,h)
         if base_holder then
             x=x+10
             local page=self:option_page_of(base_holder.op)
-            cv:text(L('Mod: ')..pretty_mod(base_holder.mod)..' = '..self:text(row,base_holder.value)
-                ..(page and('   '..L('set by its in-game options "%s"'):format(page.title or page.id))or''),x,cy,
+            cv:text(Lf('Mod: %s = %s',pretty_mod(base_holder.mod),self:text(row,base_holder.value))
+                ..(page and('   '..Lf('set by its in-game options "%s"',page.title or page.id))or''),x,cy,
                 {size=SZ.small,colour=C.mod,max=math.max(40,maxw-x)})
         end
     elseif self.view=='mods'then
@@ -1571,11 +1585,11 @@ function App:draw_confirm()
         local active=self.layer:counts()
         title=L('RESET TO DEFAULTS?')
         body={L('Every field the editor changed goes back to the value its mod applies,'),
-            L('or to the game\'s own value.')..' '..L('%d active, %d pending.'):format(active,self.pending_n)}
+            L('or to the game\'s own value.')..' '..Lf('%d active, %d pending.',active,self.pending_n)}
     elseif c.kind=='delete_preset'then
-        title=L('DELETE PRESET?');body={L('"%s" will be removed from your saved presets.'):format(tostring(c.data))}
+        title=L('DELETE PRESET?');body={Lf('"%s" will be removed from your saved presets.',tostring(c.data))}
     elseif c.kind=='overwrite_preset'then
-        title=L('OVERWRITE PRESET?');body={L('"%s" will be replaced with the current values.'):format(tostring(c.data))}
+        title=L('OVERWRITE PRESET?');body={Lf('"%s" will be replaced with the current values.',tostring(c.data))}
     end
     cv:text(title,x+24,y+34,{size=19,font='title',colour=C.text,z=11})
     for i,line in ipairs(body)do cv:text(line,x+24,y+62+(i-1)*22,{size=SZ.small,colour=C.dim,max=w-48,z=11})end
@@ -1705,15 +1719,21 @@ function App:save_preset(name,confirmed)
     if next(values)==nil then self:toast(L('Nothing to save: edit a field first'),C.dim);return end
     if not confirmed and self.presets:find(name)then self:ask('overwrite_preset',name);return end
     local ok,why=self.presets:save(name,self:encode_values(values))
-    if ok then self:toast(L('Saved preset ')..name..' ('..util.count(values)..' fields)',C.ok)
-    else self:toast(L('Could not save: ')..tostring(why),C.error)end
+    if ok then self:toast(Lf('Saved preset %s (%d fields)',name,util.count(values)),C.ok)
+    else self:toast(Lf('Could not save: %s',tostring(why)),C.error)end
+end
+-- The toast after values were staged from a preset or a file.
+function App.loaded_text(name,pending,missing)
+    if missing>0 then
+        return Lf('Loaded %s: %d pending, %d unknown fields skipped. Press Apply.',name,pending,missing)
+    end
+    return Lf('Loaded %s: %d pending. Press Apply.',name,pending)
 end
 function App:load_preset(name)
     local values=self.presets:load(name)
     if not values then return end
     local missing=self:stage_map(values)
-    self:toast(L('Loaded ')..name..': '..self.pending_n..' pending'..(missing>0 and(', '..missing..' unknown fields skipped')or'')
-        ..'. Press Apply.',missing>0 and C.pending or C.ok)
+    self:toast(App.loaded_text(name,self.pending_n,missing),missing>0 and C.pending or C.ok)
 end
 function App:finish_rename()
     local r=self.rename
@@ -1727,7 +1747,7 @@ function App:finish_rename()
         return
     end
     local ok,why=self.presets:rename(r.old,r.text)
-    if ok then self:toast(L('Renamed to ')..r.text,C.ok)else self:toast(tostring(why),C.error)end
+    if ok then self:toast(Lf('Renamed to %s',r.text),C.ok)else self:toast(tostring(why),C.error)end
 end
 local PRESET_ACTIONS={'LOAD','SAVE OVER','RENAME','SHARE','DELETE'}
 function App:preset_action_run(index,preset)
@@ -1765,9 +1785,9 @@ function App:share_preset(preset)
     end
     local ok,path=pcall(preset_files.save,folder,preset.name,values,labels,
         {editor=self.ctx.version,runtime=self.ctx.minimum},win.mkdir)
-    if not ok then self:toast(L('Not shared: %s'):format(tostring(path)),C.error);return end
+    if not ok then self:toast(Lf('Not shared: %s',tostring(path)),C.error);return end
     self.pf_list=nil
-    self:toast(L('Shared as %s'):format(path),C.ok)
+    self:toast(Lf('Shared as %s',path),C.ok)
     if self.ctx.log then self.ctx.log('shared the preset '..preset.name..' as '..path)end
 end
 -- A file's preset, read once per size: {preset, error}.
@@ -1786,13 +1806,12 @@ function App:preset_file_action_run(index,f)
     local p=open.preset
     if FILE_ACTIONS[index]=='LOAD'then
         local missing=self:stage_map(p.values)
-        self:toast(L('Loaded ')..p.name..': '..self.pending_n..' pending'..(missing>0 and(', '..missing..' unknown fields skipped')or'')
-            ..'. Press Apply.',missing>0 and C.pending or C.ok)
+        self:toast(App.loaded_text(p.name,self.pending_n,missing),missing>0 and C.pending or C.ok)
     else
         local name=self.presets:unique_name(p.name)
         local ok,why=self.presets:save(name,p.values)
-        if ok then self:toast(L('Saved preset ')..name..' ('..util.count(p.values)..' fields)',C.ok)
-        else self:toast(L('Could not save: ')..tostring(why),C.error)end
+        if ok then self:toast(Lf('Saved preset %s (%d fields)',name,util.count(p.values)),C.ok)
+        else self:toast(Lf('Could not save: %s',tostring(why)),C.error)end
     end
 end
 -- A preset file from anywhere: the Windows open-file dialog, then a copy into the shared folder.
@@ -1800,7 +1819,7 @@ function App:preset_file_pick()
     if self.pf_picking then return end
     local job,why=win.pick_file({title=L('Choose a preset file'),
         filter=L('HD2R Editor presets')..' (*.hd2rpreset.json)|*.hd2rpreset.json;*.json|',folder=preset_files.folder()})
-    if not job then self:toast(L('The Windows file dialog did not open (%s)'):format(tostring(why)),C.error);return end
+    if not job then self:toast(Lf('The Windows file dialog did not open (%s)',tostring(why)),C.error);return end
     self.pf_picking=job
 end
 function App:preset_file_poll()
@@ -1811,9 +1830,9 @@ function App:preset_file_poll()
     self.pf_picking=nil
     if not result then return end
     local path,preset=preset_files.import(result,preset_files.folder(),win.mkdir)
-    if not path then self:toast(L('Not imported: %s'):format(tostring(preset)),C.error);return end
+    if not path then self:toast(Lf('Not imported: %s',tostring(preset)),C.error);return end
     self.pf_list=nil
-    self:toast(L('Imported %s into the shared folder'):format(path:match('([^\\]+)$')or path),C.ok)
+    self:toast(Lf('Imported %s into the shared folder',path:match('([^\\]+)$')or path),C.ok)
 end
 function App:new_preset()
     if next(self:current_values())==nil then self:toast(L('Nothing to save: edit a field first'),C.dim);return end
@@ -1854,7 +1873,7 @@ function App:mb_stage(open,name)
         end
     end
     if n==0 and failed==0 then self:toast(L('Nothing chosen to stage'),C.dim);return end
-    self:toast(L('Staged %d values from %s. Press Apply.'):format(n,name)..(failed>0 and(' '..L('%d refused'):format(failed))or''),
+    self:toast(Lf('Staged %d values from %s. Press Apply.',n,name)..(failed>0 and(' '..Lf('%d refused',failed))or''),
         failed>0 and C.pending or C.ok)
     self:sound('click')
 end
@@ -1975,7 +1994,7 @@ function App:draw_presets(y0,h)
                 cv:text(p.name,x+22,y+17,{size=SZ.label,colour=selected and C.text or C.dim,max=w-60})
             end
             local when=p.created and p.created>0 and os.date and os.date('%Y-%m-%d %H:%M',p.created)or''
-            cv:text(p.count..(p.count==1 and' field'or' fields')..(when~=''and('   '..when)or''),x+22,y+35,
+            cv:text((p.count==1 and L('1 field')or Lf('%d fields',p.count))..(when~=''and('   '..when)or''),x+22,y+35,
                 {size=SZ.tiny,colour=C.faint,max=w-44})
         end})
     -- settings
@@ -2003,7 +2022,7 @@ function App:draw_presets(y0,h)
         cv:text(L('Free the mouse from the camera while open (experimental)'),tx+46,cy2,{size=SZ.small,colour=C.dim,max=PRESETS_W-80})
         cv:hit(tx,cy2-12,PRESETS_W-36,24,self.toggle_cursor)
     end
-    cv:text(L('Open the editor with ')..self:hotkey()..'. Edits apply live through HD2Runtime\'s guarded writes.',
+    cv:text(Lf('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.',self:hotkey()),
         18,sy+70,{size=SZ.tiny,colour=C.faint,max=PRESETS_W-36})
     -- detail
     local x0=PRESETS_W
@@ -2012,7 +2031,7 @@ function App:draw_presets(y0,h)
     if self.preset_index==1 then
         local values=self:current_values()
         cv:text(L('NEW PRESET'),x0+20,y0+24,{size=20,font='title',colour=C.text})
-        cv:text(util.count(values)..' fields would be saved: every applied editor value and every pending change.',
+        cv:text(Lf('%d fields would be saved: every applied editor value and every pending change.',util.count(values)),
             x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
         self.btn_new=self.btn_new or{click=function()self:new_preset()end}
         button(self,L('SAVE AS NEW PRESET'),x0+20,y0+72,230,34,next(values)and'primary'or'disabled',self.btn_new)
@@ -2026,7 +2045,7 @@ function App:draw_presets(y0,h)
     if entry.kind=='mb'then return self:draw_mb_project(entry.project,x0,y0,w,h)end
     local p=entry.preset
     cv:text(p.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
-    cv:text(p.count..' fields',x0+20,y0+47,{size=SZ.small,colour=C.faint})
+    cv:text(Lf('%d fields',p.count),x0+20,y0+47,{size=SZ.small,colour=C.faint})
     self.preset_btns=self.preset_btns or{}
     local bx=x0+20
     for i,label in ipairs(PRESET_ACTIONS)do
@@ -2065,7 +2084,7 @@ function App:draw_files_header(x0,y0,w,h)
         local folder=preset_files.folder()
         if folder then win.mkdir(folder)end
         local ok,why=win.open(folder or'')
-        if not ok then self:toast(L('Could not open it: %s'):format(tostring(why)),C.error)end
+        if not ok then self:toast(Lf('Could not open it: %s',tostring(why)),C.error)end
     end}
     button(self,self.pf_picking and L('CHOOSE IN THE WINDOWS DIALOG...')or L('IMPORT A FILE'),x0+20,y0+200,300,34,
         'primary',self.btn_pf_import)
@@ -2077,11 +2096,11 @@ function App:draw_preset_file(f,x0,y0,w,h)
     local p=open.preset
     cv:text(p and p.name or f.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
     if not p then
-        cv:text(L('Could not read this file: %s'):format(tostring(open.error)),x0+20,y0+47,{size=SZ.small,colour=C.error,max=w-40})
+        cv:text(Lf('Could not read this file: %s',tostring(open.error)),x0+20,y0+47,{size=SZ.small,colour=C.error,max=w-40})
         return
     end
-    local info=f.name..'   '..util.count(p.values)..' fields'..(p.editor and('   '..L('from editor %s'):format(p.editor))or'')
-        ..(p.skipped>0 and('   '..L('%d unreadable fields skipped'):format(p.skipped))or'')
+    local info=f.name..'   '..Lf('%d fields',util.count(p.values))..(p.editor and('   '..Lf('from editor %s',p.editor))or'')
+        ..(p.skipped>0 and('   '..Lf('%d unreadable fields skipped',p.skipped))or'')
     cv:text(info,x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
     self.pf_btns=self.pf_btns or{}
     local bx=x0+20
@@ -2127,7 +2146,7 @@ function App:draw_mb_project(p,x0,y0,w,h)
         if it.selected and it.row and not it.why then chosen=chosen+1 end
     end
     cv:text(p.name,x0+20,y0+24,{size=20,font='title',colour=C.text,max=w-40})
-    cv:text(L('%s   ModBuilder project, SDK %s   %d of %d edits can be staged'):format(tostring(p.resource or''),
+    cv:text(Lf('%s   ModBuilder project, SDK %s   %d of %d edits can be staged',tostring(p.resource or''),
         tostring(p.sdk or'?'),ok_n,#open.items),x0+20,y0+47,{size=SZ.small,colour=C.faint,max=w-40})
     self.mb_btns=self.mb_btns or{}
     local bx=x0+20
@@ -2150,7 +2169,7 @@ function App:draw_mb_project(p,x0,y0,w,h)
     end
     local y=y0+124
     if open.error then
-        cv:text(L('Could not read this project: %s'):format(open.error),x0+20,y+12,{size=SZ.small,colour=C.error,max=w-40})
+        cv:text(Lf('Could not read this project: %s',open.error),x0+20,y+12,{size=SZ.small,colour=C.error,max=w-40})
         return
     end
     cv:rect(x0,y,w,22,C.header,2)
@@ -2173,15 +2192,15 @@ function App:draw_mb_project(p,x0,y0,w,h)
             end
             local tx=x+46
             if it.row then
-                local nw=cv:text(it.row.object.name,tx,cy,{size=SZ.small,colour=C.faint,max=(lw-260)*0.45})
+                local nw=cv:text(util.display_name(it.row.object),tx,cy,{size=SZ.small,colour=C.faint,max=(lw-260)*0.45})
                 cv:text(L(it.row.label),tx+12+nw,cy,{size=SZ.small,colour=usable and C.dim or C.faint,max=lw-330-nw})
             else
-                cv:text(it.label,tx,cy,{size=SZ.small,colour=C.faint,max=lw-330})
+                cv:text(L(it.label),tx,cy,{size=SZ.small,colour=C.faint,max=lw-330})
             end
             if usable then
                 cv:text(self:text(it.row,it.value),x+lw-18,cy,{size=SZ.label,colour=C.gold,align='right',max=260})
             else
-                cv:text(tostring(it.why),x+lw-18,cy,{size=SZ.tiny,colour=C.error,align='right',max=300})
+                cv:text(L(tostring(it.why)),x+lw-18,cy,{size=SZ.tiny,colour=C.error,align='right',max=300})
             end
         end})
 end
@@ -2212,13 +2231,13 @@ function App:draw_value_list(values,x0,y,w,h)
             local item=rows[i]
             local cy=ry+rh/2
             if item.row or item.custom_name then
-                local name=item.row and item.row.object.name or item.custom_name
+                local name=item.row and util.display_name(item.row.object)or item.custom_name
                 local nw=cv:text(name,x+18,cy,{size=SZ.small,colour=C.faint,max=(lw-140)*0.45})
                 cv:text(item.row and L(item.row.label)or item.custom_label,x+30+nw,cy,{size=SZ.small,colour=C.dim,max=lw-170-nw})
             else
-                cv:text(L('Unknown field: ')..item.key,x+18,cy,{size=SZ.small,colour=C.faint,max=lw-140})
+                cv:text(Lf('Unknown field: %s',item.key),x+18,cy,{size=SZ.small,colour=C.faint,max=lw-140})
             end
-            cv:text(item.row and self:text(item.row,item.value)or item.custom_text or util.value_text(item.value),x+lw-18,cy,
+            cv:text(item.row and self:text(item.row,item.value)or item.custom_text or util.value_label(item.value),x+lw-18,cy,
                 {size=SZ.label,colour=C.gold,align='right',max=170})
         end})
 end
