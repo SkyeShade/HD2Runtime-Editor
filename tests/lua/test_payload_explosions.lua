@@ -71,6 +71,12 @@ check(app:reveal(impact),'the Coyote\'s impact payload is shown')
 frame()
 local _,views=page(coyote)
 check(views[impact]==nil and views[expiry]==nil,'nothing under None')
+-- (a slot alone is a single row: shown in Projectile without an "Impact explosion" header)
+local function header_of(items,title)for _,it in ipairs(items)do if it.header==title then return it end end end
+local function item_of(items,row)for _,it in ipairs(items)do if it.row==row then return it end end end
+local items0=page(coyote)
+check(not header_of(items0,'Impact explosion')and item_of(items0,impact).fold,'the slot alone: a row without a header')
+check(app:focused_row()==impact,'the slot focused')
 
 -- 1. Staged: the CB-9 explosion's settings under the slot, in its subsection, keyed as on the CB-9 page.
 check(app:stage(impact,cb9),'CB-9 explosion staged as the impact payload')
@@ -89,6 +95,7 @@ for _,f in ipairs({'explosion.inner_radius','explosion.outer_radius','explosion.
     check(shown[f],'shown: '..f)
 end
 check(rows[shown[1]]==rows[impact]+1,'right under the slot')
+check(app:focused_row()==impact,'the slot stays focused when its part gets its header')
 local sub=subsection(items,rows[damage])
 check(sub and sub.header=='Impact explosion'and sub==subsection(items,rows[impact]),
     'in the slot\'s own subsection: '..tostring(sub and sub.header))
@@ -132,6 +139,15 @@ check(views[impact]==nil,'closed: no rows')
 local closed
 for _,it in ipairs(items)do if it.key==sub.key then closed=it end end
 check(closed and not closed.open and app:header_marks(closed,app:markers()).pending,'the closed subsection is marked')
+-- back to None the slot is a row again; an explosion again brings the part back closed, its header focused
+check(app:stage(impact,impact.vanilla),'None while closed')
+items=page(coyote)
+check(not header_of(items,'Impact explosion')and item_of(items,impact)and app:focused_row()==impact,
+    'None: the slot alone again, focused')
+check(app:stage(impact,cb9),'CB-9 while closed')
+items=page(coyote)
+local head=header_of(items,'Impact explosion')
+check(head and not head.open and app:focused_item()==head,'the part back closed, its header focused')
 app:toggle(coyote,sub.key,true)
 out[#out+1]='payload collapse ok'
 

@@ -175,21 +175,32 @@ function App:toggle(object,key,open,quiet)
     self.expanded[id]=open or nil
     self.expand_version=self.expand_version+1
 end
--- Every header of an object's page: {key, ...} (categories, their subsections, groups and their sections).
+-- Every header of an object's page: {key, ...} (categories, their subsections, groups and their sections; not the
+-- parts of a single row, which field_items shows without a header).
 function App:page_headers(object)
     local keys={}
     if not object then return keys end
     local sections=self:effective_sections(object)
-    local plain,groups,seen={},{},{}
+    local plain,count={},{}
     for _,section in ipairs(sections)do
-        if section.group then
-            if not seen[section.group]then seen[section.group]=true;keys[#keys+1]='g|'..section.group end
-            keys[#keys+1]='s|'..section.group..'|'..section.label
+        if section.group then count[section.group]=(count[section.group]or 0)+#section.rows
         else plain[#plain+1]=section end
     end
+    local seen={}
+    for _,section in ipairs(sections)do
+        local g=section.group
+        if g and count[g]~=1 then
+            if not seen[g]then seen[g]=true;keys[#keys+1]='g|'..g end
+            if#section.rows~=1 then keys[#keys+1]='s|'..g..'|'..section.label end
+        end
+    end
     for _,c in ipairs(sections_module.layout(plain,object.category))do
-        keys[#keys+1]=c.key
-        for _,sub in ipairs(c.subs)do keys[#keys+1]=sub.key end
+        if not c.plain then
+            keys[#keys+1]=c.key
+            if not c.flat then
+                for _,sub in ipairs(c.subs)do if not sub.fold then keys[#keys+1]=sub.key end end
+            end
+        end
     end
     return keys
 end
@@ -441,6 +452,20 @@ function App:fitted_label(row,max)
     end
     return self.canvas:fit(self:payload_name(row),room,SZ.label)..' · '..L(row.label)
 end
+-- A field-list row's label fitted into `max` units: a row whose header is folded away (a part or category of one row)
+-- carries that header's name before its label ("Flak · Projectile"); the name is cut first, so the label stays readable.
+function App:item_label(item,max)
+    local row=item.row
+    if not item.prefix then return self:fitted_label(row,max)end
+    local prefix=L(item.prefix)
+    local label=self:row_label(row)
+    local cv=self.canvas
+    local room=max-cv:measure(' · '..label,SZ.label)
+    if cv:measure(prefix,SZ.label)<=room then return prefix..' · '..label end
+    room=math.max(max*0.3,room)
+    local cut=cv:fit(prefix,room,SZ.label)
+    return cut..' · '..self:fitted_label(row,max-cv:measure(cut..' · ',SZ.label))
+end
 -- Opens the page a link row points to (the donor's owner weapon), at its first projectile row when it is shown.
 function App:open_link(row)
     local link=row.link
@@ -500,6 +525,12 @@ function App:field_items(object)
     if object.items and object.items_version==self.expand_version and object.items_swaps==sig then
         return object.items,object.selectable
     end
+    -- (the focused item of the page, found again below when the list changes around it: a part that grows a header)
+    local before
+    if object.items and self.view=='browse'and self:objects()[self.obj]==object then
+        local index=object.selectable and object.selectable[self.field]
+        before=index and object.items[index]
+    end
     local items,selectable={},{}
     local function add(item,pick)
         items[#items+1]=item
@@ -515,20 +546,29 @@ function App:field_items(object)
     end
     for g,list in pairs(groups)do groups[g]=sections_module.order_group(list)end
     -- the page's own sections in categories (ui/sections.lua), each collapsible, before the object's parts; a
-    -- category of one part shows its rows under the category itself
+    -- category of one part shows its rows under the category itself; a part of one row is that row in its category
+    -- (folded, no header), a category of one row that row alone
     for _,c in ipairs(sections_module.layout(plain,object.category))do
-        local open=self:is_open(object,c.key)
-        local single=#c.subs==1 and(c.subs[1].title==c.title or not c.classified)
-        add({header=c.title,key=c.key,open=open,count=#c.rows,subs=#c.subs,depth=0,rows=c.rows,category=true},true)
-        if open then
-            if single then
-                for _,row in ipairs(c.subs[1].rows)do add({row=row,depth=1,parent=c.key},true)end
-            else
-                for _,sub in ipairs(c.subs)do
-                    local sopen=self:is_open(object,sub.key)
-                    add({header=sub.title,key=sub.key,open=sopen,count=#sub.rows,depth=1,parent=c.key,rows=sub.rows},true)
-                    if sopen then
-                        for _,row in ipairs(sub.rows)do add({row=row,depth=2,parent=sub.key},true)end
+        if c.plain then
+            add({row=c.rows[1],depth=0,prefix=c.prefix,fold=true},true)
+        else
+            local open=self:is_open(object,c.key)
+            add({header=c.title,key=c.key,open=open,count=#c.rows,subs=#c.subs,depth=0,rows=c.rows,category=true},true)
+            if open then
+                if c.flat then
+                    for _,row in ipairs(c.subs[1].rows)do add({row=row,depth=1,parent=c.key},true)end
+                else
+                    for _,sub in ipairs(c.subs)do
+                        if sub.fold then
+                            add({row=sub.rows[1],depth=1,parent=c.key,prefix=sub.prefix,fold=true},true)
+                        else
+                            local sopen=self:is_open(object,sub.key)
+                            add({header=sub.title,key=sub.key,open=sopen,count=#sub.rows,depth=1,parent=c.key,
+                                rows=sub.rows},true)
+                            if sopen then
+                                for _,row in ipairs(sub.rows)do add({row=row,depth=2,parent=sub.key},true)end
+                            end
+                        end
                     end
                 end
             end
@@ -547,22 +587,53 @@ function App:field_items(object)
                 for _,row in ipairs(sec.rows)do rows[#rows+1]=row end
             end
             local gkey='g|'..g
-            local open=self:is_open(object,gkey)
-            add({header=g,key=gkey,open=open,count=count,subs=#groups[g],depth=0,rows=rows},true)
-            if open then
-                for _,sec in ipairs(groups[g])do
-                    local skey='s|'..g..'|'..sec.label
-                    local sopen=self:is_open(object,skey)
-                    add({header=sec.label,key=skey,open=sopen,count=#sec.rows,depth=1,parent=gkey,rows=sec.rows},true)
-                    if sopen then
-                        for _,row in ipairs(sec.rows)do add({row=row,depth=2,parent=skey},true)end
+            if count==1 then
+                -- (a group of one row: that row alone, named by its group and section)
+                local sec,row=nil,rows[1]
+                for _,s in ipairs(groups[g])do if#s.rows==1 then sec=s end end
+                local prefix=sections_module.fold_prefix(g,row.label)
+                local own=sec.label~=g and sections_module.fold_prefix(sec.label,row.label)
+                if own then prefix=prefix and(prefix..' · '..own)or own end
+                add({row=row,depth=0,prefix=prefix,fold=true},true)
+            else
+                local open=self:is_open(object,gkey)
+                add({header=g,key=gkey,open=open,count=count,subs=#groups[g],depth=0,rows=rows},true)
+                if open then
+                    for _,sec in ipairs(groups[g])do
+                        local skey='s|'..g..'|'..sec.label
+                        if#sec.rows==1 then
+                            add({row=sec.rows[1],depth=1,parent=gkey,
+                                prefix=sections_module.fold_prefix(sec.label,sec.rows[1].label),fold=true},true)
+                        else
+                            local sopen=self:is_open(object,skey)
+                            add({header=sec.label,key=skey,open=sopen,count=#sec.rows,depth=1,parent=gkey,rows=sec.rows},
+                                true)
+                            if sopen then
+                                for _,row in ipairs(sec.rows)do add({row=row,depth=2,parent=skey},true)end
+                            end
+                        end
                     end
                 end
             end
         end
     end
     object.items,object.selectable,object.items_version,object.items_swaps=items,selectable,self.expand_version,sig
+    if before then self:refocus(items,selectable,before)end
     return items,selectable
+end
+-- Focuses the item that was focused before the list changed (the same row or header); a row now inside a closed
+-- header focuses that header.
+function App:refocus(items,selectable,item)
+    local holder
+    for s,index in ipairs(selectable)do
+        local it=items[index]
+        if(item.row and it.row==item.row)or(item.key and it.key==item.key)then self.field=s;return true end
+        if item.row and it.header and not it.open then
+            for _,r in ipairs(it.rows or{})do if r==item.row then holder=s end end
+        end
+    end
+    if holder then self.field=holder;return true end
+    return false
 end
 -- The focused field-list item (a row or a collapsible header), or nil.
 function App:focused_item()
@@ -1784,6 +1855,17 @@ end
 
 -- Column positions of the field rows (relative to the fields pane).
 local FX={label=18,default_right=404,box=416,box_w=120,unit=544,badge_right=-14}
+-- Nesting: a header's arrow steps INDENT right per level (its title 20 after the arrow); a field's name starts one step
+-- inside the title of the header it is under (a field of a part sits visibly inside that part), a field with no header
+-- above it (a category of one row) at the headers' own edge. Only names move: the DEFAULT, VALUE, unit and SOURCE
+-- columns stay where they are on every row, and the hit area and the selection span the whole row.
+local INDENT=20
+local function header_x(depth)return FX.label+(depth or 0)*INDENT end
+local function name_x(depth)
+    depth=depth or 0
+    return FX.label+(depth>0 and(depth+1)*INDENT or 0)
+end
+App.name_x,App.header_x,App.FX=name_x,header_x,FX
 function App:draw_fields(y0,h)
     local cv=self.canvas
     local x0=CAT_W+OBJ_W
@@ -1859,7 +1941,7 @@ function App:draw_fields(y0,h)
                     actions[i]=action
                 end
                 cv:hit(x,y,lw,rh,action)
-                local indent=FX.label+(item.depth or 0)*20
+                local indent=header_x(item.depth)
                 if item.depth==0 then cv:rect(x+6,y+2,lw-12,rh-4,C.header,1)end
                 if selected then
                     cv:rect(x+6,y+1,lw-12,rh-2,focused and C.select or C.gold_wash,2)
@@ -1903,18 +1985,21 @@ function App:draw_fields(y0,h)
                 cv:rect(x+6,y+1,3,rh-2,focused and C.gold or C.gold_dim,3)
             elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
             local cy=y+rh/2
-            local indent=(item.depth or 0)*20
+            local lx=name_x(item.depth)
             -- (a status slot whose earlier slot is empty is greyed out until that one holds a status; a row a projectile
             -- swap sets aside stays locked while it is shown, holding a value of yours to reset)
             local fires_lock=self:fires_block(row)
             local open=row.editable and not self:slot_block(row)and not fires_lock or row.link~=nil
             -- (a donor's row has no default of the weapon's own: its label takes that column)
             local wide=row.link or row.fires_info
-            local label_max=wide and(FX.box-FX.label-16-indent)or(FX.default_right-FX.label-90-indent)
-            cv:text(self:fitted_label(row,label_max),x+FX.label+indent,cy,{size=SZ.label,
+            -- (the name ends 12 units before the default value as drawn: a short default leaves a long name more room)
+            local default=not wide and self:text(row,row.vanilla)or''
+            local dw=default~=''and math.min(84,cv:measure(default,SZ.small))or 0
+            local label_max=wide and(FX.box-16-lx)or(FX.default_right-math.max(dw,24)-12-lx)
+            cv:text(self:item_label(item,label_max),x+lx,cy,{size=SZ.label,
                 colour=open and(selected and C.text or C.dim)or C.faint,max=label_max})
             if not wide then
-                cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
+                cv:text(default,x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
             end
             -- value box
             local value,source,state,holder,err=self:row_view(row)

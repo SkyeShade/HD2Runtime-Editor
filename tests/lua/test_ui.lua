@@ -1531,56 +1531,192 @@ do
         end
     end
 end
--- object pages in categories (ui/sections.lua): Projectile (its type swap first, flight, impact and expiry explosions
--- with their payload slot first), Damage (direct hit, then its status slots), Handling / Fire, Ammunition, Armory,
--- Hellpod / Call-in last on a weapon's page; one set per feed (the AC-8's Flak); every header collapsible, remembered
--- per kind in the settings, closed headers skipped by the keyboard and marked with what their fields hold
+-- object pages in categories (ui/sections.lua): Projectile holds everything a round carries, round by round (its type
+-- swap first, flight, direct hit and its status slots, impact and expiry explosions with their payload slot first), one
+-- set per feed (the AC-8's Flak); Damage only for damage no round carries (a beam's); Handling / Fire, Ammunition,
+-- Armory, Hellpod / Call-in last on a weapon's page. A part or a category of one row is that row without a header
+-- (its feed or title before its label when needed). Every header collapsible, remembered per kind in the settings,
+-- closed headers skipped by the keyboard and marked with what their fields hold.
 do
     local function shows(d,text)
         for _,it in ipairs(d.items)do if it.k=='t'and it.s:find(text,1,true)then return true end end
         return false
     end
     local sections=require('mods/skyeshade/hd2runtime_editor/editor/ui/sections')
-    local function headers(object)
+    -- the page's outline: headers (a part indented) and the rows shown without a header of their own ('* ')
+    local function outline(object)
         local out={}
         for _,it in ipairs((H.app:field_items(object)))do
-            if it.header then out[#out+1]=(it.depth==0 and''or'  ')..it.header end
+            local pad=string.rep('  ',it.depth or 0)
+            if it.header then out[#out+1]=pad..it.header
+            elseif it.fold then out[#out+1]=pad..'* '..(it.prefix and(it.prefix..' · ')or'')..it.row.label end
         end
         return out
     end
+    local function starts(list,expected,what)
+        for i,e in ipairs(expected)do
+            assert(list[i]==e,what..': item '..i..' is '..tostring(list[i])..', not '..e..'\n'..table.concat(list,'\n'))
+        end
+    end
     local function index_of(list,text)for i,t in ipairs(list)do if t==text then return i end end end
     H.app:set_view('browse')
+    -- AC-8: the main round, then the Flak round, each with its swap, flight, direct hit and explosion; no Damage
     local ac8=H.catalog:object('sp|AC-8 Autocannon')
     H.app:reveal(ac8.rows[1])
     H.app:set_page_open(ac8,true)
-    local list=headers(ac8)
-    local p,d,f,a,ar,c=index_of(list,'Projectile'),index_of(list,'Damage'),index_of(list,'Handling / Fire'),
-        index_of(list,'Ammunition'),index_of(list,'Armory'),index_of(list,'Hellpod / Call-in')
-    assert(p and d and f and a and ar and c and p<d and d<f and f<a and a<ar and ar<c,
-        'AC-8 categories in order: '..table.concat(list,', '))
-    for _,sub in ipairs({'  Flight','  Impact explosion','  Impact explosion · Status','  Flak · Projectile type',
-            '  Flak · Flight','  Flak · Explosion','  Direct hit','  Direct hit · Status','  Flak · Direct hit',
-            '  Flak · Direct hit · Status','  Call-in','  Hellpod'})do
-        assert(index_of(list,sub),'AC-8 subsection '..sub..': '..table.concat(list,', '))
-    end
-    assert(index_of(list,'  Flight')<index_of(list,'  Flak · Flight')
-        and index_of(list,'  Flak · Flight')<index_of(list,'  Flak · Explosion')
-        and index_of(list,'  Flak · Explosion')<d,'the main round, then the Flak feed, inside Projectile')
+    local list=outline(ac8)
+    starts(list,{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status','  Impact explosion',
+        '  Impact explosion · Status','  * Flak · Projectile','  Flak · Flight','  Flak · Direct hit',
+        '  Flak · Direct hit · Status','  Flak · Explosion','Handling / Fire'},'AC-8')
+    assert(not index_of(list,'Damage'),'AC-8: no Damage category (its direct hits are its rounds\')')
+    local f,a,ar,c=index_of(list,'Handling / Fire'),index_of(list,'Ammunition'),index_of(list,'Armory'),
+        index_of(list,'Hellpod / Call-in')
+    assert(f and a and ar and c and f<a and a<ar and ar<c,'AC-8 categories in order: '..table.concat(list,', '))
+    assert(index_of(list,'  Call-in')and index_of(list,'  Hellpod'),'AC-8 call-in parts')
     -- a category of one part shows its rows under the category itself (Armory)
     assert(not index_of(list,'  Armory'),'no Armory subsection under Armory')
-    -- the Liberator: the projectile swap first, each payload slot opens its explosion
+    -- (the AC-8 page starts with its Projectile header and the main round's swap: a page that starts at Flight is a
+    -- scrolled one)
+    local items=H.app:field_items(ac8)
+    assert(items[1].header=='Projectile'and items[1].depth==0 and items[2].fold and items[2].row.field=='attack.projectile',
+        'AC-8: Projectile first, its swap right under it')
+    -- the headers COLLAPSE ALL closes: never a part shown without one
+    for _,key in ipairs(H.app:page_headers(ac8))do
+        assert(key~='c|projectile|Projectile type'and key~='c|projectile|Flak · Projectile type',
+            'a part of one row has no header: '..key)
+    end
+    -- APW-1: swap, flight, direct hit and its status in Projectile
+    local apw=H.catalog:object('sp|APW-1 Anti-Materiel Rifle')
+    H.app:reveal(apw.rows[1])
+    starts(outline(apw),{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status',
+        'Handling / Fire'},'APW-1')
+    -- AR-2 Coyote: no swap; its payload slots alone are rows of Projectile after the direct hit
+    local coyote=H.catalog:object('pw|AR-2 Coyote')
+    H.app:reveal(coyote.rows[1])
+    starts(outline(coyote),{'Projectile','  Flight','  Direct hit','  Direct hit · Status','  * Impact payload',
+        '  * Expiry payload','Handling / Fire'},'AR-2')
+    -- the Liberator: the projectile swap first, each payload slot a row of Projectile while it is alone
     local lib=H.catalog:object('pw|AR-23 Liberator')
     H.app:reveal(lib.rows[1])
-    local items=H.app:field_items(lib)
-    assert(items[1].header=='Projectile'and items[2].header=='Projectile type'and items[3].row
-        and items[3].row.field=='ammunition.projectile','Liberator: Projectile type first: '..tostring(items[2].header))
+    items=H.app:field_items(lib)
+    assert(items[1].header=='Projectile'and items[2].fold and items[2].row and items[2].row.field=='ammunition.projectile'
+        and items[2].parent=='c|projectile','Liberator: its swap first: '..tostring(items[2].header))
     local impact
-    for i,it in ipairs(items)do if it.header=='Impact explosion'then impact=items[i+1]end end
-    assert(impact and impact.row and impact.row.field=='terminal.explosion','the impact payload slot opens Impact explosion')
+    for _,it in ipairs(items)do if it.row and it.row.field=='terminal.explosion'then impact=impact or it end end
+    assert(impact and impact.fold and impact.depth==1 and impact.parent=='c|projectile','the impact payload slot alone')
+    -- a beam's damage is no round's: Damage (with its status), and the beam swap first in Beam / Arc
+    local las=H.catalog:object('sp|LAS-98 Laser Cannon')
+    H.app:reveal(las.rows[1])
+    list=outline(las)
+    assert(list[1]=='Damage'and not index_of(list,'Projectile'),'LAS-98: Damage first: '..table.concat(list,', '))
+    local beam,swap=index_of(list,'  Beam'),index_of(list,'  * Beam')
+    assert(beam and(not swap or swap<beam),'LAS-98: the beam swap before the beam: '..table.concat(list,', '))
     -- row keys and sections are unchanged (presentation only)
     for _,r in ipairs(lib.rows)do assert(r.key:find('^pw|AR%-23 Liberator|'),'row key unchanged: '..r.key)end
-    assert(sections.classify('Damage · Flak direct hit · Status')=='damage','classification table')
+    assert(sections.classify('Damage · Flak direct hit · Status')=='projectile','classification table')
+    assert(sections.classify('Damage · Status')=='damage','a beam\'s damage')
+    -- single rows: the layout folds a part of one row (its feed before it), a category of one row is that row alone; a
+    -- part that grows gets its header back
+    local function row(label)return {label=label}end
+    local cats=sections.layout({{label='Projectile · Swap',rows={row('Projectile')}},
+        {label='Projectile',rows={row('Projectile velocity'),row('Projectile mass')}},
+        {label='Projectile · Flak · Swap',rows={row('Projectile')}},{label='Projectile · Flak',rows={row('Projectile velocity')}},
+        {label='Explosion · Impact',rows={{label='Impact payload',field='terminal.explosion'}}},
+        {label='Armory',rows={row('Displayed traits')}},{label='Weapon',rows={row('Fire rate')}},
+        {label='Handling',rows={row('Ergonomics'),row('Sway multiplier')}}},'support_weapons')
+    local by={}
+    for _,cat in ipairs(cats)do by[cat.id]=cat end
+    local subs={}
+    for _,s in ipairs(by.projectile.subs)do subs[#subs+1]=s.title..(s.fold and(' [fold '..tostring(s.prefix)..']')or'')end
+    assert(table.concat(subs,', ')=='Projectile type [fold nil], Flight, Impact explosion [fold nil], Flak · Projectile type '
+        ..'[fold Flak], Flak · Flight [fold Flak · Flight]','folds: '..table.concat(subs,', '))
+    assert(by.armory.plain and by.armory.prefix=='Armory','a category of one row is that row: '..tostring(by.armory.prefix))
+    local fire={}
+    for _,s in ipairs(by.fire.subs)do fire[s.title]=s end
+    assert(not by.fire.plain and not fire.Handling.fold and fire.Weapon.fold and fire.Weapon.prefix=='Weapon',
+        'Weapon · Fire rate folded into Handling / Fire')
+    cats=sections.layout({{label='Projectile',rows={row('Projectile velocity'),row('Projectile mass')}},
+        {label='Explosion · Impact',rows={{label='Impact payload',field='terminal.explosion'},row('Standard damage')}}},
+        'primary')
+    assert(cats[1].subs[2].title=='Impact explosion'and not cats[1].subs[2].fold,'two rows: a part with its header')
+    -- attacks and mounts: a direct hit when its round is on the page; status sections with their own section
+    cats=sections.layout({{label='Attack · Delivery 1 projectile · Projectile',rows={row('Speed'),row('Mass')}},
+        {label='Attack · Delivery 1 projectile damage · Damage',rows={row('Damage'),row('Durable')}},
+        {label='Attack · Delivery 1 projectile impact damage · Explosion',rows={row('Damage'),row('AP')}},
+        {label='Attack · Delivery 1 projectile impact damage · Status',rows={row('Status 1'),row('Status 1 strength')}},
+        {label='Attack · Beam damage · Damage',rows={row('Damage'),row('Durable')}}},'offensive')
+    by={}
+    for _,cat in ipairs(cats)do by[cat.id]=cat end
+    assert(by.projectile and#by.projectile.subs==4 and by.projectile.subs[2].title=='Attack · Delivery 1 projectile damage'
+        and by.projectile.subs[4].title=='Attack · Delivery 1 projectile impact damage · Status',
+        'an attack\'s round, direct hit, explosion and its status together')
+    assert(by.damage and#by.damage.subs==1 and not by['h:Attack'],'the beam\'s damage stays in Damage')
+    -- a part of a group of one row: that row under the group, named by its part (an attachment)
+    for _,o in ipairs({coyote,lib})do
+        H.app:set_page_open(o,true)
+        for _,it in ipairs((H.app:field_items(o)))do
+            if it.fold and it.parent and it.parent:sub(1,2)=='g|'then
+                assert(it.depth==1 and it.prefix,'a folded attachment row carries its name: '..it.row.label)
+            end
+        end
+    end
+    -- indentation: a part's fields start right of the part's title, a folded row with the parts' titles; the DEFAULT,
+    -- VALUE and SOURCE columns stay where they are on every row; a click in the indentation selects the row
+    H.app:reveal(ac8.rows[1])
+    H.app:set_page_open(ac8,true)
+    H.app.field_scroll,H.app.field=0,1
+    local d=step({},nil,'84_indentation')
+    local cat_t
+    for _,it in ipairs(d.items)do if it.k=='t'and it.s=='PROJECTILE'and it.font=='title'then cat_t=it end end
+    assert(cat_t,'the AC-8 page drawn from its top')
+    local function text_at(s)
+        for _,it in ipairs(d.items)do
+            if it.k=='t'and it.s==s and it.font=='body'and it.x>cat_t.x-30 and it.y>cat_t.y then return it end
+        end
+    end
+    local flight_t,folded_t,velocity_t=text_at('Flight'),text_at('Projectile'),text_at('Projectile velocity')
+    assert(flight_t and folded_t and velocity_t,'the AC-8 page drawn from its top')
+    local step_x=flight_t.x-cat_t.x
+    assert(step_x>0,'a part\'s title right of its category\'s')
+    assert(math.abs(folded_t.x-flight_t.x)<=1,'a folded row starts with the parts\' titles: '..folded_t.x..' / '..flight_t.x)
+    assert(velocity_t.x-flight_t.x>=step_x*0.5,'a part\'s fields start right of its title: '..velocity_t.x..' / '..flight_t.x)
+    local boxes={}
+    for _,it in ipairs(d.items)do
+        if it.k=='r'and it.c[1]==5 and it.c[2]==7 and it.c[3]==9 and it.c[4]==255 and it.x>cat_t.x then boxes[#boxes+1]=it end
+    end
+    assert(#boxes>=8,'value boxes drawn: '..#boxes)
+    local function right_edge(t)return t.x+d:text_width(t.s,t.size,t.font)end
+    local edge
+    for _,b in ipairs(boxes)do
+        assert(b.x==boxes[1].x and b.w==boxes[1].w,'every value box in the same column: '..b.x..' / '..boxes[1].x)
+        -- on its row, left of the box: the name, then the default
+        local on={}
+        for _,it in ipairs(d.items)do
+            if it.k=='t'and it.x<b.x and it.x>cat_t.x-30 and it.y>=b.y-2 and it.y<=b.y+b.h+2 then on[#on+1]=it end
+        end
+        table.sort(on,function(p,q)return p.x<q.x end)
+        local name,default=on[1],on[#on]
+        if name and default and name~=default then
+            if name.x>default.x then name,default=default,name end
+            edge=edge or right_edge(default)
+            assert(math.abs(right_edge(default)-edge)<=1,'the DEFAULT column does not move with the indentation: '
+                ..default.s)
+            assert(right_edge(name)<=default.x+1,'the name ends before the default: '..name.s)
+        end
+    end
+    assert(edge,'defaults drawn')
+    -- a click left of an indented name selects that row (the hit area spans the whole row)
+    step({},{mouse={x=cat_t.x-4,y=velocity_t.y+4,left=false}})
+    step({},{mouse={x=cat_t.x-4,y=velocity_t.y+4,left=true}})
+    assert(H.app:focused_row()and H.app:focused_row().field=='projectile.velocity',
+        'a click in the indentation selects the row: '..tostring(H.app:focused_row()and H.app:focused_row().field))
+    step({},{mouse={x=cat_t.x-4,y=velocity_t.y+4,left=false}})
+    -- a long name before a long label: the name is cut first, the label stays whole
+    local long=H.app:item_label({row={label='Armor penetration: extreme angle'},
+        prefix='Muzzle brake Custom Assault Rifle Large Calibre'},230)
+    assert(long:find('... · Armor penetration: extreme angle',1,true),'the name is cut first: '..long)
     -- Enter on a category closes it; the keyboard skips its rows; the choice is saved for every page of that kind
+    H.app:reveal(lib.rows[1])
     H.app.focus='fields'
     local _,selectable=H.app:field_items(lib)
     local before=#selectable
@@ -1591,7 +1727,7 @@ do
     after=#selectable
     assert(after<before and items[selectable[1]].header=='Projectile'and not items[selectable[1]].open,
         'Projectile closed: '..before..' -> '..after)
-    assert(items[selectable[2]].header=='Damage','Down from a closed category goes to the next one')
+    assert(items[selectable[2]].header=='Handling / Fire','Down from a closed category goes to the next one')
     local saved=H.store.data.settings and H.store.data.settings.collapsed_sections
     assert(saved and saved['c|projectile']==true,'the closed category is saved')
     local sw=H.catalog:object('sp|GL-21 Grenade Launcher')
