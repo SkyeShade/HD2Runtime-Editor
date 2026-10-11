@@ -492,7 +492,9 @@ local PAYLOAD_WARNINGS={
     fire={badge='FIRE',text='Leaves fire on the ground'},
     shrapnel={badge='SHRAPNEL',text='Releases shrapnel or bomblets of its own'},
     arc={badge='ARC',text='Releases an electric arc'},
-    no_damage={badge='NO DAMAGE',text='Deals no damage itself (a status field, smoke or a push)'}}
+    no_damage={badge='NO DAMAGE',text='Deals no damage itself (a status field, smoke or a push)'},
+    objective_packages={badge='300 MB LOAD',text='Loads two mission objective packages (about 300 MB) before the '
+        ..'write: up to 90 s and a hitch, and they stay loaded'}}
 M.PAYLOAD_WARNINGS=PAYLOAD_WARNINGS
 -- An option's damage and radius as its picker subtitle ("350 damage · 3 to 6 m").
 local function option_sub(o)
@@ -543,6 +545,7 @@ local function payload_options(row)
             it.warnings={}
             for _,code in ipairs(type(x.warnings)=='table'and x.warnings or{})do it.warnings[#it.warnings+1]=code end
             it.explosion=x.name
+            it.note=type(x.note)=='string'and x.note~=''and x.note or nil
         end
     end
     local note={}

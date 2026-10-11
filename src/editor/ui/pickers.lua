@@ -83,9 +83,13 @@ function M.install(App)
         local current=self:row_view(row)
         local index=1
         for i,item in ipairs(items)do if util.same(item.value,current)then index=i end end
-        -- (payload options: two lines for the highlighted one's warnings and acknowledgements)
+        -- (payload options: two lines for the highlighted one's warnings and acknowledgements, three when an option
+        -- carries a note of the Runtime's)
         local details=false
-        for _,item in ipairs(items)do if item.acks or item.warnings then details=true;break end end
+        for _,item in ipairs(items)do
+            if item.note then details=3;break end
+            if item.acks or item.warnings then details=2 end
+        end
         self.picker={row=row,items=items,index=index,filter=filter or'',scroll=0,current=current,note=items.note,
             details=details}
         self:picker_filter()
@@ -104,6 +108,8 @@ function M.install(App)
             texts[#texts+1]=w and(L(w.badge)..': '..L(w.text))or tostring(code)
         end
         if#texts>0 then lines[#lines+1]={text=table.concat(texts,'   '),colour=C.pending}end
+        -- the Runtime's own note on the option (e.g. which stratagem's blast it is)
+        if item.note then lines[#lines+1]={text=util.plain(item.note,160),colour=C.faint}end
         local row=self.picker and self.picker.row
         if row and(item.acks or item.checked)then
             local ok,acks=catalog_module.probe(row,item.value)
@@ -208,7 +214,7 @@ function M.install(App)
         end
         -- list: the shown items, a header before each group (payload options: Weapons, Support weapons ...)
         local ly,rh,hh=fy+44,40,26
-        local notes=(p.note and#p.note or 0)+(p.details and 2 or 0)
+        local notes=(p.note and#p.note or 0)+(p.details or 0)
         local area=y+h-56-notes*18-ly
         local n=#p.shown
         local lines,line_of,last={},{},nil
@@ -292,7 +298,7 @@ function M.install(App)
         local below={}
         if p.details then
             local d=self:picker_details(p.items[p.shown[p.cursor] or 0])
-            for k=1,2 do below[#below+1]=d[k]or{text=''}end
+            for k=1,p.details do below[#below+1]=d[k]or{text=''}end
         end
         for _,line in ipairs(p.note or{})do below[#below+1]={text=line,colour=C.dim}end
         for i,line in ipairs(below)do
