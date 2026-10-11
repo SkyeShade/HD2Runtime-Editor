@@ -2459,6 +2459,98 @@ local function status_slots(rows)
     return out
 end
 M.status_slots=status_slots
+-- A used status slot's own stats, under the slot. The Runtime publishes a damage row's used slots as a status only
+-- (status_k_type) and reaches their strength and the status's duration through a child status attack of their own
+-- (support weapons: "primary_status_43", the native status type; stratagems: "... damage status 1"; throwables:
+-- "Status effect · Gas"). The child's strength IS slot k's strength (the same 4 bytes of the DamageInfo row, offset 48 +
+-- 8 (k - 1)), and its duration is the status's own definition (StatusEffectSettings +40), shared by every attack that
+-- applies that status (the same bytes as the Status Effects category's row). So each child is matched to its slot by
+-- native identity (its strength's bytes against the slot's status bytes, 4 before them), never by order, and shown under
+-- it as "Status k strength" and "Status k duration (Gas 2, all uses)" (the status it was published for); a damage row
+-- without status rows (a stratagem's) gets its children together under one "· Status" section. Keys, targets and
+-- fields stay as they are (presentation only); a child gets row.status_child = {n, kind = 'strength' | 'duration',
+-- type_row, status}, and never row.status_slot (the slot order rules are the type and own strength rows').
+local function damage_slot(loc)
+    local record,offset=tostring(loc):match('^(settings/damage/%d+)@(%d+)$')
+    offset=tonumber(offset)
+    if not offset or offset<48 or offset>72 or(offset-48)%8~=0 then return nil end
+    return record,(offset-48)/8+1,offset
+end
+local status_names
+local function status_by_row(record)
+    if status_names==nil then
+        status_names=false
+        local D=load('status_effect_authoring')
+        if D and type(D.statuses)=='table'then
+            status_names={}
+            for id,entry in pairs(D.statuses)do
+                if type(entry)=='table'and entry.row~=nil then status_names[tonumber(entry.row)or entry.row]=id end
+            end
+        end
+    end
+    local row=tonumber(tostring(record):match('^settings/status/(%d+)@40$'))
+    return status_names and row and status_names[row]or nil
+end
+local function status_children(rows)
+    local types,by_section={},{}
+    for _,r in ipairs(rows)do
+        if r.status_slot and r.status_slot.kind=='type'then types[r.loc]=r end
+        if(r.field=='status.strength'or r.field=='status.duration')and not r.status_slot then
+            local key=tostring(r.group)..'\0'..tostring(r.section)
+            local s=by_section[key]or{}
+            by_section[key]=s
+            s[r.field]=s[r.field]or r
+        end
+    end
+    local after,moved={},{}
+    for _,s in pairs(by_section)do
+        local strength,duration=s['status.strength'],s['status.duration']
+        local record,n,offset=damage_slot(strength and strength.loc)
+        if record then
+            local t=types[record..'@'..(offset-4)]
+            local status=t and t.vanilla
+            if not t then status=duration and status_by_row(duration.loc)end
+            if t and duration and status_by_row(duration.loc)and status_by_row(duration.loc)~=status then
+                duration=nil   -- (a duration of another status than the slot's: left where it is)
+            end
+            local name=status and status~='none'and util.humanize(status)or nil
+            for _,l in ipairs(t and t.labels or{})do if l.value==status then name=l.label end end
+            strength.status_child={n=n,kind='strength',type_row=t,status=status}
+            strength.label='Status '..n..' strength'
+            if duration then
+                duration.status_child={n=n,kind='duration',type_row=t,status=status}
+                duration.label='Status '..n..' duration'..(name and(' ('..name..', all uses)')or' (all uses)')
+            end
+            if t then
+                -- under the slot: after its own strength row when it has one, else after its status
+                local anchor=t.status_slot.strength or t
+                local list=after[anchor]or{}
+                after[anchor]=list
+                for _,c in ipairs({strength,duration})do
+                    c.section,c.group=t.section,t.group
+                    list[#list+1]=c
+                    moved[c]=true
+                end
+            else
+                -- no status rows for this damage row: its children together, "... damage status 1 · Status" ->
+                -- "... damage · Status"
+                local section=tostring(strength.section):gsub(' status %d+',''):gsub('  +',' ')
+                strength.section=section
+                if duration then duration.section=section end
+            end
+        end
+    end
+    if next(moved)==nil then return rows end
+    local out={}
+    for _,r in ipairs(rows)do
+        if not moved[r]then
+            out[#out+1]=r
+            for _,c in ipairs(after[r]or{})do out[#out+1]=c end
+        end
+    end
+    return out
+end
+M.status_children=status_children
 -- An object's rows and sections (built once): object.rows, object.sections = {{label, rows}}.
 function Catalog:open(object)
     if object.rows then return object end
@@ -2467,7 +2559,7 @@ function Catalog:open(object)
         object.rows,object.sections,object.error={},{},tostring(rows)
         return object
     end
-    rows=status_slots(rows)
+    rows=status_children(status_slots(rows))
     object.rows,object.sections={},{}
     local by_label={}
     for _,row in ipairs(rows)do

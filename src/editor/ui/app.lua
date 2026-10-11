@@ -151,10 +151,43 @@ function App:toggle(object,key,open)
     self.expanded[id]=open or nil
     self.expand_version=self.expand_version+1
 end
--- An object's sections as shown: a mount that holds another weapon shows THAT weapon's rows (its own catalogued
--- vehicle weapon, edited through its home vehicle) instead of the slot's original weapon, whose records the Runtime
--- refuses to write while the slot holds something else. Returns sections and a signature of the swaps.
+-- A used status slot's duration (catalog status_children) is its status's own: it is shown under the slot while the slot
+-- holds that status (as shown: a pending status first), or while it holds a value of yours or an error. Returns the rows
+-- hidden now and a signature of them.
+function App:hidden_status_rows(object)
+    local hidden,sig
+    for _,row in ipairs(object.rows or{})do
+        local c=row.status_child
+        if c and c.kind=='duration'and c.type_row then
+            local status=self:row_view(c.type_row)
+            local _,source,state=self:row_view(row)
+            if not util.same(status,c.status)and source~='pending'and source~='editor'and state~='error'then
+                hidden=hidden or{}
+                hidden[row]=true
+                sig=(sig and(sig..';')or'')..row.key
+            end
+        end
+    end
+    return hidden,sig or''
+end
+-- An object's sections as shown (the mounts' weapons, the status durations that apply now) and a signature of what
+-- decided them.
 function App:effective_sections(object)
+    local hidden,hsig=self:hidden_status_rows(object)
+    local sections,sig=self:mount_sections(object)
+    if not hidden then return sections,sig end
+    local out={}
+    for _,section in ipairs(sections)do
+        local rows={}
+        for _,r in ipairs(section.rows)do if not hidden[r]then rows[#rows+1]=r end end
+        if#rows>0 then out[#out+1]={label=section.label,group=section.group,rows=rows}end
+    end
+    return out,sig..'|'..hsig
+end
+-- A mount that holds another weapon shows THAT weapon's rows (its own catalogued vehicle weapon, edited through its home
+-- vehicle) instead of the slot's original weapon, whose records the Runtime refuses to write while the slot holds
+-- something else. Returns sections and a signature of the swaps.
+function App:mount_sections(object)
     local swapped,sig={},{}
     for _,row in ipairs(object.rows or{})do
         if row.mount_slot then

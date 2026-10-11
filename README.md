@@ -50,7 +50,11 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - **Hellpod contents:** the items a support weapon, backpack or Resupply pod drops, and how many.
   - **Projectile swaps and terminal explosion payloads**, from a searchable donor list. With HD2Runtime 0.30.2, the
     sentries and emplacements that can fire another round have a swap too (the MG-43 and G-16 stay read-only).
-  - **Statuses, on/off switches and enums.**
+  - **Statuses, on/off switches and enums.** A damage row's status slots are listed in order, each with its own stats
+    under it: Status 1, Status 1 strength, Status 1 duration, Status 2 ... A status the weapon applies natively has
+    its strength and its duration there (on the TX-41 Sterilizer, for example, they were separate "Primary status 43"
+    sections). A duration is the status's own, shared by every attack that applies it (labelled "all uses", for
+    example "Status 1 duration (Gas 2, all uses)"); it is shown while the slot holds that status.
   - **With HD2Runtime 0.31.0:**
     - beam swaps (the Trident, Dagger, Scythe, Laser Cannon, Meltagun and Laser Sentry fire any catalogued beam; the
       Scythe's is its default muzzle's, shared; the Rover's shows why it is read-only), the beam fire mode by name

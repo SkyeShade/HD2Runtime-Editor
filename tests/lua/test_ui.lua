@@ -1487,6 +1487,50 @@ do
         H.app:set_view('browse')
     end
 end
+-- a used status slot's own stats under the slot (catalog status_children): the TX-41 Sterilizer's child status attacks
+-- (primary_status_43 / 45) are slot 1's and slot 2's strength (the same bytes) and their status's shared duration,
+-- matched by native identity; no "Primary status 43" section is left; keys unchanged; a duration follows its slot's
+-- status (hidden while the slot shows another one, unless it holds a value of yours)
+do
+    local o=H.catalog:object('sp|TX-41 Sterilizer')
+    if o then
+        H.catalog:open(o)
+        local base='sp|TX-41 Sterilizer|sw|'
+        local strength1=H.catalog:row(base..'status.primary_status_43.strength@primary_status_43')
+        local duration1=H.catalog:row(base..'status.primary_status_43.duration@primary_status_43')
+        local type1=H.catalog:row(base..'damage.primary.status_1_type@primary')
+        if strength1 and duration1 and type1 then
+            assert(strength1.loc==type1.loc:gsub('@44$','@48'),'slot 1 strength is the child strength (same bytes)')
+            assert(strength1.label=='Status 1 strength'and duration1.label=='Status 1 duration (Gas 2, all uses)',
+                'labels: '..strength1.label..' / '..duration1.label)
+            assert(strength1.section==type1.section and duration1.section==type1.section,'in the slot\'s section')
+            for _,section in ipairs(o.sections)do
+                assert(not section.label:find('Primary status',1,true),'no child section left: '..section.label)
+            end
+            H.app:discard()
+            assert(H.app:reveal(type1),'the slot is shown')
+            local function order()
+                local items=H.app:field_items(H.app:object())
+                local labels,at={},nil
+                for i,item in ipairs(items)do
+                    if item.row==type1 then at=i end
+                    if at and item.row and i<at+6 then labels[#labels+1]=item.row.label end
+                end
+                return table.concat(labels,' | ')
+            end
+            assert(order():find('^Status 1 | Status 1 strength | Status 1 duration %(Gas 2, all uses%) | Status 2 | '
+                ..'Status 2 strength | Status 2 duration'),'each slot\'s stats under it: '..order())
+            step({},nil,'74_status_slot_stats')
+            -- another status in slot 1: its strength stays (the slot's bytes), Gas 2's duration goes
+            local other
+            for _,l in ipairs(type1.labels)do if l.value~='gas_2'and l.value~='none'then other=l.value;break end end
+            assert(H.app:stage(type1,other),'slot 1 changed')
+            assert(order():find('^Status 1 | Status 1 strength | Status 2 | '),'the duration follows the status: '..order())
+            H.app:discard()
+            assert(order():find('Status 1 duration',1,true),'back with its status')
+        end
+    end
+end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title
 assert(title({name='AMR Fixed 1.0.0',version='1.0.0'})=='AMR Fixed 1.0.0','name ending in the version')
