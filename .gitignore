@@ -9,3 +9,5 @@ images/si_*.png
 images/bi_*.png
 src/editor/generated/
 images/mi_*.png
+# Your own preset pictures (tools/preset_icons.py): local builds only
+images/pi_*.png

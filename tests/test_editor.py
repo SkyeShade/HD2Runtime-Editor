@@ -272,6 +272,44 @@ class EditorTests(unittest.TestCase):
         if old.returncode == 0:
             self.assertIn('old editor ok', result)
 
+    def test_preset_pictures_tool(self):
+        # tools/preset_icons.py: your own pictures as layered mask images the build packs (the Runtime cannot load a
+        # picture file while the game runs)
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest('needs Pillow')
+        import tempfile
+        spec = importlib.util.spec_from_file_location('preset_icons', lua_host.PROJECT / 'tools' / 'preset_icons.py')
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as tmp:
+            pictures, images = Path(tmp) / 'pictures', Path(tmp) / 'images'
+            pictures.mkdir()
+            picture = Image.new('RGBA', (300, 200), (0, 0, 0, 0))
+            for x in range(40, 260):
+                for y in range(30, 170):
+                    picture.putpixel((x, y), (220, 40, 40, 255) if x < 150 else (250, 250, 250, 255))
+            picture.save(pictures / 'My Squad.png')
+            (pictures / 'notes.txt').write_text('not a picture')
+            (pictures / 'broken.png').write_bytes(b'not a png')
+            generated = Path(tmp) / 'preset_icons.lua'
+            self.assertEqual(tool.main([str(pictures), '--images', str(images), '--generated', str(generated)]), 0)
+            made = sorted(p.name for p in images.glob('pi_*.png'))
+            self.assertTrue(made and all(n.startswith('pi_mysquad') for n in made), made)
+            result = lua_host.run('local t=dofile(%s) local e=t.icons[1] return #t.icons..\' \'..e.name..\' \'..#e.layers'
+                                  '..\' \'..e.layers[1].image..\' \'..#e.layers[1].colours.r' % lua_host._lua_string(
+                                      generated.as_posix()))
+            count, name, rest = result.split(' ', 2)
+            self.assertEqual(count, '1')
+            self.assertEqual(name + ' ' + rest.split(' ')[0], 'My Squad')
+            layers, image, channels = rest.split(' ')[1:]
+            self.assertEqual(int(layers), len(made))
+            self.assertIn(image + '.png', made)
+            self.assertEqual(channels, '4')
+            self.assertEqual(tool.main(['--clean', '--images', str(images), '--generated', str(generated)]), 0)
+            self.assertFalse(list(images.glob('pi_*.png')) or generated.exists())
+
     def test_saved_session_keeps_values_that_did_not_come_back(self):
         result = lua_file('test_session.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                                'harness': (LUA / 'ui_harness.lua').as_posix()})

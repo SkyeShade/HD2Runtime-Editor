@@ -19,6 +19,7 @@
 | `editor/sounds.lua` | The game's menu sounds on the buttons (`hd2.sounds.play('ui/generic_select')` and others), at most one per 40 ms. |
 | `editor/generated/game_icons.lua` | Optional, written by `tools/game_icons.py`: stratagem and booster name → the image of its own HUD sprite (HD2Runtime SDK `tools/hd2_hud_icons.py`), its accent and, for boosters, the glyph colour. |
 | `editor/generated/mod_icons.lua` | Optional, written by `tools/mod_icons.py`: a deployed mod's icon as up to three mask layers, each with its own three colours. |
+| `editor/generated/preset_icons.lua` | Optional, written by `tools/preset_icons.py`: your own pictures for preset icons, as mask layers like the mod icons. |
 
 ## Rows
 

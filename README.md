@@ -239,6 +239,10 @@ The icons are derived from Arrowhead's artwork. They are git-ignored and only en
 
 `py tools/mod_icons.py` reads the icons of the mods your mod manager deployed (Echelon or HD2 Arsenal, whichever deployed last) and packs them in at the next build. The overlay paints images as three colour masks, so each icon is reduced to its own nine most common colours and drawn as three stacked layers: the mod's own picture, with fewer colours. Mods installed after the build show the plain mod icon until you run the tool and build again. `--clean` removes them. The icons are their authors' artwork: like the game icons, they are git-ignored and stay in your own builds.
 
+## Preset pictures
+
+`py tools/preset_icons.py` turns every PNG or JPG in `Documents\HD2R Editor\Preset icons` (or a folder you name) into the editor's own images, the way the mod icons are made (three stacked colour layers), and the next build packs them in. In the game, a preset's ICON picker lists them by file name. This is the only way to a picture of your own: the game loads a mod's images from its archive when it starts, and HD2Runtime never creates them while it runs. `--clean` removes them; like the mod icons they are git-ignored and stay in your own builds.
+
 ## Localisation
 
 Every text the window shows goes through one lookup: the interface, and the catalogue's object names (weapons,

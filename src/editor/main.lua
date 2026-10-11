@@ -19,13 +19,15 @@ require('mods/skyeshade/hd2runtime_editor/editor/modbuilder')
 require('mods/skyeshade/hd2runtime_editor/editor/preset_files')
 require('mods/skyeshade/hd2runtime_editor/editor/ui/search_view')
 -- Generated for this build (optional; never committed): the game's own stratagem and booster icons
--- (tools/game_icons.py) and the installed mods' own icons (tools/mod_icons.py).
+-- (tools/game_icons.py), the installed mods' own icons (tools/mod_icons.py) and pictures for presets
+-- (tools/preset_icons.py).
 local function optional(name)
     local ok,value=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/generated/'..name)
     return ok and type(value)=='table'and value or nil
 end
 local game_icons=optional('game_icons')
 local mod_icon_map=optional('mod_icons')
+local preset_icon_map=optional('preset_icons')
 local M={}
 
 M.VERSION='0.9.2'
@@ -162,6 +164,24 @@ function M.start(hd2,id)
         end
         log(count..' mod icons available')
     end
+    -- Pictures for presets (tools/preset_icons.py): built into this editor like the mod icons. The Runtime draws only
+    -- images a mod's build compiled (docs/custom-images.md), so a picture file cannot be loaded while the game runs.
+    local preset_icons
+    if preset_icon_map and type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
+        preset_icons={}
+        local count=0
+        for _,entry in ipairs(preset_icon_map.icons or{})do
+            local list={}
+            for _,layer in ipairs(entry.layers or{})do
+                local ok,handle=pcall(hd2.resources.image,layer.image)
+                if ok and handle then list[#list+1]={handle=handle,colours=layer.colours}end
+            end
+            if type(entry.name)=='string'and#list>0 and#list==#(entry.layers or{})then
+                preset_icons[entry.name]=list;count=count+1
+            end
+        end
+        log(count..' preset pictures available')
+    end
     local sounds=sounds_module.new(hd2,function()return presets:setting('ui_sounds',true)end)
     -- The cursor capture (HD2Runtime r50, experimental): freed while the editor is open, when the setting is on.
     local function set_free_cursor(on)
@@ -171,7 +191,7 @@ function M.start(hd2,id)
     local app=app_module.new({hd2=hd2,catalog=catalog,layer=layer,ledger=ledger,presets=presets,hotkey=hotkey,
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
         mouse=function()return overlay:mouse()end,log=log,icons=icons,ui_icons=ui_icons,choices=type(mod.choice)=='function',
-        id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,version=M.VERSION,game_names=game_names,
+        id=id,sounds=sounds,mod_icons=mod_icons,preset_icons=preset_icons,strings=strings,version=M.VERSION,game_names=game_names,
         minimum=tostring(hd2.version or'0.30.0'),
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
