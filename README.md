@@ -17,7 +17,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Export your changes as a mod.** The Export tab is a three-step wizard. Pick which changes to include, give the mod a name, version, author, description and an HD2 Arsenal image from your PC, then press Export. It writes a mod ZIP, ready for your mod manager, in ModBuilder's layout (see [Exporting a mod](#exporting-a-mod)). The values are also saved as a preset.
 - **The log, live.** The Logs tab follows `HD2Runtime.log` as it is written, coloured by kind (errors red, warnings orange, applied values green, the editor's own lines gold), with filters and buttons to open the file or its folder.
 - **Custom stratagems.** The Custom tab lists the custom stratagems your mods registered, with their code, carrier and state, coloured like the game colours their carrier (offensive red, defensive green, support blue). Their cooldown and uses can be tuned on this machine, from the next call.
-- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Resupply), Equipment (Boosters), Helldiver (Helldiver, Armor) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 20,700 fields with HD2Runtime 0.31.0, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
+- **Every writable field, in familiar categories.** Weapons (Primary, Secondary, Throwables), Stratagems colour-coded like the game (Offensive in red, Defensive in green, and in blue Support Weapons, Support Backpacks, Vehicles and Mission: Resupply, and the NUX-223 Hellbomb's explosion), Equipment (Boosters), Helldiver (Helldiver, Armor) and Enemies (Terminids, Automatons, Illuminate, Structures). That is about 20,700 fields with HD2Runtime 0.31.0, read from the installed Runtime's own catalogues, so the defaults, ranges and safety flags always match your Runtime.
 - **One stratagem, one place.**
   - A support weapon holds its call-in, the weapon, the backpack it comes with and its hellpod.
   - A support backpack holds its call-in, the backpack, its drone weapon (Guard Dogs) and its hellpod.
@@ -74,6 +74,10 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
       every attack that applies it;
     - values another mod changed outside HD2Runtime (a data-file mod, a moved component table, a rebuilt weapon) are
       shown locked with the reason, read with `hd2.inspect`.
+  - **With HD2Runtime 0.31.1 and newer, from the explosion catalogue:** the explosions a weapon's own explosions
+    spawn (the RL-77's bomblets, Explosion · Bomblets, from both its rockets; the EAT-700's napalm shrapnel), and the
+    Hellbombs' detonation (Explosion · Detonation) on the B-100 Portable Hellbomb and on a NUX-223 Hellbomb entry under
+    Mission. Both Hellbombs and some mission objectives share that damage row.
   - **Beam conversion** (HD2Runtime 0.31.0, `hd2.beam_conversion`; absent on older Runtimes): a projectile weapon's
     Beam Conversion group shows the verdict and caveats (a refused weapon only its reason), the layout and its
     multiplayer rule, the switch, its own rate, beams and pulse, and the interim per-weapon damage, AP and range rows

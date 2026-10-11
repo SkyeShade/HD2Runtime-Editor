@@ -20,7 +20,7 @@ M.GROUPS={
         {id='offensive',label='Offensive',tone='offensive'},{id='defensive',label='Defensive',tone='defensive'},
         {id='support_weapons',label='Support Weapons',tone='support'},
         {id='support_backpacks',label='Support Backpacks',tone='support'},
-        {id='vehicles',label='Vehicles',tone='support'},{id='resupply',label='Resupply',tone='support'}}},
+        {id='vehicles',label='Vehicles',tone='support'},{id='resupply',label='Mission',tone='support'}}},
     {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'},{id='status_effects',label='Status Effects'}}},
     {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'}}},
     {id='enemies',label='ENEMIES',items={
@@ -739,6 +739,101 @@ local function player_rows(hd2,object,entry)
     return rows
 end
 
+--------------------------------------------------------------------------------------- catalogue explosions --
+-- Explosions of the Runtime's explosion catalogue (HD2Runtime 0.31.1+, edited through hd2.explosion(id)) shown on the
+-- page of what sets them off. An object takes the explosions the catalogue lists with an owner of its name, for the
+-- roles it asks for (a support weapon's programmable burst: function_impact; a Hellbomb: behavior), and every
+-- explosion those or any other of its own explosions spawn (owners of category 'explosion': a burst's shrapnel, the
+-- RL-77's bomblets). The rows carry the Runtime's own descriptors (the record identity of every other route to the same
+-- bytes, its shared flag and acknowledgement), so a value the page already shows is not shown twice. Nothing without
+-- hd2.explosion and the catalogue (an older HD2Runtime).
+-- A chain explosion by its owner-neutral alias (HD2Runtime 0.31.2: the RL-77's 'bomblet'), else as shrapnel.
+local CHAIN_LABELS={bomblet='Bomblets',shrapnel='Shrapnel'}
+local function chain_label(e)
+    for _,alias in pairs(type(e.aliases)=='table'and e.aliases or{})do
+        local label=CHAIN_LABELS[tostring(alias):match('([^/]+)$')or'']
+        if label then return label end
+    end
+    return CHAIN_LABELS.shrapnel
+end
+-- Notes on a catalogue explosion's rows, by explosion id.
+local HELLBOMB_NOTE='Shared by both Hellbombs and some mission objectives'
+local EXPLOSION_NOTES={['backpack/b100_portable_hellbomb/behavior']=HELLBOMB_NOTE,
+    ['stratagem/nux223_hellbomb/behavior']=HELLBOMB_NOTE}
+local function explosion_api()
+    local explosions=load('explosion_catalogue')
+    local ok,writes=pcall(require,'hd2runtime/domains/explosion_writes')
+    if not(explosions and type(explosions.explosions)=='table'and ok and type(writes)=='table'
+        and type(writes.descriptor)=='function')then return nil end
+    return explosions,writes
+end
+-- The owners of a catalogue explosion, in the catalogue's order (the list may have holes).
+local function owners_of(e)
+    local out={}
+    local list=type(e.owners)=='table'and e.owners or{}
+    for i=1,table.maxn(list)do if type(list[i])=='table'then out[#out+1]=list[i]end end
+    return out
+end
+-- opts: {roles = {[role] = true}, section = function(role, entry, id, chained) -> section label or nil}. `rows` are
+-- the rows already on the page. Returns the new rows.
+local function catalogue_explosion_rows(hd2,object,name,rows,opts)
+    if type(hd2.explosion)~='function'then return {}end
+    local explosions,writes=explosion_api()
+    if not explosions then return {}end
+    local all=explosions.explosions
+    local ids=util.sorted_keys(all)
+    local own,picked,order={},{},{}
+    for _,eid in ipairs(ids)do
+        for _,o in ipairs(owners_of(all[eid]))do
+            if o.name==name and o.category~='explosion'then
+                own[eid]=true
+                if opts.roles[o.role]and not picked[eid]then picked[eid]={role=o.role};order[#order+1]=eid end
+            end
+        end
+    end
+    -- what those explosions spawn, and what that spawns in turn
+    local grew=true
+    while grew do
+        grew=false
+        for _,eid in ipairs(ids)do
+            if not picked[eid]then
+                for _,o in ipairs(owners_of(all[eid]))do
+                    if o.category=='explosion'and(own[o.name]or picked[o.name])and not picked[eid]then
+                        picked[eid]={role=o.role,chained=true};order[#order+1]=eid;grew=true
+                    end
+                end
+            end
+        end
+    end
+    local covered={}
+    for _,r in ipairs(rows or{})do if r.loc then covered[r.loc]=true end end
+    local out={}
+    for _,eid in ipairs(order)do
+        local e,p=all[eid],picked[eid]
+        local section=opts.section(p.role,e,eid,p.chained)
+        for _,field in ipairs(section and explosions.fields or{})do
+            local okd,d=pcall(writes.descriptor,e,eid,field.id)
+            if okd and type(d)=='table'and d.editable and numeric(d.type,d.currentDefault)then
+                local suffix=field.id:gsub('^explosion%.',''):gsub('^damage%.','')
+                local ap=suffix:match('^ap_(%a+)$')
+                local label=ap and('Armor penetration: '..(ap=='direct'and'direct'or ap..' angle'))
+                    or util.humanize(suffix)
+                local id=eid
+                local row=make_row(object,{id=eid..'|'..field.id,label=label,
+                    unit=d.unit,field=field.id,target=function()return hd2.explosion(id)end,
+                    shared=shared_ack(d),
+                    -- (no hd2.explosion edit is live-tested: a descriptor without an acknowledgement still gets one)
+                    unverified=unverified(d)or(d.acknowledgement==nil and d.acknowledgements==nil),descriptor=d,
+                    section=section,vanilla=d.currentDefault,note=EXPLOSION_NOTES[eid],
+                    min=d.range and d.range.min,max=d.range and d.range.max,type=d.type,
+                    storage=(d.backing or{}).storage})
+                if not covered[row.loc]then covered[row.loc]=true;out[#out+1]=row end
+            end
+        end
+    end
+    return out
+end
+
 ------------------------------------------------------------------------------------------- support weapons --
 -- The maximum rows of a team-reload weapon's own ammunition (HD2Runtime 0.31.0 teamReload.ownSpares)
 local TEAM_RELOAD_NOTES={
@@ -868,38 +963,14 @@ local function support_rows(hd2,object,entry)
         end
     end
     -- HD2Runtime 0.31.1: the burst of that projectile (the AC-8's flak, the GR-8's HE), a catalogued explosion edited
-    -- through hd2.explosion(name); the Runtime's own descriptors, so the rows share the record identity of every other
-    -- route to the same bytes
-    local explosions=type(hd2.explosion)=='function'and load('explosion_catalogue')
-    local ok_writes,writes=pcall(require,'hd2runtime/domains/explosion_writes')
-    if explosions and ok_writes and type(writes.descriptor)=='function'then
-        -- (a burst the weapon's own rows already reach, the RL-77's, which is its primary rocket's: not shown twice)
-        local covered={}
-        for _,r in ipairs(rows)do if r.loc then covered[r.loc]=true end end
-        for _,eid in ipairs(util.sorted_keys(explosions.explosions or{}))do
-            local e=explosions.explosions[eid]
-            for _,o in ipairs(e.owners or{})do
-                if o.name==name and o.role=='function_impact'then
-                    for _,field in ipairs(explosions.fields or{})do
-                        local okd,d=pcall(writes.descriptor,e,eid,field.id)
-                        if okd and type(d)=='table'and d.editable and numeric(d.type,d.currentDefault)then
-                            local suffix=field.id:gsub('^explosion%.',''):gsub('^damage%.','')
-                            local ap=suffix:match('^ap_(%a+)$')
-                            local label=ap and('Armor penetration: '..(ap=='direct'and'direct'or ap..' angle'))
-                                or util.humanize(suffix)
-                            local row=make_row(object,{id=eid..'|'..field.id,label=label,
-                                unit=d.unit,field=field.id,target=function()return hd2.explosion(eid)end,
-                                shared=d.shared==true,unverified=true,descriptor=d,
-                                section=join('Explosion',role_text('programmable')),vanilla=d.currentDefault,
-                                min=d.range and d.range.min,max=d.range and d.range.max,type=d.type,
-                                storage=(d.backing or{}).storage})
-                            if not covered[row.loc]then rows[#rows+1]=row end
-                        end
-                    end
-                end
-            end
-        end
-    end
+    -- through hd2.explosion(name); 0.31.2: what its explosions spawn (the RL-77's bomblets, from both its rockets; the
+    -- EAT-700's napalm shrapnel). A burst the weapon's own rows already reach (the RL-77's, which is its primary
+    -- rocket's) is not shown twice.
+    for _,r in ipairs(catalogue_explosion_rows(hd2,object,name,rows,{roles={function_impact=true},
+        section=function(_,e,_,chained)
+            if chained then return join('Explosion',chain_label(e))end
+            return join('Explosion',role_text('programmable'))
+        end}))do rows[#rows+1]=r end
     -- the RL-77's cluster rocket hits with its main rocket's own DamageInfo row: said so where it is shown again
     same_hit_rows(name,rows)
     -- a hint on a status slot where a player looks for it (the slot's choices are the Runtime's, unchanged)
@@ -1617,6 +1688,16 @@ local function part_rows(object,prefix,build,decorate)
     return rows
 end
 local function append(into,rows)for _,r in ipairs(rows)do into[#into+1]=r end return into end
+-- The catalogue explosions an object sets off itself (owner role 'behavior': a Hellbomb's detonation) and what they
+-- spawn, as "Explosion · Detonation" rows.
+local function detonation_rows(hd2,object,name,rows)
+    return catalogue_explosion_rows(hd2,object,name,rows,{roles={behavior=true},
+        section=function(_,e,_,chained)return join('Explosion',chained and chain_label(e)or'Detonation')end})
+end
+-- Objects that are only their explosion (the NUX-223 Hellbomb: a mission stratagem the Runtime has no stratagem data
+-- for, whose detonation the explosion catalogue holds). Listed only when the installed Runtime catalogues it.
+local EXPLOSION_OBJECTS={{name='NUX-223 Hellbomb',explosion='stratagem/nux223_hellbomb/behavior',
+    subtitle='Mission stratagem',detail='its explosion'}}
 
 -- A player weapon's attachments, each slot a collapsed group: its magazines (attachment_authoring weapons[name]) and
 -- its muzzles, optics and underbarrels (slots[name][slot]). {{id, entry, group}}, sorted by name in a slot.
@@ -1875,6 +1956,8 @@ function CATEGORY.support_backpacks(cat)
                             function(row)row.group='Drone Weapon';row.vw_key=d.key end))
                     end
                     if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
+                    -- the explosion it sets off (the B-100 Portable Hellbomb's detonation)
+                    append(rows,part_rows(object,'ex',function(p)return detonation_rows(cat.hd2,p,name,rows)end))
                     return rows
                 end}
         end
@@ -1917,7 +2000,7 @@ function CATEGORY.vehicles(cat)
     end
     return sorted_objects(list)
 end
--- The Resupply mission stratagem and its pod.
+-- Mission stratagems: Resupply and its pod; the NUX-223 Hellbomb's explosion (HD2Runtime explosion catalogue).
 function CATEGORY.resupply(cat)
     local ST,why=load('stratagem_authoring')
     if not ST then return nil,why end
@@ -1931,6 +2014,14 @@ function CATEGORY.resupply(cat)
                     if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
                     return rows
                 end}
+        end
+    end
+    local explosions=type(cat.real_hd2.explosion)=='function'and explosion_api()
+    for _,x in ipairs(explosions and EXPLOSION_OBJECTS or{})do
+        if explosions.explosions[x.explosion]and not ST.stratagems[x.name]then
+            local name=x.name
+            list[#list+1]={key='ex|'..name,name=name,subtitle=x.subtitle,detail=x.detail,
+                build=function(object)return detonation_rows(cat.hd2,object,name,{})end}
         end
     end
     return sorted_objects(list)
@@ -2203,7 +2294,7 @@ M.CATEGORY=CATEGORY
 local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boosters'},
     st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
-    vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},
+    vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},ex={'resupply'},
     en={'terminids','automatons','illuminate','structures'},hd={'helldiver'},ar={'armor'},se={'status_effects'}}
 
 ------------------------------------------------------------------------------------------------- catalogue --

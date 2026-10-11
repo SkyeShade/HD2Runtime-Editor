@@ -1654,7 +1654,8 @@ function App:current_values()
 end
 -- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the
 -- loadout screen colours it. False when there is none (the layout keeps its text-only form).
-local STRATAGEM_FAMILIES={st=true,sp=true,sb=true,ve=true,rs=true}
+-- (ex: an object that is only its explosion, the NUX-223 Hellbomb: no icon of its own, a plain square)
+local STRATAGEM_FAMILIES={st=true,sp=true,sb=true,ve=true,rs=true,ex=true}
 function App:draw_icon(object,x,y,size)
     if type(self.canvas.d.image)~='function'then return false end
     local icons=self.ctx.icons

@@ -200,6 +200,52 @@ do
         out[#out+1]='zone names ok'
     end
 end
+-- catalogue explosions on the page of what sets them off: the RL-77's bomblets (spawned by both its rockets' bursts)
+-- and the Hellbombs' detonation (HD2Runtime 0.31.1+ hd2.explosion; the NUX-223 has no stratagem data of its own)
+do
+    local E=has('explosion_catalogue')and require('hd2runtime/domains/explosion_catalogue')
+    local all=E and type(hd2.explosion)=='function'and E.explosions or{}
+    if all['support_weapon/rl77_airburst_rocket_launcher/function_expiry/shrapnel_expiry']then
+        local rl77=rows('sp|RL-77 Airburst Rocket Launcher')
+        local function bomblet(field)
+            return find(rl77,function(r)return r.section=='Explosion · Bomblets'and r.field==field end)
+        end
+        local damage,outer=bomblet('explosion.damage.standard_damage'),bomblet('explosion.outer_radius')
+        check(damage and damage.vanilla==500 and damage.shared and damage.unverified and damage.acks.allow_shared,
+            'RL-77 bomblet damage')
+        check(outer and outer.vanilla==6 and bomblet('explosion.inner_radius').vanilla==4
+            and bomblet('explosion.shockwave_radius').vanilla==8,'RL-77 bomblet radii')
+        check(require('mods/skyeshade/hd2runtime_editor/editor/export').trace(damage.target)
+            =='hd2.explosion("support_weapon/rl77_airburst_rocket_launcher/function_expiry/shrapnel_expiry")',
+            'bomblet target')
+        local seen={}
+        for _,r in ipairs(rl77)do
+            if r.section:find('^Explosion')then
+                check(not seen[r.loc],'one explosion row per native field: '..r.key);seen[r.loc]=true
+            end
+        end
+        out[#out+1]='rl77 bomblets ok'
+    end
+    if all['backpack/b100_portable_hellbomb/behavior']and all['stratagem/nux223_hellbomb/behavior']then
+        local nux=cat:object('ex|NUX-223 Hellbomb')
+        check(nux and nux.category=='resupply','NUX-223 Hellbomb listed under Mission')
+        local function detonation(key,field)
+            return find(rows(key),function(r)return r.section=='Explosion · Detonation'and r.field==field end)
+        end
+        local a=detonation('sb|B-100 Portable Hellbomb','explosion.damage.standard_damage')
+        local b=detonation('ex|NUX-223 Hellbomb','explosion.damage.standard_damage')
+        check(a and b and a.vanilla==10000 and a.loc==b.loc,'both Hellbombs write one damage row')
+        local ap=detonation('ex|NUX-223 Hellbomb','explosion.damage.ap_direct')
+        check(ap and ap.vanilla==10,'Hellbomb armor penetration')
+        for _,r in ipairs({a,b,ap})do
+            check(r.acks.allow_shared and r.acks.allow_unverified_effect and r.note:find('both Hellbombs',1,true),
+                'Hellbomb acknowledgements and note: '..r.key)
+        end
+        out[#out+1]='hellbombs ok'
+    else
+        check(not cat:object('ex|NUX-223 Hellbomb'),'no NUX-223 entry without its catalogued explosion')
+    end
+end
 -- the Sterilizer's status slots point to the acid statuses for its spray
 do
     local sterilizer=rows('sp|TX-41 Sterilizer')

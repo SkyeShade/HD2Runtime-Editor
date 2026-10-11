@@ -28,7 +28,7 @@ SHOWN_KEYS = ('label', 'section', 'group', 'subtitle', 'detail', 'note', 'own_la
 # tables of the catalogue whose values are labels or notes (key -> text)
 LABEL_TABLES = ('PRESET_ACTIONS', 'FILE_ACTIONS', 'WEAPON_GROUPS', 'GROUP_LABELS', 'DOMAIN_LABELS', 'UI_GROUPS',
                 'PATH_LABELS', 'HOVER_LABELS', 'TEAM_RELOAD_NOTES', 'DERIVED_HEAT', 'MOUNT_LABELS', 'STATUS_SLOT_NOTE',
-                'SAME_HIT_LABELS', 'VW_NOTES')
+                'SAME_HIT_LABELS', 'VW_NOTES', 'CHAIN_LABELS', 'HELLBOMB_NOTE')
 
 
 def unescape(text):

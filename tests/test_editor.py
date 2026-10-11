@@ -221,6 +221,13 @@ class EditorTests(unittest.TestCase):
             self.assertIn('0.31.1 damage rows ok', result)
         else:
             self.assertIn('no 0.31.1 rows ok', result)
+        # catalogue explosions on the page of what sets them off (the RL-77's bomblets, both Hellbombs)
+        explosions = lua_host.RUNTIME / 'domains' / 'explosion_catalogue.lua'
+        text = explosions.read_text(encoding='utf-8') if explosions.is_file() else ''
+        if 'rl77_airburst_rocket_launcher/function_expiry/shrapnel_expiry' in text:
+            self.assertIn('rl77 bomblets ok', result)
+        if 'nux223_hellbomb/behavior' in text and 'b100_portable_hellbomb/behavior' in text:
+            self.assertIn('hellbombs ok', result)
 
     def test_dependent_fields_follow_what_they_need(self):
         # the rearm pool and the mission uses (HD2Runtime 0.31.0); beam conversion settings and their conversion

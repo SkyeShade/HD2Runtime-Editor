@@ -483,8 +483,9 @@ if icons then
         for _,object in ipairs(H.catalog:objects(id))do
             local list=id=='boosters'and icons.boosters or icons.stratagems
             local name=id=='boosters'and object.name or(object.stratagem or object.name)
-            -- a vehicle without a stratagem (FRV Super Earth variant, GATER Oil Rig) has no stratagem icon
-            local plain=object.key:match('^ve|')and not object.stratagem
+            -- a vehicle without a stratagem (FRV Super Earth variant, GATER Oil Rig) has no stratagem icon, nor has an
+            -- object that is only its explosion (the NUX-223 Hellbomb)
+            local plain=object.key:match('^ve|')and not object.stratagem or object.key:match('^ex|')
             if not list[name]and not NONE[name]and not plain then missing[#missing+1]=id..': '..name end
         end
     end
