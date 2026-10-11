@@ -444,6 +444,24 @@ function M.addon(catalog_module,entries,meta)
                 ..'of its own projectile while it does (COMPOSITION_TARGET_CHANGED)'}
         end
     end
+    -- the same for a weapon's own explosion rows next to its payload slot setting off another explosion (their settings
+    -- record changed; editor/catalog.lua "What a payload slot sets off")
+    local other={}
+    for _,entry in ipairs(entries)do
+        local row=entry.row
+        if row and row.payload_rows and catalog_module.payload_other and catalog_module.payload_other(row,entry.value)then
+            other[row]=true
+        end
+    end
+    for _,entry in ipairs(entries)do
+        local slot=entry.row and entry.row.payload_from
+        if slot and other[slot]and not set_aside[entry]then
+            set_aside[entry]=true
+            skipped[#skipped+1]={entry=entry,why=tostring(entry.row.object and entry.row.object.name or'the weapon')
+                ..'\'s '..tostring(slot.label)..' sets off another explosion in this export: HD2Runtime refuses the rows '
+                ..'of its own explosion while it does'}
+        end
+    end
     -- a damage row's status slots: one transaction, written where its first change is
     local slot_groups,in_group=status_groups(entries)
     for i,entry in ipairs(entries)do

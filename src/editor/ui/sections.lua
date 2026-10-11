@@ -191,10 +191,11 @@ function M.layout(sections,object_category)
             return a.n<b.n
         end)
         for _,s in ipairs(c.subs)do
-            -- (an explosion's payload slot before its stats: where a player picks what goes off)
+            -- (an explosion's payload slot before its stats: where a player picks what goes off; the settings of the
+            -- explosion it names, ui/app.lua payload_sections, right under it)
             local refs,rest={},{}
             for _,r in ipairs(s.rows)do
-                if r.field=='terminal.explosion'then refs[#refs+1]=r else rest[#rest+1]=r end
+                if r.field=='terminal.explosion'or r.shown_by then refs[#refs+1]=r else rest[#rest+1]=r end
             end
             if#refs>0 then
                 for _,r in ipairs(rest)do refs[#refs+1]=r end

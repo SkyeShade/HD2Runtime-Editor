@@ -63,12 +63,13 @@ function M.install(App)
         end
     end
     -- The toast after values were staged from a preset or a file.
-    -- (dropped: the values of own projectile rows left out because their weapon fires another one, App:stage_map)
+    -- (dropped: the values of own projectile rows left out because their weapon fires another one, and of own explosion
+    -- rows because their payload slot sets off another explosion, App:stage_map)
     function App.loaded_text(name,pending,missing,dropped)
         if(dropped or 0)>0 then
-            return Lf('Loaded %s: %d pending, %d unknown fields skipped, %d values of a swapped weapon\'s own projectile '
-                ..'left out (HD2Runtime refuses them while it fires another projectile). Press Apply.',name,pending,missing,
-                dropped)
+            return Lf('Loaded %s: %d pending, %d unknown fields skipped, %d values of a weapon\'s own projectile or '
+                ..'explosion left out (HD2Runtime refuses them while it fires another projectile or sets off another '
+                ..'explosion). Press Apply.',name,pending,missing,dropped)
         end
         if missing>0 then
             return Lf('Loaded %s: %d pending, %d unknown fields skipped. Press Apply.',name,pending,missing)

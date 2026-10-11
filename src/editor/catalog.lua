@@ -800,6 +800,23 @@ local function owners_of(e)
     for i=1,table.maxn(list)do if type(list[i])=='table'then out[#out+1]=list[i]end end
     return out
 end
+-- The row of one field of catalogue explosion `eid` on `object` (row id: id_prefix .. field id), or nil when the
+-- Runtime publishes the field read-only or not numeric there.
+local function explosion_field_row(hd2,object,writes,e,eid,field,section,id_prefix)
+    local okd,d=pcall(writes.descriptor,e,eid,field.id)
+    if not(okd and type(d)=='table'and d.editable and numeric(d.type,d.currentDefault))then return nil end
+    local suffix=field.id:gsub('^explosion%.',''):gsub('^damage%.','')
+    local ap=suffix:match('^ap_(%a+)$')
+    local label=ap and('Armor penetration: '..(ap=='direct'and'direct'or ap..' angle'))or util.humanize(suffix)
+    return make_row(object,{id=id_prefix..field.id,label=label,
+        unit=d.unit,field=field.id,target=function()return hd2.explosion(eid)end,
+        shared=shared_ack(d),
+        -- (no hd2.explosion edit is live-tested: a descriptor without an acknowledgement still gets one)
+        unverified=unverified(d)or(d.acknowledgement==nil and d.acknowledgements==nil),descriptor=d,
+        section=section,vanilla=d.currentDefault,note=EXPLOSION_NOTES[eid],
+        min=d.range and d.range.min,max=d.range and d.range.max,type=d.type,
+        storage=(d.backing or{}).storage})
+end
 -- opts: {roles = {[role] = true}, section = function(role, entry, id, chained) -> section label or nil}. `rows` are
 -- the rows already on the page. Returns the new rows.
 local function catalogue_explosion_rows(hd2,object,name,rows,opts)
@@ -838,23 +855,8 @@ local function catalogue_explosion_rows(hd2,object,name,rows,opts)
         local e,p=all[eid],picked[eid]
         local section=opts.section(p.role,e,eid,p.chained)
         for _,field in ipairs(section and explosions.fields or{})do
-            local okd,d=pcall(writes.descriptor,e,eid,field.id)
-            if okd and type(d)=='table'and d.editable and numeric(d.type,d.currentDefault)then
-                local suffix=field.id:gsub('^explosion%.',''):gsub('^damage%.','')
-                local ap=suffix:match('^ap_(%a+)$')
-                local label=ap and('Armor penetration: '..(ap=='direct'and'direct'or ap..' angle'))
-                    or util.humanize(suffix)
-                local id=eid
-                local row=make_row(object,{id=eid..'|'..field.id,label=label,
-                    unit=d.unit,field=field.id,target=function()return hd2.explosion(id)end,
-                    shared=shared_ack(d),
-                    -- (no hd2.explosion edit is live-tested: a descriptor without an acknowledgement still gets one)
-                    unverified=unverified(d)or(d.acknowledgement==nil and d.acknowledgements==nil),descriptor=d,
-                    section=section,vanilla=d.currentDefault,note=EXPLOSION_NOTES[eid],
-                    min=d.range and d.range.min,max=d.range and d.range.max,type=d.type,
-                    storage=(d.backing or{}).storage})
-                if not covered[row.loc]then covered[row.loc]=true;out[#out+1]=row end
-            end
+            local row=explosion_field_row(hd2,object,writes,e,eid,field,section,eid..'|')
+            if row and not covered[row.loc]then covered[row.loc]=true;out[#out+1]=row end
         end
     end
     return out
@@ -2510,6 +2512,68 @@ local function donor_sections(hd2,object,swap,id)
     return sections
 end
 
+------------------------------------------------------------------------------ what a payload slot sets off --
+-- An impact or expiry payload slot (a terminal.explosion row, "Impact payload") names the explosion the projectile
+-- sets off: the weapon's own, none, another weapon's terminal explosion (hd2.weapon(w):attack(a):projectile()
+-- :terminal_action(p):explosion(), what the editor offers) or a catalogued explosion (hd2.explosion(name): a mod's
+-- value). The window shows the named explosion's settings under the slot, in the slot's own subsection (ui/app.lua
+-- payload_sections): the rows its owner's page has for it (the same keys, native bytes, descriptors and
+-- acknowledgements, so an edit made there and one made here are one field in pending values, Changes, presets, the
+-- saved session and exports), as views of them (row.canonical = the owner's row, row.shown_by = the slot). They edit
+-- the explosion's own definition, shared with every weapon that sets it off. An explosion no page has a row for is
+-- edited through hd2.explosion(id), keyed by the explosion itself ('ex|<id>|<field>'). While a slot names another
+-- explosion than the weapon's own, HD2Runtime refuses the weapon's own explosion rows (their settings record changed,
+-- its reset included): Catalog:open links them to the slot (row.payload_from, slot.payload_rows), and the window sets
+-- them aside as it does for a projectile swap.
+-- The texts of these rows (shown through L()).
+local PAYLOAD_TEXTS={settings='Explosion settings',not_shown='Not shown',
+    unknown='HD2Runtime\'s explosion catalogue does not know this explosion, so its settings cannot be shown here',
+    package='No package that ships this explosion\'s effect is known to HD2Runtime: it refuses it as a payload '
+        ..'(ASSET_UNAVAILABLE), so its settings are not shown here',
+    none='HD2Runtime publishes no editable settings for this explosion',
+    explosion='Explosion'}
+M.PAYLOAD_TEXTS=PAYLOAD_TEXTS
+-- What a payload slot's value names: a key ('w|...' another weapon's terminal explosion, 'x|<id>' a catalogued one,
+-- '?' something else) and its parts; nil for no explosion.
+function M.payload_identity(value)
+    if type(value)~='table'then return nil end
+    if rawget(value,'path')=='no_explosion'then return nil end
+    local resource=rawget(value,'resource')
+    local id=rawget(value,'explosion')
+    if resource=='explosion'and type(id)=='string'then return 'x|'..id,{explosion=id}end
+    local w,a,p=rawget(value,'weapon'),rawget(value,'attack'),rawget(value,'phase')
+    if type(w)=='string'and type(p)=='string'then
+        a=type(a)=='string'and a or'primary'
+        return 'w|'..tostring(resource)..'|'..w..'|'..a..'|'..p,{weapon=w,attack=a,phase=p,resource=resource}
+    end
+    return '?',{}
+end
+-- Whether a payload slot's value sets off another explosion than the weapon's own (its own explosion rows are then
+-- refused), where no catalogue instance is at hand (exports): as its view said (Catalog:payload_view), else whether it
+-- names an explosion other than the slot's own value.
+function M.payload_other(slot,value)
+    local key=M.payload_identity(value)
+    if not key or type(slot)~='table'then return false end
+    local said
+    if type(slot.payload_other)=='table'then said=slot.payload_other[key]end
+    if said~=nil then return said end
+    return not util.same(value,slot.vanilla)
+end
+-- The catalogue explosion a weapon's terminal explosion is (owner name and role 'impact' / '<attack>_impact'), or nil.
+local function catalogue_id_of(id)
+    local explosions=explosion_api()
+    if not explosions then return nil end
+    local roles={[id.phase]=true,[id.attack..'_'..id.phase]=true}
+    for _,eid in ipairs(util.sorted_keys(explosions.explosions))do
+        for _,o in ipairs(owners_of(explosions.explosions[eid]))do
+            if o.name==id.weapon and roles[o.role]and tostring(o.category):find('^player weapon')then return eid end
+        end
+    end
+    return nil
+end
+-- The pages an owner of a catalogue explosion can be on (any family; an underbarrel on its host's page).
+local OWNER_FAMILIES={'pw','sp','th','sb','st','ve','rs'}
+
 ------------------------------------------------------------------------------------------------- catalogue --
 local Catalog={};Catalog.__index=Catalog
 
@@ -2812,7 +2876,179 @@ function Catalog:open(object)
             if swaps[row.swap_scope or'']==row then object.swap_rows[#object.swap_rows+1]=row end
         end
     end
+    -- the impact and expiry payload slots, each with the rows of its own explosion (its section and that section's
+    -- status, of the same weapon and part): "What a payload slot sets off"
+    for _,slot in ipairs(object.rows)do
+        if slot.field=='terminal.explosion'and slot.kind=='reference'then
+            object.payload_slots=object.payload_slots or{}
+            object.payload_slots[#object.payload_slots+1]=slot
+            slot.payload_rows={}
+            local status=join(slot.section,'Status')
+            for _,r in ipairs(object.rows)do
+                if r~=slot and r.field~='terminal.explosion'and r.group==slot.group and r.weapon_name==slot.weapon_name
+                    and(r.section==slot.section or r.section==status)then
+                    r.payload_from=slot
+                    slot.payload_rows[#slot.payload_rows+1]=r
+                end
+            end
+        end
+    end
     return object
+end
+-- A catalogue explosion's object of its own (an explosion no page has a row for): its rows are keyed by the explosion
+-- ('ex|<id>|<field>'). Not listed in any category.
+function Catalog:explosion_object(eid)
+    self.explosion_objects=self.explosion_objects or{}
+    local object=self.explosion_objects[eid]
+    if object then return object end
+    local explosions=explosion_api()
+    local e=explosions and explosions.explosions[eid]
+    if not e then return nil end
+    object={key='ex|'..eid,name=tostring(e.label or eid),subtitle=PAYLOAD_TEXTS.explosion,rows={},sections={},
+        explosion=eid}
+    self.explosion_objects[eid]=object
+    return object
+end
+-- The row of field `field_id` of catalogue explosion `eid` on its own object (built and indexed once), or nil.
+function Catalog:explosion_row(eid,field_id)
+    local object=self:explosion_object(eid)
+    if not object then return nil end
+    local key=object.key..'|'..tostring(field_id)
+    if self.rows[key]then return self.rows[key]end
+    local explosions,writes=explosion_api()
+    for _,field in ipairs(explosions.fields or{})do
+        if field.id==field_id then
+            local row=explosion_field_row(self.hd2,object,writes,explosions.explosions[eid],eid,field,
+                PAYLOAD_TEXTS.explosion,'')
+            if not row then return nil end
+            object.rows[#object.rows+1]=row
+            self.rows[row.key]=row
+            local list=self.by_loc[row.loc]
+            if not list then list={};self.by_loc[row.loc]=list end
+            list[#list+1]=row
+            return row
+        end
+    end
+    return nil
+end
+-- The rows of catalogue explosion `eid` where they are edited: an owner's page that has them (the same native bytes;
+-- what spawns a chained explosion counts as its owner), else the explosion's own object. Returns rows, a note (why
+-- none are shown) or nil.
+function Catalog:explosion_rows_of(eid)
+    local explosions,writes=explosion_api()
+    local e=explosions and explosions.explosions[eid]
+    if not e then return {},PAYLOAD_TEXTS.unknown end
+    if e.payload~=true then return {},PAYLOAD_TEXTS.package end
+    -- open the owners' pages (and those of what spawns it), so their rows are indexed by native bytes
+    local seen={}
+    local function open_owners(id,depth)
+        if seen[id]or depth>3 then return end
+        seen[id]=true
+        local entry=explosions.explosions[id]
+        for _,o in ipairs(entry and owners_of(entry)or{})do
+            if o.category=='explosion'and type(o.name)=='string'then open_owners(o.name,depth+1)
+            elseif type(o.name)=='string'then
+                local host=o.name:match('^(.-) / [^/]+$')
+                for _,family in ipairs(OWNER_FAMILIES)do
+                    local object=self:object(family..'|'..o.name)or(host and self:object(family..'|'..host))
+                    if object then self:open(object)end
+                end
+            end
+        end
+    end
+    open_owners(eid,0)
+    local out={}
+    for _,field in ipairs(explosions.fields or{})do
+        local okd,d=pcall(writes.descriptor,e,eid,field.id)
+        if okd and type(d)=='table'and d.editable and numeric(d.type,d.currentDefault)then
+            local found
+            for _,r in ipairs(self.by_loc[location(d)]or{})do
+                if r.field==field.id and not r.kind then found=r;break end
+            end
+            found=found or self:explosion_row(eid,field.id)
+            if found then out[#out+1]=found end
+        end
+    end
+    if#out==0 then return out,PAYLOAD_TEXTS.none end
+    return out,nil
+end
+-- The explosion a payload value names, as its rows are edited: {rows, owner (an object), label, note}; cached.
+function Catalog:payload_explosion(key,id)
+    self.payload_explosions=self.payload_explosions or{}
+    local cached=self.payload_explosions[key]
+    if cached then return cached end
+    local result={rows={}}
+    if id.explosion then
+        local explosions=explosion_api()
+        local e=explosions and explosions.explosions[id.explosion]
+        if not e and explosions then
+            local aliased=(explosions.aliases or{})[id.explosion]
+            if aliased then id={explosion=aliased};e=explosions.explosions[aliased]end
+        end
+        result.label=e and e.label or id.explosion
+        result.rows,result.note=self:explosion_rows_of(id.explosion)
+    elseif id.weapon then
+        -- another weapon's terminal explosion: that weapon's own rows of it (a sub-weapon's on its host's page)
+        local family=id.resource=='support_weapon'and'sp'or'pw'
+        local host=id.weapon:match('^(.-) / [^/]+$')
+        local own=self:object(family..'|'..id.weapon)
+        local page=own or(host and self:object(family..'|'..host))
+        local section=join('Explosion',role_label(id.attack),util.humanize(id.phase))
+        local status=join(section,'Status')
+        if page then
+            self:open(page)
+            for _,r in ipairs(page.rows)do
+                if r.field~='terminal.explosion'and r.weapon_name==id.weapon and(r.section==section or r.section==status)then
+                    result.rows[#result.rows+1]=r
+                end
+            end
+        end
+        result.owner,result.label=own,id.weapon
+        if#result.rows==0 then
+            -- (no page has it: the explosion catalogue's entry of it)
+            local eid=catalogue_id_of(id)
+            if eid then result.rows,result.note=self:explosion_rows_of(eid)
+            else result.note=PAYLOAD_TEXTS.unknown end
+        end
+    else
+        result.note=PAYLOAD_TEXTS.unknown
+    end
+    self.payload_explosions[key]=result
+    return result
+end
+-- What a payload slot shows for `value` (its pending, applied or a mod's value): nil for no explosion, else
+-- {key, rows (views of the explosion's rows, under the slot), note (an info row instead of rows), other (it names
+-- another explosion than the weapon's own: its own explosion rows are set aside)}. Cached per slot and explosion.
+function Catalog:payload_view(slot,value)
+    local key,id=M.payload_identity(value)
+    if not key then return nil end
+    self.payload_views=self.payload_views or{}
+    local ck=slot.key..'\0'..key
+    local view=self.payload_views[ck]
+    if view then return view end
+    local x=self:payload_explosion(key,id)
+    view={key=key,rows={},label=x.label,owner=x.owner}
+    local own={}
+    for _,r in ipairs(slot.payload_rows or{})do own[r.loc]=true end
+    -- (the weapon's own explosion, also when another weapon's handle names the same rows)
+    local all_own=#x.rows>0 and not x.note
+    for _,canonical in ipairs(x.rows)do
+        if not own[canonical.loc]then all_own=false end
+        -- (a view: everything else is read from the owner's row as it is now, its lock by another mod included)
+        view.rows[#view.rows+1]=setmetatable({object=slot.object,section=slot.section,group=slot.group,
+            canonical=canonical,shown_by=slot,payload_owner=x.owner,payload_label=x.label},{__index=canonical})
+    end
+    if x.note then
+        local note=info_row(slot.object,{id='payload:'..tostring(slot.key)..':'..key,label=PAYLOAD_TEXTS.settings,
+            section=slot.section,group=slot.group,text=PAYLOAD_TEXTS.not_shown,reason=x.note,info=true})
+        note.shown_by,note.payload_owner,note.payload_label=slot,x.owner,x.label
+        view.note=note
+    end
+    view.other=not(all_own or util.same(value,slot.vanilla))
+    slot.payload_other=slot.payload_other or{}
+    slot.payload_other[key]=view.other
+    self.payload_views[ck]=view
+    return view
 end
 -- The donor's sections of a swap row naming output `id` (built once per donor).
 function Catalog:donor_sections(object,swap,id)
@@ -2845,7 +3081,11 @@ function Catalog:row(key)
     local family,name=tostring(key):match('^(%a+)|([^|]+)|')
     if not family then return nil end
     local object=self:object(family..'|'..name)
-    if not object then return nil end
+    if not object then
+        -- a catalogue explosion's own row ('ex|<id>|<field>': one no page has, shown under a payload slot)
+        if family=='ex'then return self:explosion_row(name,tostring(key):match('|([^|]+)$'))end
+        return nil
+    end
     self:open(object)
     return self.rows[key]
 end

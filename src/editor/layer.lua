@@ -278,6 +278,16 @@ local function slot_for(self,row)
     end
     return slot
 end
+-- Whether a payload slot's value sets off another explosion than the weapon's own (editor/catalog.lua "What a payload
+-- slot sets off"): HD2Runtime then refuses the weapon's own explosion rows, their reset included.
+local function payload_other(self,slot_row,value)
+    if not catalog_module.payload_identity(value)then return false end
+    if self.catalog and self.catalog.payload_view then
+        local ok,view=pcall(self.catalog.payload_view,self.catalog,slot_row,value)
+        if ok and view then return view.other==true end
+    end
+    return catalog_module.payload_other(slot_row,value)
+end
 -- Turning a beam conversion off (or back to the weapon as shipped) takes its settings back too: they apply to a
 -- converted weapon only (editor/catalog.lua conversion_rows). Mission uses back to unlimited (their reset) take the
 -- stratagem out of the Eagle Rearm pool the editor put it in (REARM_POOL_UNLIMITED).
@@ -298,6 +308,13 @@ local function release_dependents(self,row,value,from_reset)
     -- they go back while they still can (swap_wait holds the swap until they are back)
     if row.swap_scope and catalog_module.donor_of(row,value)then
         for _,r in ipairs(row.fires_rows or{})do
+            local other=self.slots[r.loc]
+            if other and(other.user or other.error)and not other.removing then self:reset(r)end
+        end
+    end
+    -- the same for a payload slot setting off another explosion: the weapon's own explosion rows go back first
+    if row.payload_rows and payload_other(self,row,value)then
+        for _,r in ipairs(row.payload_rows)do
             local other=self.slots[r.loc]
             if other and(other.user or other.error)and not other.removing then self:reset(r)end
         end
@@ -871,6 +888,19 @@ local function swap_wait(self,slot)
     end
     if row.swap_scope and slot.target~=nil and catalog_module.donor_of(row,slot.target)then
         for _,r in ipairs(row.fires_rows or{})do if self:state(r)=='applying'then return true end end
+    end
+    -- a weapon's own explosion rows and its payload slot, the same way
+    local payload=row.payload_from
+    if payload and slot.user then
+        if payload_other(self,payload,(self:value(payload)))then
+            fail(self,slot,'its payload slot "'..tostring(payload.label)..'" sets off another explosion now, and '
+                ..'HD2Runtime refuses the rows of the weapon\'s own explosion while it does: set it back first')
+            return true
+        end
+        return self:state(payload)=='applying'
+    end
+    if row.payload_rows and slot.target~=nil and payload_other(self,row,slot.target)then
+        for _,r in ipairs(row.payload_rows)do if self:state(r)=='applying'then return true end end
     end
     return false
 end

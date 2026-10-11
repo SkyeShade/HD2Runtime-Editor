@@ -283,6 +283,17 @@ class EditorTests(unittest.TestCase):
             for line in ('host LAS-99 Quasar Cannon', 'donor stats ok', 'link ok'):
                 self.assertIn(line, result)
 
+    def test_payload_slots_show_their_explosion(self):
+        # the explosion an impact or expiry payload names (AR-2 Coyote -> CB-9): its settings under the slot, the CB-9
+        # page's own rows (keys, bytes, shared marking); switching, None, never shown twice, the weapon's own set aside
+        result = lua_file('test_payload_explosions.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                                          'harness': (LUA / 'ui_harness.lua').as_posix()})
+        for line in ('payload rows shown ok', 'payload edit ok', 'payload collapse ok', 'payload switch ok',
+                     'payload applied ok', 'own explosion ok', 'payload presets ok'):
+            self.assertIn(line, result)
+        if (lua_host.RUNTIME / 'domains' / 'explosion_catalogue.lua').is_file():
+            self.assertIn('catalogued payload ok', result)
+
     def test_revert_all_over_300_fields(self):
         # one guarded operation at a time, as in the game: rows stay REMOVING until their base is back, nothing
         # re-applies, failed fields are reset too, and REVERT ALL works again after manual resets and failures

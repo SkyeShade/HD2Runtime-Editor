@@ -101,6 +101,18 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
     shared with every weapon that fires it). Resetting the swap brings the own rows back. A pending own value is
     dropped when the swap is staged; an applied one goes back to its default before the swap applies. Presets, the
     saved session and exports leave such values out and say so. Mounted guns work the same way, per mount.
+  - **What a payload slot sets off.** When an **Impact payload** or **Expiry payload** names an explosion (pending,
+    applied, a preset's or a mod's value), that explosion's settings follow right under the slot, in the same Impact /
+    Expiry explosion part: radii, damage, armor penetration, demolition, stagger, push and its status slots, labelled
+    with the explosion ("CB-9 Exploding... · Explosion standard damage"). They are the explosion's own fields, the very
+    rows of its owner's page (the same keys in presets, exports and Changes, the same pending, edited and error state on
+    both pages), shared with every weapon that sets it off (SHARED, "also changes ..."). Picking another explosion shows
+    that one's; None or the weapon's own shows nothing more (a weapon's own explosion is never shown twice). Edits made
+    to an explosion stay with it when the slot changes. While the slot names another explosion than the weapon's own,
+    HD2Runtime refuses the weapon's own explosion rows, so they are set aside (shown locked while they hold a value of
+    yours; an applied one goes back to its default before the slot applies, and presets, the saved session and exports
+    leave such values out). An explosion HD2Runtime does not catalogue, or one without a known package, shows a short
+    note instead.
   - **With HD2Runtime 0.31.2:** projectile swaps on the LAS-99 Quasar and RS-422 Railgun (every donor needs
     allow_unverified_reference); the M-1000 Maxigun, GL-28 and the other hosts HD2Runtime keeps read-only show why
     where the swap would be; the Quasar's **Cooling rate while overheated** (its lockout after an overheat: 100 /
@@ -313,6 +325,7 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 - **Value fields:** calldown codes, mission uses, booleans, statuses, projectile swaps and terminal explosions over script choices, plus a mod's calldown code taken over and given back.
 - **UI:** the whole window, driven by scripted keys and clicks, including the picker, the code editor, Escape, the weapon filter, a mount swap, the Changes, Mods (with in-game options), Custom (tuning) and Settings tabs, a language switch, the traits editor and the menu sounds. With generated icons, every stratagem and booster must have one.
 - **Value fields** also cover filling the Liberator's empty rate slots (with its selector binding), the displayed traits and penetration (one at a time), and the steer watchdog.
+- **Payload slots** (`tests/lua/test_payload_explosions.lua`): the AR-2 Coyote's impact payload set to the CB-9's explosion shows that explosion's rows under the slot (the CB-9 page's keys and bytes, marked shared); switching, None, collapsing, applying, never showing an explosion twice, the R-36's own explosion rows set aside while it sets off another one (taken back first; left out of presets, the saved session and exports), and catalogued explosions (a note when one cannot be shown).
 - **Projectile swaps** (`tests/lua/test_swaps.lua`): a staged and an applied swap set the own projectile rows aside and show the donor (its stats and the link to its owner's page with HD2Runtime 0.31.2); own values are dropped, taken back first, refused with the reason, left out of presets, the saved session and exports.
 - **Helpers:** the JSON reader (sliced), the mod managers' state, the localisation file format, and the interface text list. Every frame must stay within the overlay's limits: no refused items and at most 1024 primitives. `py tests/render_frames.py` renders recorded frames to PNG for review.
 

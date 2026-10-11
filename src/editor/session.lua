@@ -21,14 +21,19 @@ function Session:restore()
     local app,layer=self.app,self.layer
     local values=self.presets:session()
     local applied,carried,reasons=0,0,{}
-    -- projectile swaps first: a value of a weapon's own projectile row waits for (or is refused by) what it fires
-    local keys,first={},{}
+    -- projectile swaps first: a value of a weapon's own projectile row waits for (or is refused by) what it fires; then
+    -- payload slots: a value of a weapon's own explosion row the same way by what its slot sets off
+    local keys,first,slots={},{},{}
     for key in pairs(values)do
         local row=not app.is_custom_key(key)and app.catalog and app.catalog:row(key)
-        if row and row.swap_scope then first[#first+1]=key else keys[#keys+1]=key end
+        if row and row.swap_scope then first[#first+1]=key
+        elseif row and row.payload_rows then slots[#slots+1]=key
+        else keys[#keys+1]=key end
     end
     table.sort(first)
+    table.sort(slots)
     table.sort(keys)
+    for _,key in ipairs(slots)do first[#first+1]=key end
     for _,key in ipairs(keys)do first[#first+1]=key end
     for _,key in ipairs(first)do
         local stored=values[key]
@@ -43,6 +48,9 @@ function Session:restore()
             elseif row.fires_from and app:fires(row.fires_from)then
                 -- (kept saved: it comes back at a start whose weapon fires its own projectile again)
                 why='the weapon fires another projectile (its own projectile rows are refused while it does)'
+            elseif row.payload_from and app.payload_block and app:payload_block(row)then
+                -- (kept saved the same way, until its payload slot sets off its own explosion again)
+                why='its payload slot sets off another explosion (its own explosion rows are refused while it does)'
             else ok,why=layer:set(row,value,{kind='session'})end
         end
         -- every saved value is carried: a restored one that the Runtime refuses later stays saved as well

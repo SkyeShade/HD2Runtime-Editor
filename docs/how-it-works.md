@@ -208,6 +208,39 @@ the projectile the weapon fires. After a swap it refuses them (`COMPOSITION_TARG
   leave such values out (counted in the load message); the saved session keeps them saved but does not apply them;
   exports skip them with the reason.
 
+## Payload slots: what an impact or expiry payload sets off
+
+An impact or expiry payload slot (`terminal.explosion`, kind `reference`) names an explosion: the weapon's own, none,
+another weapon's terminal explosion (`weapon:attack(a):projectile():terminal_action(p):explosion()`, what the editor
+offers) or a catalogued one (`hd2.explosion(name)`, a mod's value).
+
+- **Links.** `Catalog:open` gives each slot `payload_rows`: the rows of its own explosion (its section and that
+  section's Status, same weapon and part), each with `row.payload_from`; the page's slots are `object.payload_slots`.
+- **What it names.** `catalog.payload_identity(value)` keys a value (`w|...` a weapon's terminal explosion, `x|<id>` a
+  catalogued one). `Catalog:payload_explosion` finds that explosion's rows where they are edited: the owner weapon's
+  own rows of that attack and phase; for a catalogued explosion, the row on the same native bytes on an owner's page
+  (owners' pages opened first, what spawns a chained explosion counted as its owner), else a row of the explosion's
+  own (`ex|<id>|<field>`, through `hd2.explosion(id)`, found again by `Catalog:row`). An unknown explosion, one without
+  a known package (`payload = false`) or one without editable fields gets a note (an info row) instead.
+- **Views.** `Catalog:payload_view(slot, value)` (cached per slot and explosion) returns views of those rows: tables
+  with the slot's object, section and group, `canonical` (the owner's row, read through `__index`) and `shown_by`.
+  `App:stage` stages a view's value on its canonical row, so the key, pending value, layer slot, Changes entry, preset
+  key and error are the owner's; markers and values are by key and native bytes, so both pages show the same state.
+  `view.other` is true when the slot names another explosion than the weapon's own.
+- **The page.** `App:payload_sections` adds a slot's views right after it (ui/sections.lua keeps them under the slot,
+  in its subsection), leaving out rows already shown on the page (by native bytes; an explosion named by both slots
+  shows once) and status durations that do not apply. While `view.other`, the slot's own explosion rows are set aside
+  like a swap's (`App:payload_block`, through `App:fires_block`: locked while they hold a value of yours; staging the
+  slot drops their pending values).
+- **Order.** In the layer, `release_dependents` resets the applied own explosion values when the slot is set to another
+  explosion, and `swap_wait` holds the slot until they are back; an own value waits while the slot goes back to the
+  weapon's own explosion and is refused at once while it names another one. Presets and the saved session stage the
+  slots after the projectile swaps and before every other value, leaving such values out (the session keeps them
+  saved); exports skip them with the reason (`catalog.payload_other`).
+- **Labels.** "<explosion> · <field>": the owner weapon's name (or the catalogue's label), cut first to the same width
+  on every row of the slot so the field stays readable (`App:fitted_label`). The status line's SHARED chip and
+  "also changes ..." name the owner page and every other object on the same bytes.
+
 ## Mount swaps
 
 A vehicle's mount row (kind `reference`, field `mount.weapon`, target `hd2.vehicle(name):mount(slot)`) offers the

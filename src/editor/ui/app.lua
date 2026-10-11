@@ -228,18 +228,23 @@ end
 function App:hidden_status_rows(object)
     local hidden,sig
     for _,row in ipairs(object.rows or{})do
-        local c=row.status_child
-        if c and c.kind=='duration'and c.type_row then
-            local status=self:row_view(c.type_row)
-            local _,source,state=self:row_view(row)
-            if not util.same(status,c.status)and source~='pending'and source~='editor'and state~='error'then
-                hidden=hidden or{}
-                hidden[row]=true
-                sig=(sig and(sig..';')or'')..row.key
-            end
+        if self:duration_hidden(row)then
+            hidden=hidden or{}
+            hidden[row]=true
+            sig=(sig and(sig..';')or'')..row.key
         end
     end
     return hidden,sig or''
+end
+-- Whether a row holds a value of yours: pending, applied or failed (a row set aside stays shown while it does).
+function App:holds_value(row)
+    local _,source,state=self:row_view(row)
+    return source=='pending'or source=='editor'or state=='error'
+end
+function App:duration_hidden(row)
+    local c=row.status_child
+    if not(c and c.kind=='duration'and c.type_row)then return false end
+    return not util.same((self:row_view(c.type_row)),c.status)and not self:holds_value(row)
 end
 -- Projectile swaps (editor/catalog.lua "What a swapped weapon fires"): the donor output a swap row names as the window
 -- shows it (a pending value first, else the applied one, or a mod's), or nil while it fires its own projectile.
@@ -259,7 +264,8 @@ end
 function App:fires_block(row)
     local swap=row.fires_from
     local id=swap and self:fires(swap)
-    if not id then return nil end
+    -- (else its payload slot may name another explosion: payload_block)
+    if not id then return self:payload_block(row)end
     return Lf('the weapon fires %s now: HD2Runtime refuses its own projectile rows while it does '
         ..'(COMPOSITION_TARGET_CHANGED). Reset "%s" to edit them again',self:donor_name(id),L(swap.label))
 end
@@ -290,13 +296,93 @@ function App:fires_sections(object,present)
     end
     return hide,add,sig or''
 end
+-- Impact and expiry payload slots (editor/catalog.lua "What a payload slot sets off"): what a slot names as the window
+-- shows it (a pending value first, else the applied one, or a mod's), or nil for no explosion.
+function App:payload_view(slot)
+    if not slot then return nil end
+    return self.catalog:payload_view(slot,(self:row_view(slot)))
+end
+-- The name of the explosion a payload view shows: its owner weapon's own (translated) name, else the catalogue's label.
+function App:payload_name(row)
+    if row.payload_owner then return util.display_name(row.payload_owner)end
+    return L(tostring(row.payload_label or'?'))
+end
+-- Why a weapon's own explosion row takes no value of its own now (nil when it can): its payload slot names another
+-- explosion, and HD2Runtime refuses the rows of the weapon's own while it does (their settings record changed).
+function App:payload_block(row)
+    local slot=row.payload_from
+    local view=slot and self:payload_view(slot)
+    if not(view and view.other)then return nil end
+    local name=view.owner and util.display_name(view.owner)or L(tostring(view.label or'?'))
+    return Lf('"%s" sets off %s now: HD2Runtime refuses the rows of the weapon\'s own explosion while it does. Set it '
+        ..'back to edit them again',L(slot.label),name)
+end
+-- A payload slot now naming another explosion: the pending values of the weapon's own explosion rows are dropped
+-- (HD2Runtime would refuse them). Said once.
+function App:payload_staged(slot,origin)
+    local view=self:payload_view(slot)
+    if not(view and view.other)then return 0 end
+    local dropped=0
+    for _,r in ipairs(slot.payload_rows or{})do
+        if self.pending[r.key]then self.pending[r.key]=nil;self.pending_n=self.pending_n-1;dropped=dropped+1 end
+    end
+    if dropped>0 and not(origin and origin.kind=='preset')then
+        self:toast(Lf('%s: %d pending values of the weapon\'s own explosion dropped (HD2Runtime refuses them while it '
+            ..'sets off another one)',L(slot.label),dropped),C.pending)
+    end
+    return dropped
+end
+-- Under each payload slot shown, the settings of the explosion it names (views of that explosion's rows: shared with
+-- every weapon that sets it off), or a note why they are not shown; while it names another explosion than the weapon's
+-- own, the weapon's own explosion rows are set aside (those holding a value of yours stay, locked, to be reset). Rows
+-- already on the page are not shown twice. Returns the rows set aside, the rows to show after each slot, a signature.
+function App:payload_sections(object,sections,present,hidden)
+    if not object.payload_slots then return nil,nil,''end
+    local hide,views,sig
+    for _,slot in ipairs(object.payload_slots)do
+        if present[slot]and not(hidden and hidden[slot])then
+            local view=self:payload_view(slot)
+            if view then
+                views=views or{}
+                views[#views+1]={slot=slot,view=view}
+                sig=(sig and(sig..';')or'')..slot.key..'='..view.key
+                for _,r in ipairs(view.other and slot.payload_rows or{})do
+                    if self:holds_value(r)then sig=sig..','..r.key
+                    else hide=hide or{};hide[r]=true end
+                end
+            end
+        end
+    end
+    if not views then return nil,nil,''end
+    -- what the page shows besides (by native bytes)
+    local shown={}
+    for _,section in ipairs(sections)do
+        for _,r in ipairs(section.rows)do
+            if not(hidden and hidden[r])and not(hide and hide[r])and r.loc then shown[r.loc]=true end
+        end
+    end
+    local after={}
+    for _,v in ipairs(views)do
+        local list={}
+        for _,p in ipairs(v.view.rows)do
+            if not shown[p.loc]and not self:duration_hidden(p)then
+                shown[p.loc]=true
+                list[#list+1]=p
+                sig=sig..'+'..p.key
+            end
+        end
+        if v.view.note then list[#list+1]=v.view.note end
+        after[v.slot]=list
+    end
+    return hide,after,sig
+end
 -- An object's sections as shown (the mounts' weapons, the status durations that apply now, what a swapped weapon
--- fires) and a signature of what decided them.
+-- fires, what each payload slot sets off) and a signature of what decided them.
 function App:effective_sections(object)
     local hidden,hsig=self:hidden_status_rows(object)
     local sections,sig=self:mount_sections(object)
     local present={}
-    if object.swap_rows then
+    if object.swap_rows or object.payload_slots then
         for _,section in ipairs(sections)do for _,r in ipairs(section.rows)do present[r]=true end end
     end
     local fhide,fadd,fsig=self:fires_sections(object,present)
@@ -304,15 +390,25 @@ function App:effective_sections(object)
         hidden=hidden or{}
         for r in pairs(fhide)do hidden[r]=true end
     end
-    if not hidden and not fadd then return sections,sig end
+    local phide,pafter,psig=self:payload_sections(object,sections,present,hidden)
+    if phide then
+        hidden=hidden or{}
+        for r in pairs(phide)do hidden[r]=true end
+    end
+    if not hidden and not fadd and not pafter then return sections,sig end
     local out={}
     for _,section in ipairs(sections)do
         local rows={}
-        for _,r in ipairs(section.rows)do if not(hidden and hidden[r])then rows[#rows+1]=r end end
+        for _,r in ipairs(section.rows)do
+            if not(hidden and hidden[r])then
+                rows[#rows+1]=r
+                for _,x in ipairs(pafter and pafter[r]or{})do rows[#rows+1]=x end
+            end
+        end
         if#rows>0 then out[#out+1]={label=section.label,group=section.group,rows=rows}end
     end
     for _,section in ipairs(fadd or{})do out[#out+1]=section end
-    return out,sig..'|'..hsig..'|'..fsig
+    return out,sig..'|'..hsig..'|'..fsig..'|'..psig
 end
 -- The name of the page a link row points to (translated as the object list shows it).
 function App:link_name(row)
@@ -322,7 +418,28 @@ end
 -- A row's label as shown: "Edit EAT-17 Expendable Anti-Tank's projectile" for a link, else its label translated.
 function App:row_label(row)
     if row.link then return Lf('Edit %s\'s projectile',self:link_name(row))end
+    -- (the settings of the explosion a payload slot names: "CB-9 Exploding Crossbow · Explosion standard damage")
+    if row.shown_by then return self:payload_name(row)..' · '..L(row.label)end
     return L(row.label)
+end
+-- A row's label fitted into `max` units: under a payload slot the explosion's name is cut first (to the same width on
+-- every row of the slot), so the field's own label stays readable ("CB-9 Exploding... · Explosion standard damage").
+function App:fitted_label(row,max)
+    local text=self:row_label(row)
+    if not row.shown_by or self.canvas:measure(text,SZ.label)<=max then return text end
+    local view=self:payload_view(row.shown_by)
+    local key=tostring(row.shown_by.key)..'\0'..tostring(view and view.key)..'\0'..max..'\0'..tostring(i18n.language())
+    self.label_rooms=self.label_rooms or{}
+    local room=self.label_rooms[key]
+    if not room then
+        room=max
+        for _,r in ipairs(view and view.rows or{row})do
+            room=math.min(room,max-self.canvas:measure(' · '..L(r.label),SZ.label))
+        end
+        room=math.max(max*0.3,room)
+        self.label_rooms[key]=room
+    end
+    return self.canvas:fit(self:payload_name(row),room,SZ.label)..' · '..L(row.label)
 end
 -- Opens the page a link row points to (the donor's owner weapon), at its first projectile row when it is shown.
 function App:open_link(row)
@@ -662,13 +779,17 @@ App.slot_order=slot_order
 -- origin: where the value comes from, kept with the pending value and the applied field for the errors list
 -- ({kind = 'preset', name} | {kind = 'session'}; a personal edit when nil).
 function App:stage(row,value,origin)
+    -- (a setting of the explosion a payload slot names is its owner's row: staged there, under that row's key)
+    local shown=row
+    row=row.canonical or row
     if not row.editable then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error);return false end
     local staged=self:stage_value(row,value,origin)
     -- accepted: any value staged on another row of the same bytes gives way to it
     if staged then self:unstage_siblings(row)end
     if staged and row.swap_scope then self:swap_staged(row,origin)end
+    if staged and row.payload_rows then self:payload_staged(row,origin)end
     if staged and self.pending[row.key]then
-        local names=self:shared_names(row)
+        local names=self:shared_names(shown)
         if names then self:toast(Lf('Shared value: this also changes %s',names),C.pending)end
         -- once a session: the edits GameGuard was reported to react to
         if row.risk=='gameguard'and not self.gameguard_warned then
@@ -754,10 +875,11 @@ function App:unstage(row)
     end
     return false
 end
--- Returns how many values are missing, and how many were left out because their weapon fires another projectile.
+-- Returns how many values are missing, and how many were left out because their weapon fires another projectile (or
+-- its payload slot sets off another explosion).
 function App:stage_map(map,origin)
     local missing=0
-    local staged,swaps,rest={},{},{}
+    local staged,swaps,slots,rest={},{},{},{}
     for _,key in ipairs(util.sorted_keys(map))do
         local stored=map[key]
         if App.is_custom_key(key)then
@@ -767,17 +889,23 @@ function App:stage_map(map,origin)
             local row,value=self:decode_value(key,stored)
             if row and value~=nil then
                 local item={row=row,value=value}
-                if row.swap_scope then swaps[#swaps+1]=item else rest[#rest+1]=item end
+                if row.swap_scope then swaps[#swaps+1]=item
+                elseif row.payload_rows then slots[#slots+1]=item
+                else rest[#rest+1]=item end
             else missing=missing+1 end
         end
     end
     -- projectile swaps first: the rows of a weapon's own projectile follow what it fires. A value for one of them on a
     -- weapon that fires a donor (in these values, or already) is left out: HD2Runtime refuses it
-    -- (COMPOSITION_TARGET_CHANGED), and a swap staged after it would drop it anyway
+    -- (COMPOSITION_TARGET_CHANGED), and a swap staged after it would drop it anyway. Then the payload slots: the rows of
+    -- a weapon's own explosion follow what its slot sets off (refused while it sets off another explosion)
     for _,item in ipairs(swaps)do self:stage(item.row,item.value,origin)end
     local dropped=0
+    for _,item in ipairs(slots)do
+        if self:fires_block(item.row)then dropped=dropped+1 else self:stage(item.row,item.value,origin)end
+    end
     for _,item in ipairs(rest)do
-        if item.row.fires_from and self:fires(item.row.fires_from)then dropped=dropped+1
+        if self:fires_block(item.row)then dropped=dropped+1
         else staged[#staged+1]=item end
     end
     -- (status slot 1 before slot 2: the slots fill in order)
@@ -1782,8 +1910,9 @@ function App:draw_fields(y0,h)
             local open=row.editable and not self:slot_block(row)and not fires_lock or row.link~=nil
             -- (a donor's row has no default of the weapon's own: its label takes that column)
             local wide=row.link or row.fires_info
-            cv:text(self:row_label(row),x+FX.label+indent,cy,{size=SZ.label,colour=open and(selected and C.text or C.dim)
-                or C.faint,max=wide and(FX.box-FX.label-16-indent)or(FX.default_right-FX.label-90-indent)})
+            local label_max=wide and(FX.box-FX.label-16-indent)or(FX.default_right-FX.label-90-indent)
+            cv:text(self:fitted_label(row,label_max),x+FX.label+indent,cy,{size=SZ.label,
+                colour=open and(selected and C.text or C.dim)or C.faint,max=label_max})
             if not wide then
                 cv:text(self:text(row,row.vanilla),x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
             end
