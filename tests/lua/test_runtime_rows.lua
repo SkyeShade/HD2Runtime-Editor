@@ -178,6 +178,21 @@ do
         out[#out+1]='vehicle mounts ok'
     end
 end
+-- damage zones by their native names where the Runtime's entity data has one ("Zone N" otherwise)
+do
+    local E=require('hd2runtime/domains/entity_authoring')
+    local exo=E.vehicles and E.vehicles['EXO-55 Breakthrough Exosuit']
+    if exo and exo.zones and exo.zones.zone_2 and exo.zones.zone_2.name=='cockpit_rear'then
+        local sections={}
+        for _,r in ipairs(rows('ve|EXO-55 Breakthrough Exosuit'))do
+            if r.group=='Damage Zones'then sections[r.section]=true end
+        end
+        check(sections['Cockpit rear']and not sections['Zone 2']and sections['Zone 0'],'vehicle zone names')
+        local namer=catalog.zone_namer({zone_1={index=1,name='leg'},zone_2={index=2,name='leg'},zone_3={index=3}})
+        check(namer('zone_1')=='Leg (Zone 1)'and namer('zone_3')=='Zone 3','a shared zone name keeps its number')
+        out[#out+1]='zone names ok'
+    end
+end
 -- the Sterilizer's status slots point to the acid statuses for its spray
 do
     local sterilizer=rows('sp|TX-41 Sterilizer')

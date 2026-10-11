@@ -934,6 +934,28 @@ local function support_rows(hd2,object,entry)
     return rows
 end
 
+-- Damage zone sections of vehicles, backpacks (and their linked drone or shield) and stratagems' deployed entities: the
+-- zone's native name when the Runtime's entity data carries one (entity_authoring zones[id].name, stratagem_authoring
+-- damageZones[].name: "cockpit_rear" -> "Cockpit rear"), else "Zone N"; a name two zones of the entity share gets the
+-- zone number. Shown through L() like every section. (Enemy pages keep their own labels.)
+local function zone_namer(zones)
+    local names,count={},{}
+    for key,z in pairs(type(zones)=='table'and zones or{})do
+        if type(z)=='table'and type(z.name)=='string'and z.name~=''then
+            local id=z.zoneId or key
+            local label=util.humanize(z.name)
+            names[id]=label
+            count[label]=(count[label]or 0)+1
+        end
+    end
+    return function(zone)
+        local label=names[zone]
+        if label and count[label]>1 then label=label..' ('..util.humanize(zone)..')'end
+        return label or util.humanize(zone or'')
+    end
+end
+M.zone_namer=zone_namer
+
 ------------------------------------------------------------------------------------------------ stratagems --
 local PATH_LABELS={stratagem='Call-in',eagle_rearm='Eagle Rearm',deployed_entity='Deployed Entity',shield='Shield',
     turret='Turret',targeting='Targeting',minefield='Minefield',weapon='Mounted Weapon'}
@@ -978,6 +1000,7 @@ end
 local function stratagem_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    local zone_name=zone_namer(entry.damageZones)
     -- in the Eagle Rearm pool (the Eagles): its uses are charges, never unlimited (REARM_POOL_UNLIMITED)
     local pooled=false
     for _,f in ipairs(entry.fields or{})do
@@ -1031,7 +1054,7 @@ local function stratagem_rows(hd2,object,entry)
                 local section=PATH_LABELS[t.path]
                 local group
                 if t.path=='weapon'then section=mounted_section(f.semanticFieldId)
-                elseif t.path=='damage_zone'then section=util.humanize(t.zone or'');group='Damage Zones'
+                elseif t.path=='damage_zone'then section=zone_name(t.zone);group='Damage Zones'
                 elseif t.path=='attack'then
                     section=join(t.weapon=='mine'and'Mine'or(t.weapon and'Mounted Weapon')or'Attack',
                         util.humanize(t.attack or''),DOMAIN_LABELS[domain_of(f.semanticFieldId)])
@@ -1103,6 +1126,7 @@ local VW_NOTES={['TD-220 Bastion MK XVI / attach_tank_gun_mg']={
 local function vehicle_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    local zone_name=zone_namer(entry.zones)
     -- mounts: which weapon each slot holds (a same-family swap, as ModBuilder offers it)
     for _,f in ipairs(entry.fields or{})do
         local t=f.target or{}
@@ -1139,7 +1163,7 @@ local function vehicle_rows(hd2,object,entry)
             else
                 local zone=t.zone
                 target=function()return hd2.vehicle(name):damage_zone(zone)end
-                section=util.humanize(zone)
+                section=zone_name(zone)
             end
             rows[#rows+1]=make_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.zone)),
                 label=f.displayName,unit=f.unit,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
@@ -1165,6 +1189,16 @@ local HOVER_LABELS={['hover.vertical_acceleration_low_speed']='Lift (climbs when
 local function backpack_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
+    local zone_names={}
+    local function zone_name(linked,zone)
+        local key=linked or''
+        if not zone_names[key]then
+            local zones=entry.zones
+            if linked then zones=type(entry.linked)=='table'and type(entry.linked[linked])=='table'and entry.linked[linked].zones end
+            zone_names[key]=zone_namer(zones)
+        end
+        return zone_names[key](zone)
+    end
     -- the Hover Pack shares the jump packs' JumppackComponent: its jump.* sustain and air-control members drive the
     -- hover flight too, so they are "Flight" there, not a "Jump Pack" section on a pack that cannot jump
     local hovers=false
@@ -1191,7 +1225,7 @@ local function backpack_rows(hd2,object,entry)
                 elseif linked=='energy_shield'then
                     target=function()return hd2.backpack(name):energy_shield():damage_zone(zone)end
                 else target=function()return hd2.backpack(name):damage_zone(zone)end end
-                section=join(linked and util.humanize(linked)or nil,util.humanize(zone))
+                section=join(linked and util.humanize(linked)or nil,zone_name(linked,zone))
             end
             if target then
                 rows[#rows+1]=make_row(object,{id=f.instanceKey or(f.semanticFieldId..'@'..tostring(t.path)),
