@@ -921,6 +921,21 @@ function M.install(App)
         cv:text(capturing and L('Press the new key, or Ctrl / Shift / Alt with it. Esc cancels.')
             or L('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.'):format(self:hotkey()),
             x,y+4,{size=SZ.tiny,colour=capturing and C.gold or C.faint,max=W-48})
+        -- HD2Runtime's own settings panel (F10: its language, the messages it shows), HD2Runtime 0.31.1
+        -- hd2.ui.open_settings: the editor closes first, so the two windows never share the cursor
+        y=y+34
+        local can_open=type(self.hd2.ui)=='table'and type(self.hd2.ui.open_settings)=='function'
+        cv:text(L('HD2Runtime settings (F10): its language and on-screen messages'),x,y,
+            {size=SZ.label,colour=C.dim,max=390})
+        self.btn_runtime_settings=self.btn_runtime_settings or{click=function()
+            if self.ctx.close then self.ctx.close()end
+            local ok,why=pcall(self.hd2.ui.open_settings)
+            if not ok and self.ctx.log then self.ctx.log('HD2Runtime settings did not open: '..tostring(why))end
+        end}
+        button(self,L('OPEN'),x+400,y-13,140,26,can_open and'normal'or'disabled',self.btn_runtime_settings)
+        if not can_open then
+            cv:text(L('needs HD2Runtime 0.31.1'),x+552,y,{size=SZ.tiny,colour=C.faint})
+        end
         -- the wheel hook off (the player's HD2Runtime install choice): the Runtime's own notice, and what it turns off here
         local wheel=self:wheel_notice()
         if wheel then
