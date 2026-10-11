@@ -5,13 +5,14 @@
 --   MODS      every deployed mod: HD2Runtime mods with the values they applied and their in-game options, and the
 --             mods the mod manager deployed that are not HD2Runtime mods (what those change cannot be read);
 --   CUSTOM    custom stratagems registered by mods, with their cooldown and uses tunable on this machine;
---   SETTINGS  restore session, the cursor, menu sounds and the language.
+--   SETTINGS  restore session, the cursor, menu sounds, the game's own names and the language.
 local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local installed=require('mods/skyeshade/hd2runtime_editor/editor/installed')
 local logfile=require('mods/skyeshade/hd2runtime_editor/editor/logfile')
 local win=require('mods/skyeshade/hd2runtime_editor/editor/win')
+local game_names_module=require('mods/skyeshade/hd2runtime_editor/editor/game_names')
 local C,SZ=theme.colour,theme.size
 local L=i18n.L
 local Lf=i18n.Lf
@@ -829,23 +830,34 @@ function M.install(App)
     function App:handle_settings_keys(f)
         local k=f.keys
         local langs=self:languages()
-        self.settings_index=clamp_index(self.settings_index or 1,6+#langs)
-        if k.UP then self.settings_index=clamp_index(self.settings_index-1,6+#langs)end
-        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,6+#langs)end
+        local toggles=App.SETTINGS_TOGGLES
+        self.settings_index=clamp_index(self.settings_index or 1,toggles+2+#langs)
+        if k.UP then self.settings_index=clamp_index(self.settings_index-1,toggles+2+#langs)end
+        if k.DOWN then self.settings_index=clamp_index(self.settings_index+1,toggles+2+#langs)end
         local i=self.settings_index
-        if i==5 then
+        if i==toggles+1 then
             -- the interface size: left smaller, right or Enter larger
             if k.LEFT then self:step_ui_scale(-1)elseif k.RIGHT or k.ENTER then self:step_ui_scale(1)end
-        elseif i==6 then
+        elseif i==toggles+2 then
             -- the open key: Enter waits for a new one, Del returns to the default
             if k.ENTER or k.RIGHT then self:start_key_capture()
             elseif(k.DELETE or k.BACKSPACE)and self:hotkey()~=App.DEFAULT_HOTKEY then self:set_hotkey(App.DEFAULT_HOTKEY)end
         elseif k.ENTER or k.RIGHT or k.LEFT then
-            if i<=4 then
+            if i<=toggles then
                 local action=(self.settings_toggles or{})[i]
                 if action then action.click()end
-            else self:use_language(langs[i-6].name)end
+            else self:use_language(langs[i-toggles-2].name)end
         end
+    end
+    -- The settings that are on/off switches (the first rows of SETTINGS), then the interface size and the open key.
+    App.SETTINGS_TOGGLES=5
+    -- "Use the game's names": the game's own names of weapons, stratagems, boosters ... in its language
+    -- (editor/game_names.lua), shown at once.
+    function App:set_game_names(on)
+        self.presets:set_setting('game_names',on)
+        local names=self.ctx.game_names
+        if names then names:refresh()end
+        self.tab_actions,self.mods_cache,self.changes_key=nil,nil,nil
     end
     function App:use_language(name)
         local ok,why=i18n.use(name)
@@ -887,19 +899,31 @@ function M.install(App)
                 if not on and type(self.hd2.input)=='table'and type(self.hd2.input.block)=='function'then
                     pcall(self.hd2.input.block,false)
                 end
-            end}}
+            end},
+            {click=function()self:set_game_names(not self.presets:setting('game_names',true))end}}
         local labels={L('Restore my last applied values when the game starts'),
             L('Free the mouse from the camera while open (experimental)'),L('Menu sounds on buttons'),
-            L('Keep keys, clicks and the wheel from the game while open (experimental)')}
+            L('Keep keys, clicks and the wheel from the game while open (experimental)'),
+            L('Use the game\'s names (weapons, stratagems, boosters, in the game\'s language)')}
         local values={self.presets:setting('restore_session',true),self.presets:setting('free_cursor',true),
-            self.presets:setting('ui_sounds',true),self.presets:setting('block_game_input',true)}
+            self.presets:setting('ui_sounds',true),self.presets:setting('block_game_input',true),
+            self.presets:setting('game_names',true)}
+        local toggles=App.SETTINGS_TOGGLES
         for i=1,#labels do
             if self.settings_index==i then cv:rect(x-8,y-14,560,28,C.select,1)end
             toggle_row(self,cv,x,y,540,values[i],labels[i],self.settings_toggles[i])
+            if i==5 then
+                -- (only with a Runtime that reads the game's texts; until then the editor's own names)
+                local names=self.ctx.game_names
+                local note
+                if not(names and game_names_module.available(self.hd2))then note=L('needs HD2Runtime 0.31.2')
+                elseif values[i]and not names.ready then note=L('the game\'s texts are not available yet')end
+                if note then cv:text(note,x+552,y,{size=SZ.tiny,colour=C.faint,max=W-x-576})end
+            end
             y=y+34
         end
         -- the interface size
-        if self.settings_index==5 then cv:rect(x-8,y-14,560,28,C.select,1)end
+        if self.settings_index==toggles+1 then cv:rect(x-8,y-14,560,28,C.select,1)end
         cv:text(L('Interface size (text and everything else)'),x,y,{size=SZ.label,colour=C.dim})
         self.btn_scale_down=self.btn_scale_down or{click=function()self:step_ui_scale(-1)end,sound=false}
         self.btn_scale_up=self.btn_scale_up or{click=function()self:step_ui_scale(1)end,sound=false}
@@ -913,7 +937,7 @@ function M.install(App)
         end
         y=y+34
         -- the key that opens and closes the editor
-        if self.settings_index==6 then cv:rect(x-8,y-14,560,28,C.select,1)end
+        if self.settings_index==toggles+2 then cv:rect(x-8,y-14,560,28,C.select,1)end
         cv:text(L('Key to open and close the editor'),x,y,{size=SZ.label,colour=C.dim})
         self.btn_hotkey=self.btn_hotkey or{click=function()
             if self.key_capture then self:end_key_capture()else self:start_key_capture()end
@@ -973,7 +997,7 @@ function M.install(App)
                 self.language_actions[lang.name]=action
             end
             local current=i18n.language()==lang.name
-            if self.settings_index==6+i then cv:rect(x-8,y-2,560,28,C.select,1)
+            if self.settings_index==toggles+2+i then cv:rect(x-8,y-2,560,28,C.select,1)
             elseif self.hover==action then cv:rect(x-8,y-2,560,28,C.hover,1)end
             cv:rect(x,y+6,14,14,current and C.gold or C.line_strong,3)
             cv:text(lang.name,x+26,y+13,{size=SZ.label,colour=current and C.text or C.dim})

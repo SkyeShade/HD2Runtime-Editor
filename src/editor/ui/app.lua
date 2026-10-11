@@ -111,7 +111,7 @@ function App:objects()
     if group=='All'then group=nil end
     local q=self.search and self.search.text~=''and self.search.text:lower()
     if not q and not group then return list end
-    local key=item.id..'\0'..(q or'')..'\0'..(group or'')..'\0'..i18n.language()
+    local key=item.id..'\0'..(q or'')..'\0'..(group or'')..'\0'..util.names_key()
     if self.filter_key==key then return self.filtered end
     local out={}
     for _,object in ipairs(list)do

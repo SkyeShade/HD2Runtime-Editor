@@ -760,7 +760,7 @@ end
 do
     local theme=require('mods/skyeshade/hd2runtime_editor/editor/ui/theme')
     H.app:set_view('settings')
-    H.app.settings_index=5
+    H.app.settings_index=H.app.SETTINGS_TOGGLES+1
     for _=1,6 do step({'RIGHT'})end
     assert(H.app:ui_scale()==1.5,'stepped up to 150%: '..tostring(H.app:ui_scale()))
     step({},nil,'50_scale_settings')
@@ -779,7 +779,7 @@ do
         H.app:set_view(view)
         step({},nil,view=='browse'and'51_scale_browse'or nil)
     end
-    H.app:set_view('settings');H.app.settings_index=5
+    H.app:set_view('settings');H.app.settings_index=H.app.SETTINGS_TOGGLES+1
     for _=1,8 do step({'LEFT'})end
     assert(H.app:ui_scale()==0.9,'stepped down to 90%')
     step({})
@@ -790,7 +790,7 @@ end
 -- Settings: the open key. Enter waits for a key with the current one held off; a key the editor uses is refused; the
 -- new chord is taken once released; a key another mod holds is refused; Esc cancels; Del returns to F8
 do
-    H.app:set_view('settings');H.app.settings_index=6
+    H.app:set_view('settings');H.app.settings_index=H.app.SETTINGS_TOGGLES+2
     step({'ENTER'})
     assert(H.app.key_capture and H_hotkey.held==true,'waiting for a key, the current one held off')
     step({'UP'})
@@ -1331,6 +1331,90 @@ do
             and H.app.pending[s.type1.key]and H.app.pending[s.type2.key],'a preset stages both slots')
         H.app:discard()
     end
+end
+-- the game's own names (HD2Runtime game text API, feature-detected): shown in the game's language, cached per language,
+-- searched with the English names too, never the identity; Settings turns them off; a failing call shows English
+do
+    local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
+    local game_names=require('mods/skyeshade/hd2runtime_editor/editor/game_names')
+    local lang,calls,broken='de',{},false
+    local NAMES={de={['weapon|AR-23 Liberator']='AR-23 Befreier',['stratagem|Eagle 500kg Bomb']='Adler-500-kg-Bombe',
+        ['stratagem|M-1000 Maxigun']='M-1000 Maxikanone'},fr={['weapon|AR-23 Liberator']='AR-23 Libérateur'}}
+    local fake={text={available=function()return true end,language=function()return lang end,
+        name=function(kind,key)
+            calls[#calls+1]=kind..'|'..key
+            if broken then error('game text unavailable')end
+            local name=NAMES[lang]and NAMES[lang][kind..'|'..key]
+            if name then return name end
+            return nil,'no such name'
+        end}}
+    assert(not game_names.available({})and game_names.available(fake),'feature detection')
+    local names=game_names.new(fake,function()return H.presets:setting('game_names',true)end):install()
+    H.app.ctx.game_names=names
+    local liberator=H.catalog:object('pw|AR-23 Liberator')
+    local eagle=H.catalog:object('st|Eagle 500kg Bomb')
+    local maxigun=H.catalog:object('sp|M-1000 Maxigun')
+    assert(util.display_name(liberator)=='AR-23 Befreier'and util.display_name(eagle)=='Adler-500-kg-Bombe','game names')
+    -- a support weapon by its weapon kind first, then as a stratagem
+    assert(util.display_name(maxigun)=='M-1000 Maxikanone','support weapon name through its stratagem')
+    local tried={}
+    for _,c in ipairs(calls)do tried[c]=true end
+    assert(tried['support_weapon|M-1000 Maxigun']and tried['stratagem|M-1000 Maxigun'],'support weapon kinds tried')
+    local before=#calls
+    util.display_name(liberator)
+    assert(#calls==before,'cached')
+    local function finds(word,object)
+        for _,r in ipairs(H.app:search_results(word))do if r.object==object then return r end end
+    end
+    assert(finds('befreier',liberator)and finds('liberator',liberator),'search by the game name and by the English one')
+    assert(finds('befreier',liberator).label=='AR-23 Befreier','the result shows the game name')
+    assert(liberator.key=='pw|AR-23 Liberator'and liberator.name=='AR-23 Liberator','the English name stays the identity')
+    H.app:set_view('browse');H.app:goto_object(liberator)
+    local d=step({},nil,'68_game_names')
+    local shown=false
+    for _,item in ipairs(d.items)do if item.k=='t'and item.s=='AR-23 Befreier'then shown=true end end
+    assert(shown,'the game name is drawn')
+    -- another game language: looked up again when the window opens (refresh), each language cached on its own
+    lang='fr'
+    assert(names:refresh(),'a new game language')
+    assert(util.display_name(liberator)=='AR-23 Libérateur'and util.display_name(eagle)=='Eagle 500kg Bomb',
+        'French names, English where the game has none')
+    lang='de'
+    names:refresh()
+    before=#calls
+    assert(util.display_name(liberator)=='AR-23 Befreier'and#calls==before,'each language cached')
+    -- Settings: off shows the editor's own names at once, and the search follows
+    H.app:set_view('settings')
+    H.app.settings_index=5
+    step({'ENTER'},nil,'69_game_names_off')
+    assert(H.presets:setting('game_names',true)==false and util.display_name(liberator)=='AR-23 Liberator','off')
+    assert(not finds('befreier',liberator),'the search follows the setting')
+    step({'ENTER'})
+    assert(util.display_name(liberator)=='AR-23 Befreier','on again')
+    -- a failing call: the English name
+    broken=true;lang='es'
+    names:refresh()
+    assert(util.display_name(liberator)=='AR-23 Liberator','a failing call shows English')
+    -- the game switching language (UNAVAILABLE): the editor's names until the window opens again, nothing cached
+    broken=false;lang='pl'
+    local unavailable=true
+    local name=fake.text.name
+    fake.text.name=function(kind,key)if unavailable then return nil,'UNAVAILABLE','switching'end return name(kind,key)end
+    names:refresh()
+    assert(util.display_name(eagle)=='Eagle 500kg Bomb'and not names.ready,'not available now')
+    unavailable,lang=false,'de'
+    assert(names:refresh()and util.display_name(eagle)=='Adler-500-kg-Bombe','available again on the next open')
+    fake.text.name=name
+    -- without the API (an older Runtime): the editor's own names, Settings says what it needs
+    local plain=game_names.new({},function()return true end):install()
+    H.app.ctx.game_names=plain
+    assert(not plain.ready and util.display_name(liberator)=='AR-23 Liberator','no API, English')
+    H.app:set_view('settings')
+    d=step({},nil,'70_game_names_unavailable')
+    local note=false
+    for _,item in ipairs(d.items)do if item.k=='t'and item.s=='needs HD2Runtime 0.31.2'then note=true end end
+    assert(note,'Settings says the game names need a newer Runtime')
+    util.game_name,util.names_version,H.app.ctx.game_names=nil,nil,nil
 end
 -- a mod's title shows its version once: not again when the name already ends with it
 local title=H.app.mod_title

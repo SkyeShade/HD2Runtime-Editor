@@ -53,8 +53,9 @@ function M.install(App)
     -- The results for a query: {{kind='object', object, label, sub}}, names that start with the first word first.
     function App:search_results(text)
         local s=state(self)
-        -- (a language switch changes the names shown and matched)
-        local key=tostring(text)..'\0'..i18n.language()
+        -- (a language switch, or the game's names, change the names shown and matched)
+        local names=util.names_key()
+        local key=tostring(text)..'\0'..names
         if s.key==key then return s.results end
         local list=words(text)
         local results,seen={},{}
@@ -64,8 +65,8 @@ function M.install(App)
                 for _,object in ipairs((self.catalog:objects(c.id))or{})do
                     -- the English name and subtitle, and the ones shown (translated): either matches
                     local name,sub=util.display_name(object),util.display_subtitle(object)
-                    if object.search_language~=i18n.language()then
-                        object.search_language=i18n.language()
+                    if object.search_language~=names then
+                        object.search_language=names
                         object.search_text=(object.name..' '..tostring(object.subtitle or'')..' '..name..' '
                             ..tostring(sub or'')):lower()
                     end

@@ -246,6 +246,12 @@ stratagems, enemies ...), subtitles, sections, groups, field labels and value la
 
 The search finds an object by its English name and by its translated one.
 
+**The game's own names.** With an HD2Runtime that reads the game's texts (its game text API, expected in 0.31.2),
+weapons, support weapons, throwables, backpacks, vehicles, boosters and stratagems are shown by the game's own name in
+the game's language (Settings: **Use the game's names**, on by default). They come before a localisation file's
+translation of the name; the search still finds every object by its English name, and presets, exports and keys keep
+the English name. Without that API, or for an object the game has no name for, nothing changes.
+
 `src/editor/strings.lua` lists the interface texts; `py tools/locale_strings.py` regenerates it, and a test keeps it current. `py tools/locale_strings.py --template FILE` writes the complete template offline (needs the game's `lua51.dll` and an HD2Runtime checkout, as the tests do).
 
 ## UI art

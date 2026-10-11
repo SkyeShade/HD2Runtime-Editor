@@ -11,6 +11,7 @@ local session_module=require('mods/skyeshade/hd2runtime_editor/editor/session')
 local app_module=require('mods/skyeshade/hd2runtime_editor/editor/ui/app')
 local sounds_module=require('mods/skyeshade/hd2runtime_editor/editor/sounds')
 local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+local game_names_module=require('mods/skyeshade/hd2runtime_editor/editor/game_names')
 local strings=require('mods/skyeshade/hd2runtime_editor/editor/strings')
 require('mods/skyeshade/hd2runtime_editor/editor/installed')
 require('mods/skyeshade/hd2runtime_editor/editor/json')
@@ -104,6 +105,10 @@ function M.start(hd2,id)
         local ok,why=i18n.use(language)
         if not ok then log('language '..tostring(language)..' unavailable: '..tostring(why))end
     end
+    -- The game's own names of weapons, stratagems, boosters ... in its language (HD2Runtime game text API,
+    -- feature-detected; Settings: "Use the game's names"). Looked up again each time the window opens.
+    local game_names=game_names_module.new(hd2,function()return presets:setting('game_names',true)end):install()
+    if game_names.ready then log('the game\'s own names are shown ('..tostring(game_names.language)..')')end
     local overlay=hd2.ui.overlay({id='editor',visible=false})
     -- Icons: one image handle per generated icon (needs the overlay's d:image, HD2Runtime r50).
     local icons
@@ -166,7 +171,7 @@ function M.start(hd2,id)
     local app=app_module.new({hd2=hd2,catalog=catalog,layer=layer,ledger=ledger,presets=presets,hotkey=hotkey,
         label='HD2Runtime '..tostring(hd2.version_label or hd2.version)..'  ·  Editor '..M.VERSION,
         mouse=function()return overlay:mouse()end,log=log,icons=icons,ui_icons=ui_icons,choices=type(mod.choice)=='function',
-        id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,version=M.VERSION,
+        id=id,sounds=sounds,mod_icons=mod_icons,strings=strings,version=M.VERSION,game_names=game_names,
         minimum=tostring(hd2.version or'0.30.0'),
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
     local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
@@ -197,7 +202,9 @@ function M.start(hd2,id)
             app.edit=nil
         else
             -- (texts cached in the game's language before it changed are built again)
-            if follow_game_language()then app.tab_actions,app.mods_cache,app.changes_key=nil,nil,nil end
+            local changed=follow_game_language()
+            if game_names:refresh()then changed=true end
+            if changed then app.tab_actions,app.mods_cache,app.changes_key=nil,nil,nil end
             overlay:show()
         end
     end

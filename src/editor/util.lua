@@ -206,6 +206,18 @@ function M.value_label(v)return M.value_text(v,true)end
 -- for the game's own names: M.game_name, set when the Runtime offers them), the translation of its English name
 -- (a localisation file), else the English name itself.
 M.game_name=nil
+-- What the shown names depend on, for caches of them (the search): the window's language and, with the game's names
+-- (editor/game_names.lua sets M.names_version), their game language and setting.
+M.names_version=nil
+function M.names_key()
+    i18n=i18n or require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+    local version=0
+    if type(M.names_version)=='function'then
+        local ok,v=pcall(M.names_version)
+        if ok then version=v end
+    end
+    return tostring(i18n.language())..'\0'..tostring(version)
+end
 function M.display_name(object)
     if type(object)~='table'then return tr(tostring(object or''))end
     local name=tostring(object.name or'')
