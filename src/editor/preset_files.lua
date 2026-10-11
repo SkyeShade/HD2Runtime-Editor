@@ -8,6 +8,7 @@
 -- references as {ref, ...}, editor/catalog.lua encode), label only for people reading the file.
 local json=require('mods/skyeshade/hd2runtime_editor/editor/json')
 local export=require('mods/skyeshade/hd2runtime_editor/editor/export')
+local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local M={}
 
 M.FORMAT='hd2r-editor-preset'
@@ -66,7 +67,7 @@ function M.decode(text,fallback_name)
             values[f.key]=f.value
         else skipped=skipped+1 end
     end
-    local name=type(data.name)=='string'and data.name:gsub('[%c]',''):sub(1,40)or''
+    local name=type(data.name)=='string'and util.utf8_cut((data.name:gsub('[%c]','')),40)or''
     if name==''then name=fallback_name or'Shared preset'end
     return {name=name,values=values,editor=data.editor,runtime=data.runtime,skipped=skipped}
 end

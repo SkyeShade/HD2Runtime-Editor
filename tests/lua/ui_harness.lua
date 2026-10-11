@@ -114,7 +114,8 @@ local function frame_builder()
     function d:text(s,x,y,o)
         o=o or{}
         if type(s)~='string'or s==''then return end
-        if#s>160 or s:find('[%z\1-\31\127]')then return refuse('text: '..s:sub(1,40))end
+        -- (the Runtime's own limit: 512 bytes on 0.31.0+, 160 before)
+        if#s>(ui_fonts.MAX_TEXT_BYTES or 160)or s:find('[%z\1-\31\127]')then return refuse('text: '..s:sub(1,40))end
         local size=o.size or 18
         if not(finite(x)and finite(y)and finite(size)and size>=4 and size<=256)then return refuse('text pos '..s)end
         local z=o.z or 0

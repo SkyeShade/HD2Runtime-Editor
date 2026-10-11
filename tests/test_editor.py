@@ -77,6 +77,36 @@ class EditorTests(unittest.TestCase):
             assert(i18n.L('APPLY')=='ANWENDEN'and i18n.L('%d fields'):format(3)=='3 Felder'and i18n.L('Other')=='Other')
             i18n.set({},'English')
             assert(i18n.L('APPLY')=='APPLY')
+            -- a text with " = " in it (the trait picker's help) and a translation that keeps one; a tab separator
+            local help='Enter / click toggle   numbers = order   Backspace remove last   Tab save'
+            local m2,_,count,code=i18n.parse('@code cn\n'..help..' = 回车 切换   数字 = 顺序\nAPPLY\t=\t应用\nx = y = z\n')
+            assert(m2[help]=='回车 切换   数字 = 顺序'and m2.APPLY=='应用'and count==3 and code=='cn','ambiguous lines')
+            assert(m2.x=='y = z'and m2['x = y']=='z','an unknown text keeps every split')
+            -- a translation whose format does not fit its arguments falls back to the English template
+            i18n.set({['%d fields']='%s Felder',['Saved preset %s (%d fields)']='%d %d'},'Deutsch')
+            assert(i18n.Lf('%d fields',3)=='3 Felder','format')
+            assert(i18n.Lf('Saved preset %s (%d fields)','x',2)=='Saved preset x (2 fields)','a broken template: English')
+            -- a composite section, part by part
+            i18n.set({Explosion='爆炸',Status='状态'},'中文')
+            assert(i18n.L('Explosion · Primary impact · Status')=='爆炸 · Primary impact · 状态','by parts')
+            i18n.set({},'English')
+            assert(i18n.L('Explosion · Status')=='Explosion · Status')
+            -- a file for the game language: by @code, file name or language name
+            local langs={{name='English'},{name='Deutsch',file='de.txt'},{name='简体中文',file='mine.txt'},
+                {name='X',file='x.txt',code='jp'}}
+            assert(i18n.match_game_language('de',langs)=='Deutsch'and i18n.match_game_language('cn',langs)=='简体中文'
+                and i18n.match_game_language('jp',langs)=='X'and i18n.match_game_language('ru',langs)==nil,'game language')
+            -- UTF-8: cuts and Backspace never split a character
+            local u=require('mods/skyeshade/hd2runtime_editor/editor/util')
+            assert(u.utf8_cut('ab解放者',4)=='ab'and u.utf8_cut('ab解放者',5)=='ab解'and u.drop_last('a解')=='a'
+                and u.drop_last('é')==''and u.drop_last('')=='','utf8 cuts')
+            assert(u.plain(string.rep('解',200)):len()<=u.text_limit()and u.plain(string.rep('解',200)):len()%3==0,'plain')
+            assert(u.estimate_width('解解',10)==20 and u.estimate_width('ab',10)==11,'width estimate')
+            assert(u.value_text(true)=='On'and u.value_text('none')=='None','English values')
+            i18n.set({On='开',None='无'},'中文')
+            assert(u.value_label(true)=='开'and u.value_label('none')=='无'and u.value_text(true)=='On','translated values')
+            assert(u.display_name({name='None'})=='无'and u.display_subtitle({name='x'})==nil,'display name')
+            i18n.set({},'English')
             return 'ok'
         """)
         self.assertEqual(result, 'ok')

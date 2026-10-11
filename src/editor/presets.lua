@@ -4,6 +4,7 @@
 -- %LOCALAPPDATA%\HD2Runtime\mod_data). Values are stored by row key ('pw|AR-23 Liberator|weapon.fire_rate'), never
 -- by address, so a preset survives game and Runtime updates; a key the catalogue no longer has is reported, not
 -- guessed.
+local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local M={}
 local FORMAT=1
 local MAX_PRESETS=64
@@ -40,7 +41,7 @@ local function map_of(list)
 end
 local function clean_name(name)
     name=tostring(name or''):gsub('[%z\1-\31\127]',''):gsub('^%s+',''):gsub('%s+$','')
-    if#name>MAX_NAME then name=name:sub(1,MAX_NAME)end
+    if#name>MAX_NAME then name=util.utf8_cut(name,MAX_NAME)end     -- (whole characters: a name can be Chinese)
     return name
 end
 M.clean_name=clean_name

@@ -4,39 +4,105 @@
 -- languages are plain UTF-8 text files in a folder the editor reads at startup and on Reload:
 --     %LOCALAPPDATA%\HD2REditor\localization\<anything>.txt
 -- One line per text, the English original, then " = ", then the translation; # starts a comment. A line
--- "@language Deutsch" names the language (else the file name does). Formats such as "%d fields" keep their %d / %s.
--- Settings → Write template puts template.txt (every text of the editor's interface) in that folder to translate.
--- Field names come from the Runtime's catalogues; add lines for them too if you like (L() looks every one up).
+-- "@language Deutsch" names the language (else the file name does); an optional "@code cn" names the game language it
+-- is for (else the file name or language name tells, M.GAME_LANGUAGES). Formats such as "%d fields" keep their %d /
+-- %s (a translation that breaks them shows the English text, M.Lf). With no language picked in Settings, the file for
+-- the game's language is used when there is one.
+-- Settings → Write template puts template.txt in that folder to translate: every text of the editor's interface,
+-- then every name, section and field the catalogue shows (weapons, stratagems, enemies ...). L() looks every one up.
 local M={}
 
 local current={}          -- English -> translation
 local language='English'
+local parts_cache={}      -- composite labels ('Damage · Flak') translated part by part, per language
 
+-- A composite label the catalogue builds from parts ('Explosion · Primary impact · Status'): the whole text when the
+-- file translates it, else each part that it translates (the rest stays English).
+local SEPARATOR=' · '
+local function by_parts(text)
+    local cached=parts_cache[text]
+    if cached then return cached end
+    local out,changed,start={},false,1
+    while true do
+        local a,b=text:find(SEPARATOR,start,true)
+        local part=text:sub(start,(a or 0)-1)
+        local t=current[part]
+        if t then changed=true;part=t end
+        out[#out+1]=part
+        if not a then break end
+        start=b+1
+    end
+    local result=changed and table.concat(out,SEPARATOR)or text
+    parts_cache[text]=result
+    return result
+end
 function M.L(text)
     if text==nil then return''end
     local t=current[text]
     if t then return t end
+    if type(text)=='string'and next(current)~=nil and text:find(SEPARATOR,1,true)then return by_parts(text)end
     return text
+end
+-- L(template):format(...), safe: a translation whose format specifiers do not fit the arguments (a missing %s, a %d
+-- given text) shows the English template instead of failing, like HD2Runtime's own i18n.translate.
+function M.Lf(template,...)
+    local ok,text=pcall(string.format,M.L(template),...)
+    if ok then return text end
+    local okx,english=pcall(string.format,template,...)
+    if okx then return english end
+    return tostring(template)
 end
 function M.language()return language end
 
--- Parse a localisation file: returns map, language name (or nil).
+-- Parse a localisation file: returns map, language name (or nil), the number of translated lines and the language
+-- code the file names (@code, or nil). A line is "English = translation" (a space or tab either side of the "=").
+-- When a line has " = " more than once (an English text such as "numbers = order", or a translation that keeps one),
+-- the split whose English part is an interface text the editor knows wins; with none known, every split is kept for
+-- lookups (never over a line with one " = " only).
+local known_texts
+local function known()
+    if known_texts==nil then
+        known_texts={}
+        local ok,list=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/strings')
+        for _,s in ipairs(ok and type(list)=='table'and list or{})do known_texts[s]=true end
+    end
+    return known_texts
+end
 function M.parse(text)
-    local map,name={},nil
+    local map,name,code,count={},nil,nil,0
+    local ambiguous={}
     for line in(tostring(text or'')..'\n'):gmatch('([^\n]*)\n')do
         line=line:gsub('\r$','')
         if line:sub(1,3)=='\239\187\191'then line=line:sub(4)end     -- UTF-8 byte order mark
         local lang=line:match('^%s*@language%s+(.-)%s*$')
+        local lcode=line:match('^%s*@code%s+(.-)%s*$')
         if lang and lang~=''then name=lang
+        elseif lcode and lcode~=''then code=lcode:lower()
         elseif not line:match('^%s*#')and not line:match('^%s*$')then
-            local original,translated=line:match('^(.-)%s=%s(.*)$')
-            if original and original~=''and translated and translated~=''then
-                -- \n in a file stands for nothing special: the editor's texts are single lines
-                map[original]=translated
+            -- every " = " of the line: the possible splits
+            local splits,start={},1
+            while true do
+                local a,b=line:find('%s=%s',start)
+                if not a then break end
+                local original,translated=line:sub(1,a-1),line:sub(b+1)
+                if original~=''and translated~=''and not translated:match('^%s*$')then
+                    splits[#splits+1]={original,translated}
+                end
+                start=a+1
             end
+            if#splits==1 then map[splits[1][1]]=splits[1][2];count=count+1
+            elseif#splits>1 then ambiguous[#ambiguous+1]=splits;count=count+1 end
         end
     end
-    return map,name
+    for _,splits in ipairs(ambiguous)do
+        local chosen
+        for _,s in ipairs(splits)do if known()[s[1]]then chosen=s;break end end
+        if chosen then map[chosen[1]]=chosen[2]
+        else
+            for _,s in ipairs(splits)do if map[s[1]]==nil then map[s[1]]=s[2]end end
+        end
+    end
+    return map,name,count,code
 end
 
 local function env(name)local ok,v=pcall(os.getenv,name);return ok and v or nil end
@@ -153,32 +219,74 @@ function M.languages()
     for _,file in ipairs(list_files(folder))do
         local text=read(folder..'\\'..file)
         if text then
-            local map,name=M.parse(text)
-            local n=0
-            for _ in pairs(map)do n=n+1 end
+            local map,name,n,code=M.parse(text)
             local missing,sample=M.undrawable(map)
-            out[#out+1]={name=name or file:gsub('%.txt$',''),file=file,count=n,undrawable=missing,sample=sample}
+            out[#out+1]={name=name or(file:gsub('%.txt$','')),file=file,count=n,undrawable=missing,sample=sample,
+                code=code}
         end
     end
     return out
 end
+local function switch(map,name)current,language,parts_cache=map or{},name,{}end
 -- Switch to a language by name ('English' or a file's language); false and why when it is not found.
-function M.use(name)
-    if name==nil or name=='English'then current,language={},'English';return true end
-    for _,l in ipairs(M.languages())do
+function M.use(name,languages)
+    if name==nil or name=='English'then switch({},'English');return true end
+    for _,l in ipairs(languages or M.languages())do
         if l.name==name and l.file then
             local text=read(M.folder()..'\\'..l.file)
-            if text then current,language=(M.parse(text)),l.name;return true end
+            if text then switch((M.parse(text)),l.name);return true end
         end
     end
-    current,language={},'English'
+    switch({},'English')
     return false,'no localisation file for '..tostring(name)
 end
 -- For tests: use a map directly.
-function M.set(map,name)current,language=map or{},name or'Custom'end
+function M.set(map,name)switch(map,name or'Custom')end
 
--- Write template.txt (every interface text, untranslated) into the folder. Returns the path, or nil and why.
-function M.write_template(strings)
+-- The names a localisation file for a game language can have (HD2Runtime's language codes, hd2.ui.language): the
+-- code, the usual ISO codes, the language's English name and its own. A file matches by its "@code" line, its file
+-- name or its "@language" name (case does not matter).
+M.GAME_LANGUAGES={
+    us={'us','en','en-us','english','english (us)'},gb={'gb','en-gb','english (uk)'},
+    de={'de','de-de','german','deutsch'},fr={'fr','fr-fr','french','français'},
+    es={'es','es-es','spanish','español','español (españa)'},
+    ms={'ms','es-419','es-mx','español (latinoamérica)'},it={'it','it-it','italian','italiano'},
+    pl={'pl','pl-pl','polish','polski'},bp={'bp','pt-br','português (brasil)'},
+    pt={'pt','pt-pt','portuguese','português','português (portugal)'},ru={'ru','ru-ru','russian','русский'},
+    jp={'jp','ja','ja-jp','japanese','日本語'},ko={'ko','kr','ko-kr','korean','한국어'},
+    cn={'cn','zh','zh-cn','zh-hans','zh_cn','chinese','simplified chinese','简体中文','中文','简中'},
+    tc={'tc','zh-tw','zh-hk','zh-hant','zh_tw','traditional chinese','繁體中文','繁体中文','繁中'}}
+-- The language (a file's language name, as M.use takes it) for a game language code, or nil.
+function M.match_game_language(code,languages)
+    local names=M.GAME_LANGUAGES[tostring(code or''):lower()]
+    if not names then return nil end
+    local wanted={}
+    for _,n in ipairs(names)do wanted[n]=true end
+    for _,l in ipairs(languages or M.languages())do
+        if l.file then
+            local stem=l.file:gsub('%.txt$',''):lower()
+            if(l.code and wanted[l.code])or wanted[stem]or wanted[tostring(l.name):lower()]then return l.name end
+        end
+    end
+    return nil
+end
+-- No language picked in Settings: the language the game (or HD2Runtime's F10 Language setting) shows, when a
+-- localisation file for it is there (hd2.ui.language, HD2Runtime 0.31.1). Returns the language now used, or nil.
+function M.use_game_language(hd2)
+    local ui=type(hd2)=='table'and type(hd2.ui)=='table'and hd2.ui
+    if not(ui and type(ui.language)=='function')then return nil end
+    local ok,code=pcall(ui.language)
+    if not ok or type(code)~='string'then return nil end
+    local languages=M.languages()
+    local name=M.match_game_language(code,languages)
+    if name and M.use(name,languages)then return name end
+    return nil
+end
+
+-- Write template.txt (every interface text, untranslated) into the folder, then `extra` (the names, sections and field
+-- labels the window shows from the catalogue: editor/catalog.lua Catalog:texts) under their own heading. Returns the
+-- path, or nil and why.
+function M.write_template(strings,extra,extra_heading)
     local folder=M.folder()
     if not folder then return nil,'%LOCALAPPDATA% is not set'end
     pcall(function()
@@ -197,7 +305,17 @@ function M.write_template(strings)
     f:write('# HD2R Editor localisation template. Copy this file (any name ending in .txt), set the language\n')
     f:write('# name below and write each translation after " = ". Lines without a translation are ignored.\n')
     f:write('@language My language\n\n')
-    for _,s in ipairs(strings or{})do f:write(s,' = \n')end
+    local seen={}
+    for _,s in ipairs(strings or{})do seen[s]=true;f:write(s,' = \n')end
+    local more={}
+    for _,s in ipairs(extra or{})do
+        if type(s)=='string'and s~=''and not seen[s]and not s:find('[\r\n]')then seen[s]=true;more[#more+1]=s end
+    end
+    if#more>0 then
+        f:write('\n# ',extra_heading or'Names, sections and fields',' (',#more,' texts). A section such as\n')
+        f:write('# "Explosion · Primary impact" is also translated part by part: "Explosion", "Primary impact".\n')
+        for _,s in ipairs(more)do f:write(s,' = \n')end
+    end
     f:close()
     return path
 end

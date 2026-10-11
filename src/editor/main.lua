@@ -85,9 +85,13 @@ function M.start(hd2,id)
     end
     local presets=presets_module.new(store)
     local hotkey=presets:setting('hotkey',M.HOTKEY)
-    -- the language chosen in Settings (a file in the localisation folder), English otherwise
-    local language=presets:setting('language','English')
-    if language~='English'then
+    -- the language chosen in Settings (a file in the localisation folder); none chosen yet: the game's language when a
+    -- localisation file for it is there (hd2.ui.language, HD2Runtime 0.31.1), English otherwise
+    local language=presets:setting('language',nil)
+    if language==nil then
+        local auto=i18n.use_game_language(hd2)
+        if auto then log('language '..tostring(auto)..' (the game language; pick another in Settings)')end
+    elseif language~='English'then
         local ok,why=i18n.use(language)
         if not ok then log('language '..tostring(language)..' unavailable: '..tostring(why))end
     end

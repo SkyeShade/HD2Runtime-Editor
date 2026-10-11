@@ -58,12 +58,51 @@ function M.format(v,places)
     return s
 end
 
--- Plain printable text of at most `limit` bytes (the overlay refuses control characters and long lines).
+-- The longest start of text of at most `limit` bytes that ends on a whole UTF-8 character (a Chinese character is
+-- three bytes: a byte cut would leave part of one, which the overlay draws as '?').
+function M.utf8_cut(text,limit)
+    text=tostring(text==nil and''or text)
+    if#text<=limit then return text end
+    local n=limit
+    -- step back over continuation bytes to the start of the character the limit cuts into
+    while n>0 and(text:byte(n+1)or 0)>=0x80 and(text:byte(n+1)or 0)<0xC0 do n=n-1 end
+    return text:sub(1,n)
+end
+-- Text without its last character (Backspace): a whole UTF-8 character, never one byte of it.
+function M.drop_last(text)
+    text=tostring(text==nil and''or text)
+    local n=#text
+    if n==0 then return text end
+    while n>1 and text:byte(n)>=0x80 and text:byte(n)<0xC0 do n=n-1 end
+    return text:sub(1,n-1)
+end
+-- The most bytes one overlay text may have: 512 on HD2Runtime 0.31.0+ (runtime/ui_fonts.lua MAX_TEXT_BYTES), 160 on
+-- an older one (its overlay refuses longer text).
+local text_limit
+function M.text_limit()
+    if text_limit==nil then
+        local ok,fonts=pcall(require,'hd2runtime/runtime/ui_fonts')
+        local n=ok and type(fonts)=='table'and tonumber(fonts.MAX_TEXT_BYTES)
+        text_limit=n and n>=160 and n or 160
+    end
+    return text_limit
+end
+-- Plain printable text of at most `limit` bytes (default: the overlay's own limit), cut on a whole character (the
+-- overlay refuses control characters and long lines).
 function M.plain(text,limit)
     text=tostring(text==nil and''or text):gsub('[%z\1-\31\127]',' ')
-    limit=limit or 160
-    if#text>limit then text=text:sub(1,limit)end
+    limit=limit or M.text_limit()
+    if#text>limit then text=M.utf8_cut(text,limit)end
     return text
+end
+-- A width estimate (in the units of `size`) for text the overlay cannot measure: a wide character (Hangul, CJK, kana,
+-- full-width forms: three- and four-byte characters from U+1100 on) takes about one em, any other about 0.55.
+function M.estimate_width(text,size)
+    local w=0
+    for ch in tostring(text or''):gmatch('[%z\1-\127\194-\244][\128-\191]*')do
+        w=w+(ch:byte(1)>=0xE1 and 1 or 0.55)
+    end
+    return w*size
 end
 
 -- 'damage.ap_direct' -> 'AP direct'; 'fire_rate' -> 'Fire rate'.
@@ -117,15 +156,24 @@ function M.code_text(code)
     for i,d in ipairs(code)do parts[i]=ARROWS[d]or tostring(d)end
     return table.concat(parts,' ')
 end
--- Any field value as text: numbers, On/Off, Unlimited/None, names, codes and reference handles.
-function M.value_text(v)
+-- The translation of an interface text (editor/i18n.lua L), loaded on first use.
+local i18n
+local function tr(text)
+    i18n=i18n or require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+    return i18n.L(text)
+end
+local function same_text(text)return text end
+-- Any field value as text: numbers, On/Off, Unlimited/None, names, codes and reference handles. English (logs and
+-- messages to mods), or in the player's language with `localised` (what the window shows: M.value_label).
+function M.value_text(v,localised)
+    local T=localised and tr or same_text
     local t=type(v)
     if t=='number'then return M.format(v)end
-    if t=='boolean'then return v and'On'or'Off'end
+    if t=='boolean'then return v and T('On')or T('Off')end
     if t=='string'then
-        if v=='unlimited'then return 'Unlimited'end
-        if v=='none'then return 'None'end
-        return M.humanize(v)
+        if v=='unlimited'then return T('Unlimited')end
+        if v=='none'then return T('None')end
+        return T(M.humanize(v))
     end
     if t~='table'then return tostring(v)end
     if getmetatable(v)==nil then
@@ -135,21 +183,43 @@ function M.value_text(v)
             for i,x in ipairs(v)do parts[i]=x==0 and'-'or M.format(x)end
             return table.concat(parts,' / ')
         end
-        if rawget(v,'is_null')or rawget(v,'path')=='no_explosion'then return 'None'end
+        if rawget(v,'is_null')or rawget(v,'path')=='no_explosion'then return T('None')end
         local parts={}
-        for i,x in ipairs(v)do parts[i]=M.value_text(x)end
+        for i,x in ipairs(v)do parts[i]=M.value_text(x,localised)end
         return table.concat(parts,', ')
     end
-    if rawget(v,'is_null')or rawget(v,'none')or rawget(v,'path')=='no_explosion'then return 'None'end
+    if rawget(v,'is_null')or rawget(v,'none')or rawget(v,'path')=='no_explosion'then return T('None')end
     local output=rawget(v,'output')
-    if type(output)=='string'then return(output:match('([^/]+)$')or output):gsub('%-',' ')end
-    if rawget(v,'resource')=='pickup'then return tostring(rawget(v,'name')or'pickup')end
+    if type(output)=='string'then return((output:match('([^/]+)$')or output):gsub('%-',' '))end
+    if rawget(v,'resource')=='pickup'then return T(tostring(rawget(v,'name')or'pickup'))end
     local weapon,attack,phase=rawget(v,'weapon'),rawget(v,'attack'),rawget(v,'phase')
     if weapon then
-        return tostring(weapon)..(attack and attack~='primary'and(' · '..M.humanize(attack))or'')
-            ..(phase and(' · '..M.humanize(phase))or'')
+        return T(tostring(weapon))..(attack and attack~='primary'and(' · '..T(M.humanize(attack)))or'')
+            ..(phase and(' · '..T(M.humanize(phase)))or'')
     end
-    return 'reference'
+    return T('reference')
+end
+-- A field value as the window shows it, in the player's language.
+function M.value_label(v)return M.value_text(v,true)end
+
+-- An object's name as the window shows it. One place decides, in this order: the object's own localised name (a hook
+-- for the game's own names: M.game_name, set when the Runtime offers them), the translation of its English name
+-- (a localisation file), else the English name itself.
+M.game_name=nil
+function M.display_name(object)
+    if type(object)~='table'then return tr(tostring(object or''))end
+    local name=tostring(object.name or'')
+    if type(M.game_name)=='function'then
+        local ok,game=pcall(M.game_name,object)
+        if ok and type(game)=='string'and game~=''then return game end
+    end
+    return tr(name)
+end
+-- An object's subtitle as the window shows it (translated), or nil.
+function M.display_subtitle(object)
+    local sub=type(object)=='table'and object.subtitle
+    if sub==nil or sub==''then return nil end
+    return tr(tostring(sub))
 end
 
 function M.copy(t)

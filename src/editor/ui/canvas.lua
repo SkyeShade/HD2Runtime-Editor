@@ -42,7 +42,7 @@ function Canvas:measure(text,size,font)
     local w=self.widths[key]
     if w then return w end
     local ok,value=pcall(self.d.text_width,self.d,text,size*self.s,font)
-    w=ok and type(value)=='number'and value/self.s or#text*size*0.55
+    w=ok and type(value)=='number'and value/self.s or util.estimate_width(text,size)
     if self.width_count>CACHE_LIMIT then self.widths,self.width_count={},0 end
     self.widths[key]=w
     self.width_count=self.width_count+1
@@ -50,7 +50,7 @@ function Canvas:measure(text,size,font)
 end
 -- The longest prefix of text that fits in `max` units, with '...' when cut.
 function Canvas:fit(text,max,size,font)
-    text=util.plain(text,160)
+    text=util.plain(text)
     if max<=0 then return ''end
     local key=(font or'body')..'\0'..size..'\0'..max..'\0'..text
     local cached=self.fits[key]
@@ -76,7 +76,7 @@ function Canvas:text(text,x,cy,opts)
     opts=opts or{}
     local size=opts.size or theme.size.body
     text=tostring(text==nil and''or text)
-    if opts.max then text=self:fit(text,opts.max,size,opts.font)else text=util.plain(text,160)end
+    if opts.max then text=self:fit(text,opts.max,size,opts.font)else text=util.plain(text)end
     if text==''then return 0 end
     local s=self.s
     local y=cy-size*theme.CAP_OFFSET
