@@ -115,6 +115,7 @@ function M.start(hd2,id)
     local overlay=hd2.ui.overlay({id='editor',visible=false})
     local icons,count=require('mods/skyeshade/hd2runtime_editor/editor/icons').load(hd2,game_icons)
     log(count..' game icons available')
+    local icon_assets=require('mods/skyeshade/hd2runtime_editor/editor/icons').warm(hd2,icons,log)
     -- The editor's own mask icons (images/ui_*.png: the mod marker and the category glyphs).
     local ui_icons
     if type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
@@ -169,7 +170,8 @@ function M.start(hd2,id)
         id=id,sounds=sounds,mod_icons=mod_icons,preset_icons=preset_icons,strings=strings,version=M.VERSION,game_names=game_names,
         minimum=tostring(hd2.version or'0.30.0'),
         set_free_cursor=type(overlay.free_cursor)=='function'and set_free_cursor or nil})
-    local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay}
+    local state={status='ready',app=app,layer=layer,ledger=ledger,catalog=catalog,presets=presets,overlay=overlay,
+        icon_assets=icon_assets}
 
     -- Drawing: a failing frame is logged once per message and replaced by a one-line notice.
     local last_error

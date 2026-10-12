@@ -24,16 +24,34 @@ for key,label in pairs({spawner='Factory Strider',illuminate_dropship='Warp Ship
     cy_stratagem_blocker='Stratagem Jammer',il_obj_asset_weather_device_core='Exospire Core',
     unnamed_entity_0034='MG Raider',boomer_nurser='Nursing Spewer'})do
     local object=assert(H.catalog:object('en|'..key),key)
-    assert(object.name==label,object.name)
+    assert(object.name==label or object.name:sub(1,#label+3)==label..' - ',object.name)
     assert(object.search_terms:find(key,1,true),'canonical ID search lost')
 end
 local one=assert(H.catalog:object('en|warrior_tier_1'))
 local two=assert(H.catalog:object('en|warrior_tier_2'))
-assert(one.name=='Warrior'and two.name=='Warrior'and one.subtitle~=two.subtitle,'variants collapsed')
+assert(one.name=='Warrior - Warrior Tier 1'and two.name=='Warrior - Warrior Tier 2','variants collapsed')
+assert(H.catalog:object('en|cha_soldier.cha_soldier_jumppack').name=='Devastator - Soldier Jumppack')
 assert(H.app:draw_icon(rifle,10,10,48));local draw=seen[#seen]
 assert(draw.w==48 and draw.h<draw.w and draw.opts.colours.g[4]==0,'aspect or mask lost')
 assert(H.app:draw_icon({key='en|jammer',iconKind='objective',iconName='cy_destroy_stratagem_blocker'},10,10,48))
 assert(seen[#seen].opts.colours==nil,'objective alpha art must use the image path')
+assert(seen[#seen].opts.colour[3]>seen[#seen].opts.colour[1],'objectives must be blue')
+for faction,channel in pairs({automatons=1,terminids=1,illuminate=3,super_earth=3})do
+    assert(H.app:draw_icon({key='en|colour',iconKind='faction',iconName=faction},10,10,48))
+    local opts=seen[#seen].opts
+    local tint=opts.colours and opts.colours.r or opts.colour
+    assert(tint and tint[channel]>=240,'faction tint missing: '..faction)
+end
+local warm
+I.warm({asset_dependency=H.hd2.asset_dependency,require_assets=function(request)
+    warm=request;return {status='waiting_for_assets'}end},icons)
+assert(warm and#warm.targets==2,'preload only the two UI atlas packages')
+local packages={}
+for _,handle in ipairs(warm.targets)do packages[H.hd2.asset_dependency(handle).package]=true end
+assert(packages.atlas_mission and packages.atlas_shared)
+local called=false
+I.warm({asset_dependency=function()return{known=false}end,require_assets=function()called=true end},icons)
+assert(not called,'older Runtime without icon asset dependencies')
 local kind,name=I.entity('cy_stratagem_blocker',{kind='structure',faction='automatons'})
 assert(kind=='objective'and name=='cy_destroy_stratagem_blocker')
 kind,name=I.entity('bug_spawner_shrieker',{kind='structure',faction='terminids'})

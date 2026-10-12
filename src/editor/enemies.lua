@@ -16,7 +16,7 @@ local function entity_name(name,W)
     local e=name and W.entry(name)
     if not e then return title(name)end
     local label=e.displayName or e.wikiName or title(name)
-    return label..(e.variantLabel and(' ('..e.variantLabel..')')or'')
+    return e.fullDisplayName or(label..(e.variantLabel and(' - '..e.variantLabel)or''))
 end
 local function section(id)return TITLES[tostring(id):match('^([^%.]+)')]or title(tostring(id):match('^([^%.]+)'))end
 local function sorted(list)
@@ -111,8 +111,8 @@ function M.entities(cat,H,filter)
         for _,component in ipairs(components)do tags[#tags+1]=component:gsub('ComponentData$','')end
         local iconKind,iconName,iconFaction=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(key,e)
         local subtitle=title(e.faction or e.kind)
-        if e.variantLabel then subtitle=subtitle..' / '..e.variantLabel end
-        list[#list+1]={key='en|'..key,name=e.displayName or title(label),subtitle=subtitle,
+        local full=e.fullDisplayName or(e.displayName and(e.displayName..(e.variantLabel and(' - '..e.variantLabel)or'')))
+        list[#list+1]={key='en|'..key,name=full or title(label),subtitle=subtitle,
             iconKind=iconKind,iconName=iconName,iconFaction=iconFaction,
             search_terms=key..' '..(e.className or'')..' '..(e.gameName or'')..' '..table.concat(tags,' '),
             detail=table.concat(tags,', ')..'. Authored type values; existing instances may retain private copies.',
@@ -167,8 +167,8 @@ function M.director(cat,H,kind)
             for _,candidate in ipairs(g.candidateNames or{})do search[#search+1]=candidate end
         end
         if kind=='difficulty'then name=string.format('Difficulty %02d',tonumber(key));sub='Mission budgets and cooldown'
-        elseif kind=='roster'then name=m.displayName or title(m.path and m.path:match('([^/]+)$')or key)
-            sub=(m.variantLabel and(m.variantLabel..' / ')or'')..title(m.roster)..' · Row '..m.row
+        elseif kind=='roster'then name=m.fullDisplayName or m.displayName or title(m.path and m.path:match('([^/]+)$')or key)
+            sub=title(m.roster)..' · Row '..m.row
         elseif kind=='composition'then name=title(m.faction)..' · Family '..m.family..' · Row '..m.row;sub='Spawn composition'
         else name=key;sub='Shared demolition threshold'end
         list[#list+1]={key='ed|'..kind..'/'..key,name=name,subtitle=sub,detail=d.lifecycle,

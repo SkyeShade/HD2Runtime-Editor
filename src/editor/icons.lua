@@ -2,6 +2,9 @@
 local M={}
 local KINDS={stratagem='stratagems',booster='boosters',weapon='weapons',throwable='throwables',
     faction='factions',objective='objectives'}
+local FACTION_COLOURS={automatons={255,80,80,255},terminids={255,201,45,255},
+    illuminate={183,116,255,255},super_earth={95,195,245,255}}
+local OBJECTIVE_COLOUR={95,195,245,255}
 function M.load(hd2,generated)
     local resources=hd2.resources
     if type(resources)~='table'then return nil,0 end
@@ -27,6 +30,7 @@ function M.load(hd2,generated)
                         local good,d=pcall(handle.describe,handle);if good then info=d end
                     end
                     icons[key][name]={handle=handle,game=true,atlas=kind~='stratagem'and kind~='booster',
+                        tint=kind=='faction'and FACTION_COLOURS[name]or kind=='objective'and OBJECTIVE_COLOUR or nil,
                         monochrome=info.mode=='mask',
                         aspect=info.width and info.height and info.width/info.height or 1}
                     count=count+1
@@ -35,6 +39,24 @@ function M.load(hd2,generated)
         end
     end
     return icons,count
+end
+-- Atlas-only warmup: one representative handle per proven package, normally two UI packages.
+-- Older Runtime versions without typed icon dependencies keep their normal resident-only behavior.
+function M.warm(hd2,icons,log)
+    if not icons or type(hd2.require_assets)~='function'or type(hd2.asset_dependency)~='function'then return end
+    local targets,seen={},{}
+    for _,key in ipairs({'weapons','throwables','factions','objectives'})do
+        for _,entry in pairs(icons[key]or{})do if entry.game then
+            local ok,info=pcall(hd2.asset_dependency,entry.handle)
+            if ok and type(info)=='table'and info.known and info.autoLoadSupported and info.package and not seen[info.package]then
+                seen[info.package]=true;targets[#targets+1]=entry.handle
+            end
+        end end
+    end
+    if#targets==0 then return end
+    local ok,watch=pcall(hd2.require_assets,{id='editor-hud-atlases',targets=targets})
+    if log then log(ok and('HUD atlas preload requested ('..#targets..' packages)')or('HUD atlas preload failed: '..tostring(watch)))end
+    return ok and watch or nil
 end
 local STRATAGEM={st=true,sp=true,sb=true,ve=true,rs=true,ex=true}
 function M.entry(icons,object)
