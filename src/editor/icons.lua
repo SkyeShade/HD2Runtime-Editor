@@ -42,7 +42,7 @@ function M.entry(icons,object)
     if object.iconKind then
         local entry=(icons[KINDS[object.iconKind]]or{})[object.iconName]
         if entry then return entry end
-        if object.iconKind=='objective'then return(icons.objectives or{}).objective end
+        if object.iconKind=='objective'then return(icons.factions or{})[object.iconFaction] end
     end
     local family=tostring(object.key):match('^(%a+)|')
     if family=='pw'or family=='sp'or family=='sw'then
@@ -55,6 +55,11 @@ end
 local OBJECTIVES={
     cy_stratagem_blocker='cy_destroy_stratagem_blocker',spawner_jammer='cy_destroy_stratagem_blocker',
     cy_detector_tower='cy_destroy_detector_tower',
+    cyborg_gunship_spawner='cy_destroy_gunship',
+    il_scrambler_battery='il_disable_stratagem_scrambler',
+    il_spawner_ship='il_destroy_spawners',il_spawner_portal='il_destroy_portals',
+    il_weather_device_tower='il_destroy_weather_device',il_weather_device_battery='il_destroy_weather_device',
+    cyborg_cooling_structure='cy_destroy_cooling_structure',
     gen_radar_terminal='gen_radar_station',radar_station='gen_radar_station',radar_tower='gen_radar_station',
     bug_fog_generator='bug_foggenerator',bug_fog_generator_large='bug_foggenerator',
     bug_fog_generator_tcs='bug_foggenerator',spore_lung='bug_hive_world_destroy_spore_lung',
@@ -78,10 +83,14 @@ local OBJECTIVES={
     bug_central_core_hole='bug_central_core',
 }
 function M.entity(name,entry)
-    local objective=OBJECTIVES[name]or OBJECTIVES[entry.className]
-    if objective or entry.kind=='structure'then return'objective',objective or entry.className or name end
+    local leaf=name:match('([^/]+)$')or name
+    local objective=OBJECTIVES[name]or OBJECTIVES[entry.className]or OBJECTIVES[leaf]
+    if not objective and leaf:match('^spawner_factory_conscript_')then objective='cy_destroy_spawners'end
+    if not objective and leaf:match('^bug_spawner_')then objective='bug_destroy_spawners'end
     local faction=entry.faction
     if faction=='helldivers'then faction='super_earth'end
+    if faction~='automatons'and faction~='terminids'and faction~='illuminate'and faction~='super_earth'then faction=nil end
+    if objective or entry.kind=='structure'then return'objective',objective or leaf,faction end
     if faction=='automatons'or faction=='terminids'or faction=='illuminate'or faction=='super_earth'then
         return'faction',faction
     end

@@ -79,6 +79,7 @@ function M.install(App)
                     if ok and#results<LIMIT_OBJECTS then
                         seen[object.key]=true
                         results[#results+1]={kind='object',object=object,label=name,
+                            order=#results+1,
                             sub=clabel..(sub and('  ·  '..sub)or''),
                             prefix=name:lower():sub(1,#list[1])==list[1]
                                 or object.name:lower():sub(1,#list[1])==list[1]}
@@ -87,6 +88,7 @@ function M.install(App)
             end
             table.sort(results,function(a,b)
                 if a.prefix~=b.prefix then return a.prefix end
+                if a.label:lower()==b.label:lower()then return a.order<b.order end
                 return a.label:lower()<b.label:lower()
             end)
         end

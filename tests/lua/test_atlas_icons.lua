@@ -14,9 +14,22 @@ H.app.ctx.icons=icons
 H.app.canvas.image=function(_,handle,x,y,w,h,opts)seen[#seen+1]={handle=handle,w=w,h=h,opts=opts}end
 for _,category in ipairs({'primaries','secondaries','throwables','terminids','automatons','illuminate','structures'})do
     local objects=assert(H.catalog:objects(category),category)
-    for _,object in ipairs(objects)do assert(H.app:draw_icon(object,10,10,48),'missing icon '..object.key)end
+    for _,object in ipairs(objects)do
+        local rendered=H.app:draw_icon(object,10,10,48)
+        if category~='structures'or object.iconFaction then assert(rendered,'missing icon '..object.key)end
+    end
 end
 local rifle=assert(H.catalog:object('pw|AR-23 Liberator'))
+for key,label in pairs({spawner='Factory Strider',illuminate_dropship='Warp Ship',
+    cy_stratagem_blocker='Stratagem Jammer',il_obj_asset_weather_device_core='Exospire Core',
+    unnamed_entity_0034='MG Raider',boomer_nurser='Nursing Spewer'})do
+    local object=assert(H.catalog:object('en|'..key),key)
+    assert(object.name==label,object.name)
+    assert(object.search_terms:find(key,1,true),'canonical ID search lost')
+end
+local one=assert(H.catalog:object('en|warrior_tier_1'))
+local two=assert(H.catalog:object('en|warrior_tier_2'))
+assert(one.name=='Warrior'and two.name=='Warrior'and one.subtitle~=two.subtitle,'variants collapsed')
 assert(H.app:draw_icon(rifle,10,10,48));local draw=seen[#seen]
 assert(draw.w==48 and draw.h<draw.w and draw.opts.colours.g[4]==0,'aspect or mask lost')
 assert(H.app:draw_icon({key='en|jammer',iconKind='objective',iconName='cy_destroy_stratagem_blocker'},10,10,48))
@@ -25,8 +38,15 @@ local kind,name=I.entity('cy_stratagem_blocker',{kind='structure',faction='autom
 assert(kind=='objective'and name=='cy_destroy_stratagem_blocker')
 kind,name=I.entity('bug_spawner_shrieker',{kind='structure',faction='terminids'})
 assert(name=='bug_shrieker_nest')
-kind,name=I.entity('unknown_structure',{kind='structure'})
-assert(I.entry(icons,{key='en|unknown_structure',iconKind=kind,iconName=name})==icons.objectives.objective)
+for _,faction in ipairs({'automatons','terminids','illuminate','super_earth','helldivers'})do
+    local kind,name,fallback=I.entity('unknown_structure',{kind='structure',faction=faction})
+    assert(I.entry(icons,{key='en|unknown_structure',iconKind=kind,iconName=name,iconFaction=fallback})
+        ==icons.factions[faction=='helldivers'and'super_earth'or faction])
+end
+kind,name=I.entity('unknown_structure',{kind='structure',faction='unresolved'})
+assert(I.entry(icons,{key='en|unknown_structure',iconKind=kind,iconName=name})==nil)
+assert(I.entry({objectives={},factions=icons.factions},{iconKind='objective',
+    iconName='cy_destroy_stratagem_blocker',iconFaction='automatons'})==icons.factions.automatons)
 local old=I.load({resources={game_icons=function(kind)assert(kind=='stratagem'or kind=='booster');return{}end,
     game_icon=api.game_icon}})
 assert(old and next(old.weapons)==nil,'older Runtime compatibility')

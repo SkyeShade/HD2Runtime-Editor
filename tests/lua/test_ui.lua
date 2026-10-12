@@ -1156,7 +1156,7 @@ do
     step({'DELETE'})
     type_text('maelstrom')
     results=H.app:search_results(H.app.gsearch.text)
-    for _,r in ipairs(results)do if r.kind=='object'and r.label=='TD-110 Maelstrom'then vehicle=r end end
+    for _,r in ipairs(results)do if r.kind=='object'and r.object.key=='ve|TD-110 Maelstrom'then vehicle=r end end
     assert(vehicle and results[1]==vehicle,'the vehicle is the first result')
     step({'ENTER'})
     assert(H.app.view=='browse'and H.app:object()==vehicle.object,'Enter opens it in BROWSE')

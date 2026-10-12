@@ -12,6 +12,12 @@ local NOTES={
     ['jammer.initially_enabled']='Initialization only. Does not switch off a jammer that already exists.',
 }
 local function title(s)return util.humanize(tostring(s or''))end
+local function entity_name(name,W)
+    local e=name and W.entry(name)
+    if not e then return title(name)end
+    local label=e.displayName or e.wikiName or title(name)
+    return label..(e.variantLabel and(' ('..e.variantLabel..')')or'')
+end
 local function section(id)return TITLES[tostring(id):match('^([^%.]+)')]or title(tostring(id):match('^([^%.]+)'))end
 local function sorted(list)
     table.sort(list,function(a,b)return a.name:lower()..a.key<b.name:lower()..b.key end);return list
@@ -76,12 +82,13 @@ function M.entity_rows(cat,H,o,name,W)
         info(H,rows,o,'capacity','Authored capacity',table.concat(t.dimensions,' x ')..' cells ('..t.capacityCells..' total)',
             'Transport',nil,'Cells, not a fixed passenger count. Only grid reductions are supported. Changes apply to subsequent creations.')
         for i,p in ipairs(t.footprints or{})do
-            info(H,rows,o,'footprint:'..i,table.concat(p.enemies,', '),table.concat(p.dimensions,' x ')..' cells; fits at most '..p.fixedOrientationGridUpperBound,
+            local names={};for _,name in ipairs(p.enemies)do names[#names+1]=entity_name(name,W)end
+            info(H,rows,o,'footprint:'..i,table.concat(names,', '),table.concat(p.dimensions,' x ')..' cells; fits at most '..p.fixedOrientationGridUpperBound,
                 'Passenger footprints','Transport bounds',t.footprintBoundsNote..' Matching footprints across factions do not prove these passengers are eligible for this ship.')
         end
     end
     for i,m in ipairs(e.mountedEntities or{})do
-        info(H,rows,o,'mount:'..i,'Mounted entity',m.name,'Mounted entities','Related entities',
+        info(H,rows,o,'mount:'..i,'Mounted entity',m.name and entity_name(m.name,W),'Mounted entities','Related entities',
             m.name and'Search for this entity to edit its own fields. It may hold a separate shield or weapon.'
                 or'This mounted resource does not yet have an identified editable target.')
     end
@@ -98,14 +105,16 @@ function M.entities(cat,H,filter)
     if not ok or type(W.entries)~='function'then return nil end
     local list={}
     for name,e in pairs(W.entries())do if filter(e)then
-        local key=name;local label=e.wikiName or e.name or key
+        local key=name;local label=e.displayName or e.wikiName or e.name or key
         local components=e.components or(e.pendingControls and e.pendingControls.components)or{}
         local tags={}
         for _,component in ipairs(components)do tags[#tags+1]=component:gsub('ComponentData$','')end
-        local iconKind,iconName=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(key,e)
-        list[#list+1]={key='en|'..key,name=title(label),subtitle=title(e.faction or e.kind),
-            iconKind=iconKind,iconName=iconName,
-            search_terms=key..' '..table.concat(tags,' '),
+        local iconKind,iconName,iconFaction=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(key,e)
+        local subtitle=title(e.faction or e.kind)
+        if e.variantLabel then subtitle=subtitle..' / '..e.variantLabel end
+        list[#list+1]={key='en|'..key,name=e.displayName or title(label),subtitle=subtitle,
+            iconKind=iconKind,iconName=iconName,iconFaction=iconFaction,
+            search_terms=key..' '..(e.className or'')..' '..(e.gameName or'')..' '..table.concat(tags,' '),
             detail=table.concat(tags,', ')..'. Authored type values; existing instances may retain private copies.',
             build=function(o)return M.entity_rows(cat,H,o,key,W)end}
     end end
@@ -138,7 +147,7 @@ function M.director_rows(cat,H,o,kind,key)
     end
     for _,g in ipairs(d.metadata.groups or{})do
         for i,candidate in ipairs(g.candidates or{})do
-            info(H,rows,o,'group:'..g.slot..':'..i,title(candidate),'Candidate','Group '..g.slot,nil,
+            info(H,rows,o,'group:'..g.slot..':'..i,(g.candidateNames or{})[i]or title(candidate),'Candidate','Group '..g.slot,nil,
                 'Candidate group only. Family numbers do not identify a proven patrol, dropship or breach role.')
         end
     end
@@ -153,9 +162,13 @@ function M.director(cat,H,kind)
     for _,d in ipairs(descriptions)do
         local key=d.id;local m=d.metadata;local name,sub
         local search={key,m.path or''}
-        for _,g in ipairs(m.groups or{})do for _,candidate in ipairs(g.candidates or{})do search[#search+1]=candidate end end
+        for _,g in ipairs(m.groups or{})do
+            for _,candidate in ipairs(g.candidates or{})do search[#search+1]=candidate end
+            for _,candidate in ipairs(g.candidateNames or{})do search[#search+1]=candidate end
+        end
         if kind=='difficulty'then name=string.format('Difficulty %02d',tonumber(key));sub='Mission budgets and cooldown'
-        elseif kind=='roster'then name=title(m.path and m.path:match('([^/]+)$')or key);sub=title(m.roster)..' · Row '..m.row
+        elseif kind=='roster'then name=m.displayName or title(m.path and m.path:match('([^/]+)$')or key)
+            sub=(m.variantLabel and(m.variantLabel..' / ')or'')..title(m.roster)..' · Row '..m.row
         elseif kind=='composition'then name=title(m.faction)..' · Family '..m.family..' · Row '..m.row;sub='Spawn composition'
         else name=key;sub='Shared demolition threshold'end
         list[#list+1]={key='ed|'..kind..'/'..key,name=name,subtitle=sub,detail=d.lifecycle,

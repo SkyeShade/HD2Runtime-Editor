@@ -2,7 +2,7 @@
 
 # HD2R Editor
 
-**Local 1.0.0 test build for HD2Runtime 0.32.0.** HUD atlas silhouettes now cover primaries, secondaries and throwables; enemies show faction symbols and structures use matching objective icons with a generic fallback.
+**Local 1.0.0 test build for HD2Runtime 0.32.0.** HUD atlas silhouettes now cover primaries, secondaries and throwables; enemies show faction symbols and structures use matching objective icons with a faction fallback. Enemy and structure lists use recovered game names and readable variant labels; canonical IDs remain searchable and unchanged in presets and exports.
 
  The Enemies pages now
 include the expanded enemy and structure catalogue, size, shields, jammers,

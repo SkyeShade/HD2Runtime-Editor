@@ -2499,8 +2499,8 @@ local function enemy_category(filter)
                 entry.className=entry.className or class
                 local name=entry.wikiName or entry.name or class
                 if name:find('_')or name==name:lower()then name=util.humanize(name)end
-                local ik,iname=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(class,entry)
-                list[#list+1]={key='en|'..class,name=name,iconKind=ik,iconName=iname,
+                local ik,iname,ifaction=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(class,entry)
+                list[#list+1]={key='en|'..class,name=name,iconKind=ik,iconName=iname,iconFaction=ifaction,
                     subtitle=util.humanize(entry.faction or entry.kind or''),
                     build=function(object)return enemy_rows(cat.hd2,object,entry,EN.schema or{},EN.structureAcknowledgement)end}
             end
