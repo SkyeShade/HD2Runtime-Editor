@@ -1804,7 +1804,21 @@ local function throwable_rows(hd2,object,entry)
             -- HD2Runtime 0.31.1: the explosion's status slots (each used slot's status, and the first empty slot's
             -- status and strength), as the primaries have them
             local slot_section=f.statusSlot and join(section,'Status')or section
-            if f.editable and f.type=='status_reference'and type(f.allowedValues)=='table'then
+            if f.editable and f.type=='explosion_payload'then
+                local options={}
+                for _,name in ipairs(f.allowedValues or{})do
+                    local handle=hd2.explosion(name);local info=handle:describe()
+                    options[#options+1]={value=handle,label=info.label,
+                        acks={allow_shared=true,allow_unverified_effect=true,allow_unverified_reference=true}}
+                end
+                local vanilla=hd2.explosion(f.currentDefault)
+                rows[#rows+1]=make_value_row(object,{id=f.instanceKey,kind='reference',label='Pulse explosion payload',
+                    field=f.semanticFieldId,target=target,expect=function()return hd2.explosion(f.currentDefault)end,vanilla=vanilla,
+                    shared=true,unverified=true,unverified_reference=true,descriptor=f,section='Pulse payload',
+                    options=function()return options end,
+                    note='Replaces the pulse definition for all Urchins; keeps sticking and repeated discharges. '
+                        ..'Choose the Epoch impact payload for its small plasma burst. Original explosion edits can conflict with this override.'})
+            elseif f.editable and f.type=='status_reference'and type(f.allowedValues)=='table'then
                 local labels={}
                 if f.allowNone then labels[1]={value='none',label='None'}end
                 for _,v in ipairs(f.allowedValues)do labels[#labels+1]={value=v,label=util.humanize(v)}end

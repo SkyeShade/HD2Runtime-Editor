@@ -61,7 +61,9 @@ local function start_spec(kind)
             end
             -- references are encoded when the real prepare re-proves them live: here, from their selectors
             for _,change in ipairs(spec.changes or{})do
-                if change.desired_selector then
+                if change.descriptor.type=='explosion_payload'then
+                    change.expected='payload:'..change.expect;change.desired='payload:'..change.value
+                elseif change.desired_selector then
                     change.desired='ref:'..S.selector_key(change.desired_selector)
                     change.expected='ref:'..S.selector_key(change.expected_selector or{})
                 end
