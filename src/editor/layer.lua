@@ -128,6 +128,7 @@ local function forget_applied(w,settle_now)
     local ia=upvalue(w.debug,'applied_signature')
     if not ia then return false end
     debug.setupvalue(w.debug,ia,nil)
+    if type(w.wake)=='function'then w.wake()end
     if settle_now then
         local id_,ib=upvalue(w.debug,'dirty'),upvalue(w.debug,'debounce')
         if id_ and ib then debug.setupvalue(w.debug,id_,true);debug.setupvalue(w.debug,ib,0)end
@@ -167,7 +168,7 @@ local function note(self,text)
     if#self.history>40 then table.remove(self.history,1)end
     pcall(self.log,text)
 end
-function Layer:changed()self.version=self.version+1 end
+function Layer:changed()self.version=self.version+1;self.pending=true end
 -- Fields the player changed or reset, by row key (editor/session.lua: a carried saved value gives way to them).
 function Layer:touch(key)if key~=nil then self.touched[key]=true end end
 
@@ -544,6 +545,7 @@ function Layer:register(row,handle)
         end
         local request={patch=body.patch,transaction=body.transaction,startup_delay=0,interval=30,recover=true,
             on_status=function(status,info)
+                self.pending=true
                 note(self,'ensure '..id..' ('..tostring(row.object and row.object.name)..') '
                     ..tostring(info and info.previous)..' -> '..tostring(status)
                     ..(info and info.error and(': '..tostring(info.error))or''))
@@ -920,9 +922,12 @@ local function swap_wait(self,slot)
     return false
 end
 
--- Drives every field one update further. Cheap when nothing changes.
+-- Drive unfinished work every update. A settled layer wakes on an edit/reset or an ensure status notification.
+-- Perk handles have no status callback, so compare that one handle without walking all held fields.
 function Layer:tick(dt)
     self.clock=(self.clock or 0)+(dt or 0)
+    local perks=self.perks
+    if self.pending==false and not(perks and perks.handle and perks.handle.status~=perks.status)then return end
     step_perks(self)
     for i=#self.groups,1,-1 do
         if step_group(self,self.groups[i])then table.remove(self.groups,i)end
@@ -945,6 +950,7 @@ function Layer:tick(dt)
                 slot.held,slot.phase=slot.steering,'hold'
                 slot.dirty=not util.same(slot.target,slot.held)
                 self:changed()
+                release_if_done(self,slot)
             elseif slot.dirty and slot.target~=nil and not util.same(slot.target,slot.steering)and slot.handle
                 and self:covers(slot.handle,slot.target)then
                 -- another value asked for while this steer has not run (a reset, or a new value): the handle goes
@@ -1035,6 +1041,12 @@ function Layer:tick(dt)
         local any=false
         for _,slot in pairs(self.slots)do if slot.removing and not slot.error then any=true;break end end
         if not any then self.removal_total=0 end
+    end
+    self.pending=#self.groups>0
+    if not self.pending then
+        for _,slot in pairs(self.slots)do
+            if slot.dirty or slot.phase=='steer'or slot.phase=='adopt'then self.pending=true;break end
+        end
     end
 end
 

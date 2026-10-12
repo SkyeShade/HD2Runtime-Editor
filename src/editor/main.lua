@@ -239,7 +239,8 @@ function M.start(hd2,id)
         end
     end
 
-    -- Every frame: drive the override layer; restore the last session once; save the session whenever it changes
+    -- Every frame: advance unfinished layer work; restore once; save only when the session changes.
+    -- The layer returns immediately once settled, waking on edits and ensure status callbacks.
     -- (editor/session.lua: a saved value that does not come back at this start stays saved).
     local session=session_module.new({app=app,layer=layer,presets=presets,log=log})
     state.session=session
@@ -251,11 +252,12 @@ function M.start(hd2,id)
         clock=clock+(dt or 0)
         layer:tick(dt or 0)
         -- a preset import (and the Windows dialog it waits for) goes on while the window is closed
-        if not overlay:status().visible then
+        local visible=overlay:status().visible
+        if not visible and(app.pf_job or app.pf_picking)then
             local ok,why=pcall(app.background_tick,app)
             if not ok and why~=background_error then background_error=why;log('preset import failed: '..tostring(why))end
         end
-        if can_block and presets:setting('block_game_input',true)and overlay:status().visible then block(true)end
+        if can_block and visible and presets:setting('block_game_input',true)then block(true)end
         if not session.restored and clock>=RESTORE_MIN then
             local ready=others_settled(hd2,id)
             local build=type(hd2.build)=='function'and select(2,pcall(hd2.build))or'matched'

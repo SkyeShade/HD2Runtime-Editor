@@ -11,6 +11,13 @@ PLAS-39 exposes charged-burst count/interval, charge times, multipliers, and
 Single/Unsafe modes. Unsafe can destroy the weapon at its overcharge threshold;
 the destruction switch is also editable. These controls need gameplay testing.
 
+Dev5 reduces the cost of settled presets: the Editor stops scanning held fields
+until an edit, reset or operation status change wakes it. The matching Runtime
+build sleeps each ensure between periodic verification checks (30 seconds at
+first, backing off to 600 seconds). Those checks let presets recover when game
+data reloads. Apply/reset work and preset imports continue while the window is
+closed; no import polling runs unless a dialog or import job is active.
+
 Weapon and grenade silhouettes are now included as exact local atlas extracts
 using the same startup-loaded image path as boosters and stratagems, preserving
 their proportions. They no longer depend on the native mission atlas drawing

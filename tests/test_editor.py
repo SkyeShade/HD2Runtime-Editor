@@ -28,6 +28,12 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_settled_editor_sleeps_and_wakes_for_work(self):
+        result=lua_host.run('return assert(loadfile(%s))(%s)' % (
+            lua_host._lua_string((LUA/'test_idle.lua').as_posix()),
+            lua_host._lua_string((LUA/'sim.lua').as_posix())))
+        self.assertEqual(result,'idle sleeps edit debounce drift cancellation reset ok')
+
     def test_dev4_controls_and_groups(self):
         result=lua_file('test_dev4.lua', {'sim': (LUA/'sim.lua').as_posix(),
             'harness': (LUA/'ui_harness.lua').as_posix()})
