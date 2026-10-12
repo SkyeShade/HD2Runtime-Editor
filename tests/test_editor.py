@@ -28,6 +28,15 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_page_inspections_are_incremental_cached_and_cancelled(self):
+        result=lua_file('test_owner_queue.lua', {})
+        self.assertEqual(result,'incremental owners cancellation cache overflow stale callbacks ok')
+
+    def test_maelstrom_progress_and_navigation_during_inspection(self):
+        result=lua_file('test_browse_checks.lua', {'sim': (LUA/'sim.lua').as_posix(),
+            'harness': (LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'Maelstrom fields immediate progress and navigation responsive')
+
     def test_settled_editor_sleeps_and_wakes_for_work(self):
         result=lua_host.run('return assert(loadfile(%s))(%s)' % (
             lua_host._lua_string((LUA/'test_idle.lua').as_posix()),

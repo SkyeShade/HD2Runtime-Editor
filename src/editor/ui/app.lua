@@ -1487,7 +1487,7 @@ function App:frame(d,dt)
     -- the native-bytes index of the whole catalogue, a few objects a frame (shared values, markers)
     if not self.catalog.indexed then
         local before=self.catalog.indexed
-        if self.catalog:index_step(6,0.003)and not before then self.marker_key=nil end
+        if self.catalog:index_step(1,0.0005)and not before then self.marker_key=nil end
     end
     self.frame_dt=dt or 0
     if self.ctx.sounds and self.ctx.sounds.tick then self.ctx.sounds.tick(dt or 0)end
@@ -1518,6 +1518,9 @@ function App:frame(d,dt)
     self:handle_keys(f)
     if f.mouse then self:handle_mouse(f)end
     self:draw()
+    if self.catalog.owners_step then
+        self.catalog:owners_step(self.view=='browse'and self:object()or nil,self.held_by_runtime)
+    end
     if self.toast_msg and self.time-self.toast_msg.time>3.2 then self.toast_msg=nil end
 end
 
@@ -1911,6 +1914,10 @@ function App:draw_fields(y0,h)
     local sub=(subtitle and(subtitle..'   ')or'')..(object.detail and object.detail~=''and(L(object.detail)..'   ')or'')
         ..Lf('%d fields',#object.rows)
         ..(edited>0 and('   '..Lf('%d edited',edited))or'')
+    local scan=object.owner_scan
+    if scan and not scan.complete then
+        sub=sub..'   '..(scan.build and L('Preparing live checks...')or Lf('Checking live values %d/%d',scan.done,scan.total))
+    end
     cv:text(sub,hx,y0+47,{size=SZ.small,colour=C.faint,max=w-40-(hx-x0)})
     if object.error then cv:text(Lf('Could not read: %s',object.error),x0+20,y0+70,{size=SZ.small,colour=C.error,max=w-40})end
     -- column titles

@@ -14,6 +14,10 @@ local packed=I.load({resources={image=function(id)return{image=id}end,
  throwables={['G-16 Impact']={image='ti_g_16_impact',accent={255,255,238}}}})
 assert(I.entry(packed,{key='pw|AR-23 Liberator',name='AR-23 Liberator'}).handle.image=='wi_ar_23_liberator')
 assert(I.entry(packed,{key='th|G-16 Impact',name='G-16 Impact'}).handle.image=='ti_g_16_impact')
+for _,object in ipairs(H.catalog:objects('support_weapons'))do
+    local name=object.stratagem or object.name
+    assert(I.entry(icons,object)==icons.stratagems[name],'support weapon must use its stratagem icon: '..name)
+end
 H.frame({})
 local original=H.app.canvas.image;local seen={}
 H.app.ctx.icons=icons

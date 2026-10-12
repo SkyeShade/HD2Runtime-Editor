@@ -23,6 +23,13 @@ window as **HD2R Editor UI** and its updates/jobs as **HD2R Editor work**. The F
 window's own cost is split into layout, GUI sync and resources/input. Unchanged
 graph geometry and repeated text measurements are cached; input stays responsive.
 
+Dev8 restores stratagem icons for support weapons. Page definitions stay cached
+for the session and appear immediately on revisits. Live field checks prepare
+incrementally, then inspect one target batch at a time with progress shown in the
+page header. Switching pages or closing the Editor cancels the active check;
+completed batches are reused when returning. Apply/reset still performs fresh
+guarded resolution. Inspections appear under **HD2R Editor work** in F10.
+
 Weapon and grenade silhouettes are now included as exact local atlas extracts
 using the same startup-loaded image path as boosters and stratagems, preserving
 their proportions. They no longer depend on the native mission atlas drawing

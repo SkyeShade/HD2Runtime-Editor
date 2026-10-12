@@ -2996,57 +2996,108 @@ end
 -- core/shared_records keeps no claim for them) are reported 'changed' with no owner and no reason even when an
 -- HD2Runtime operation wrote them, so such a field is locked only when nothing in HD2Runtime explains its value: an
 -- applied booster edit was shown LOCKED, its own value taken for another mod's.
-function Catalog:check_owners(object,held)
-    local hd2=self.real_hd2
-    if object.owners_checked or type(hd2)~='table'or type(hd2.inspect)~='function'then return end
-    object.owners_checked=true
-    local groups,order={},{}
-    for _,row in ipairs(object.rows or{})do
-        -- (a beam conversion has its own live status, not a reviewed value: not inspected)
-        if row.editable and not row.no_inspect and type(row.target)=='function'and type(row.field)=='string'then
-            local ok,target=pcall(row.target)
-            local okx,expect=pcall(M.expect,row)
-            if ok and type(target)=='table'and okx and expect~=nil then
-                local key=handle_key(target)
-                local g=groups[key]
-                if not g then g={target=target,rows={},fields={}};groups[key]=g;order[#order+1]=g end
-                if#g.fields<64 then
-                    g.rows[#g.rows+1]=row
-                    g.fields[#g.fields+1]={field=row.field,expect=expect}
-                end
+local function owner_results(g,result,held)
+    for i,f in ipairs(result.fields or{})do
+        local row=g.rows[i]
+        local untracked=f.state=='changed'and f.owner==nil and f.reason==nil
+        local ours=untracked and type(held)=='function'and select(2,pcall(held,row))==true
+        if row and not ours and(f.state=='foreign'or f.state=='changed')then
+            row.editable=false
+            row.foreign=true
+            -- foreign: a value (or a whole component table another mod moved: no value then); changed with
+            -- owner unknown: the item's entity map row another mod rebuilt; changed otherwise: a structural
+            -- part (a link, a slot) is not as reviewed, in the Runtime's own words
+            if f.state=='foreign'then
+                row.reason='changed by another mod (not HD2Runtime)'..(f.value~=nil and(': it is '..tostring(f.value))
+                    or'')..'; HD2Runtime leaves it as it is'
+            elseif f.owner=='unknown'then
+                row.reason='another mod (not HD2Runtime) changed the data of this item; HD2Runtime leaves it as it is'
+            elseif untracked then
+                -- (no claim to name: neither the editor nor an HD2Runtime mod applied a value here)
+                row.reason='the game holds '..(f.value~=nil and util.format(f.value)or'another value')
+                    ..' here, not the reviewed '..util.value_text(row.vanilla)..', and no HD2Runtime mod applied '
+                    ..'it: another mod (not HD2Runtime) changed it; HD2Runtime leaves it as it is'
+            else
+                row.reason='its game data is not as HD2Runtime reviewed it'..(f.reason and(' ('
+                    ..util.plain(tostring(f.reason),160)..')')or'')
             end
         end
     end
-    for _,g in ipairs(order)do
-        pcall(hd2.inspect,{target=g.target,fields=g.fields,on_result=function(result)
-            for i,f in ipairs(result.fields or{})do
-                local row=g.rows[i]
-                local untracked=f.state=='changed'and f.owner==nil and f.reason==nil
-                local ours=untracked and type(held)=='function'and select(2,pcall(held,row))==true
-                if row and not ours and(f.state=='foreign'or f.state=='changed')then
-                    row.editable=false
-                    row.foreign=true
-                    -- foreign: a value (or a whole component table another mod moved: no value then); changed with
-                    -- owner unknown: the item's entity map row another mod rebuilt; changed otherwise: a structural
-                    -- part (a link, a slot) is not as reviewed, in the Runtime's own words
-                    if f.state=='foreign'then
-                        row.reason='changed by another mod (not HD2Runtime)'..(f.value~=nil and(': it is '..tostring(f.value))
-                            or'')..'; HD2Runtime leaves it as it is'
-                    elseif f.owner=='unknown'then
-                        row.reason='another mod (not HD2Runtime) changed the data of this item; HD2Runtime leaves it as it is'
-                    elseif untracked then
-                        -- (no claim to name: neither the editor nor an HD2Runtime mod applied a value here)
-                        row.reason='the game holds '..(f.value~=nil and util.format(f.value)or'another value')
-                            ..' here, not the reviewed '..util.value_text(row.vanilla)..', and no HD2Runtime mod applied '
-                            ..'it: another mod (not HD2Runtime) changed it; HD2Runtime leaves it as it is'
-                    else
-                        row.reason='its game data is not as HD2Runtime reviewed it'..(f.reason and(' ('
-                            ..util.plain(tostring(f.reason),160)..')')or'')
+end
+-- Build the request list without reading the game. Only the selected page advances it;
+-- completed groups remain cached on the object, and a cancelled group resumes on revisit.
+function Catalog:check_owners(object,held)
+    local hd2=self.real_hd2
+    if object.owners_checked or type(hd2)~='table'or type(hd2.inspect)~='function'then return end
+    if object.owner_scan and not object.owner_scan.complete then return end
+    local scan={object=object,groups={},cursor=1,done=0,total=0,held=held,token=0}
+    object.owner_scan=scan
+    scan.build=coroutine.create(function()
+        local groups={}
+        for index,row in ipairs(object.rows or{})do
+            if row.editable and not row.no_inspect and type(row.target)=='function'and type(row.field)=='string'then
+                local ok,target=pcall(row.target)
+                local okx,expect=pcall(M.expect,row)
+                if ok and type(target)=='table'and okx and expect~=nil then
+                    local key=handle_key(target)
+                    local g=groups[key]
+                    -- Split overflowing targets instead of dropping field 65 and beyond.
+                    if not g or#g.fields>=64 then
+                        g={target=target,rows={},fields={}};groups[key]=g;scan.groups[#scan.groups+1]=g
                     end
+                    g.rows[#g.rows+1]=row;g.fields[#g.fields+1]={field=row.field,expect=expect}
+                    scan.total=scan.total+1
                 end
             end
-        end})
+            if index%16==0 then coroutine.yield()end
+        end
+    end)
+end
+function Catalog:pause_owners()
+    local scan=self.owner_active
+    if not scan then return end
+    scan.token=scan.token+1
+    if scan.job and type(scan.job.cancel)=='function'then pcall(scan.job.cancel)end
+    if scan.group_done then scan.cursor=scan.cursor+1;scan.group_done=nil end
+    scan.job=nil
+    self.owner_active=nil
+end
+function Catalog:owners_step(object,held)
+    local active=self.owner_active
+    if active and(active.object~=object or object.owners_checked)then self:pause_owners()end
+    if not object or object.owners_checked then return end
+    self:check_owners(object,held)
+    local scan=object.owner_scan
+    if not scan or scan.complete then return end
+    self.owner_active=scan
+    if scan.build then
+        local ok,why=coroutine.resume(scan.build)
+        if not ok then
+            scan.error=tostring(why);scan.build=nil;scan.complete=true;object.owners_checked=true
+            return
+        end
+        if coroutine.status(scan.build)~='dead'then return end
+        scan.build=nil
+        return
     end
+    if scan.job then
+        if scan.job.status=='running'or scan.job.status=='waiting'then return end
+        -- A cancelled/rejected adapter never calls on_result. Advance once, without retrying each frame.
+        if not scan.group_done then scan.done=scan.done+#scan.groups[scan.cursor].fields end
+        scan.cursor=scan.cursor+1;scan.job=nil;scan.group_done=nil
+    end
+    local g=scan.groups[scan.cursor]
+    if not g then scan.complete=true;object.owners_checked=true;self.owner_active=nil;return end
+    scan.token=scan.token+1
+    local token=scan.token
+    local ok,job=pcall(self.real_hd2.inspect,{target=g.target,fields=g.fields,on_result=function(result)
+        if self.owner_active~=scan or scan.token~=token then return end
+        owner_results(g,result,scan.held)
+        scan.done=scan.done+#g.fields;scan.group_done=true
+    end})
+    -- Even an immediate completion waits for the next UI frame before starting another target.
+    scan.job=ok and type(job)=='table'and job or{status='rejected'}
+    if scan.group_done then scan.job.status='complete'end
 end
 -- Status slots (HD2Runtime 0.31.2: every empty slot of a damage row, up to 4; older Runtimes offer the first empty
 -- one): a row's slots stay packed from slot 1 (the Runtime refuses a gap, STATUS_SLOT_GAP). Each slot's status and

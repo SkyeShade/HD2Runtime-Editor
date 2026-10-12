@@ -58,7 +58,7 @@ function M.warm(hd2,icons,log)
     if log then log(ok and('HUD atlas preload requested ('..#targets..' packages)')or('HUD atlas preload failed: '..tostring(watch)))end
     return ok and watch or nil
 end
-local STRATAGEM={st=true,sp=true,sb=true,ve=true,rs=true,ex=true}
+local STRATAGEM={st=true,sp=true,sw=true,sb=true,ve=true,rs=true,ex=true}
 function M.entry(icons,object)
     if not icons then return nil end
     if object.iconKind then
@@ -67,11 +67,11 @@ function M.entry(icons,object)
         if object.iconKind=='objective'then return(icons.factions or{})[object.iconFaction] end
     end
     local family=tostring(object.key):match('^(%a+)|')
-    if family=='pw'or family=='sp'or family=='sw'then
+    if STRATAGEM[family]then return(icons.stratagems or{})[object.stratagem or object.name]end
+    if family=='pw'then
         local entry=(icons.weapons or{})[object.name];if entry then return entry end
     elseif family=='th'then return(icons.throwables or{})[object.name]
     elseif family=='bo'then return(icons.boosters or{})[object.name]end
-    if STRATAGEM[family]then return(icons.stratagems or{})[object.stratagem or object.name]end
 end
 -- Explicit display assignments to reviewed objective symbols; no gameplay relationship is implied.
 local OBJECTIVES={

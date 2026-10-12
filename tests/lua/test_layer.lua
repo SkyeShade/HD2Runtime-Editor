@@ -8,6 +8,14 @@ local cat=catalog.new(hd2)
 local layer=require('mods/skyeshade/hd2runtime_editor/editor/layer').new({hd2=hd2,id=EDITOR,ledger=ledger,catalog=cat})
 local out={}
 local function check(cond,msg)if not cond then error('FAILED: '..msg..'\n'..table.concat(S.log,'\n'),2)end end
+local function inspect_page(object,held)
+    cat:check_owners(object,held)
+    for _=1,200 do
+        cat:owners_step(object,held)
+        if object.owners_checked then return end
+    end
+    error('ownership checks did not finish')
+end
 local function run(seconds)
     local t=0
     while t<seconds do S.tick(0.1);layer:tick(0.1);t=t+0.1 end
@@ -137,7 +145,7 @@ do
         return {}
     end},{__index=real})
     object.owners_checked=nil
-    cat:check_owners(object)
+    inspect_page(object)
     cat.real_hd2=real
     local by={}
     for _,r in ipairs(object.rows)do by[r.field]=by[r.field]or r end
@@ -173,7 +181,7 @@ do
                 req.on_result(result)
                 return {}
             end},{__index=real})
-            cat:check_owners(booster,held)
+            inspect_page(booster,held)
             cat.real_hd2=real
         end
         local function held(r)return layer:slot_of(r)~=nil end

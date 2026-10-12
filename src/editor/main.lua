@@ -192,6 +192,7 @@ function M.start(hd2,id)
     end
     local function toggle()
         if overlay:status().visible then
+            catalog:pause_owners()
             app:end_key_capture()
             block(false)
             overlay:hide()
