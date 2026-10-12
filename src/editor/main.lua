@@ -31,7 +31,7 @@ local mod_icon_map=optional('mod_icons')
 local preset_icon_map=optional('preset_icons')
 local M={}
 
-M.VERSION='0.10.0'
+M.VERSION='1.0.0'
 M.HOTKEY='F8'
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
@@ -113,34 +113,8 @@ function M.start(hd2,id)
     local game_names=game_names_module.new(hd2,function()return presets:setting('game_names',true)end):install()
     if game_names.ready then log('the game\'s own names are shown ('..tostring(game_names.language)..')')end
     local overlay=hd2.ui.overlay({id='editor',visible=false})
-    -- Icons: one image handle per generated icon (needs the overlay's d:image, HD2Runtime r50).
-    local icons
-    if game_icons and type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then
-        icons={stratagems={},boosters={}}
-        local count=0
-        for kind,list in pairs({stratagems=game_icons.stratagems or{},boosters=game_icons.boosters or{}})do
-            for name,entry in pairs(list)do
-                local ok,handle=pcall(hd2.resources.image,entry.image)
-                if ok and handle then icons[kind][name]={handle=handle,accent=entry.accent,dark=entry.dark};count=count+1 end
-            end
-        end
-        log(count..' game icons available')
-    end
-    -- Without locally built icons (a release build): the game's own HUD icons through HD2Runtime, drawn from the game
-    -- itself (hd2.resources.game_icon, HD2Runtime 0.30.0; nothing shipped). Each stratagem's category layer takes its
-    -- category colour; a booster keeps its yellow plate.
-    if not icons and type(hd2.resources)=='table'and type(hd2.resources.game_icon)=='function'then
-        icons={stratagems={},boosters={},game=true}
-        local count=0
-        for kind,key in pairs({stratagem='stratagems',booster='boosters'})do
-            local ok,names=pcall(hd2.resources.game_icons,kind)
-            for _,name in ipairs(ok and type(names)=='table'and names or{})do
-                local handle=hd2.resources.game_icon(kind,name)
-                if handle then icons[key][name]={handle=handle,game=true};count=count+1 end
-            end
-        end
-        log(count..' game icons from HD2Runtime (drawn from the game itself)')
-    end
+    local icons,count=require('mods/skyeshade/hd2runtime_editor/editor/icons').load(hd2,game_icons)
+    log(count..' game icons available')
     -- The editor's own mask icons (images/ui_*.png: the mod marker and the category glyphs).
     local ui_icons
     if type(hd2.resources)=='table'and type(hd2.resources.image)=='function'then

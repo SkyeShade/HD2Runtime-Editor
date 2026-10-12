@@ -2347,9 +2347,15 @@ function App:draw_icon(object,x,y,size,z)
     if type(self.canvas.d.image)~='function'then return false end
     local icons=self.ctx.icons
     local family=tostring(object.key):match('^(%a+)|')
-    local entry
-    if icons and STRATAGEM_FAMILIES[family]then entry=icons.stratagems[object.stratagem or object.name]
-    elseif icons and family=='bo'then entry=icons.boosters[object.name]end
+    local entry=require('mods/skyeshade/hd2runtime_editor/editor/icons').entry(icons,object)
+    if entry and entry.atlas then
+        local aspect=entry.aspect or 1
+        local w,h=size,size
+        if aspect>1 then h=size/aspect else w=size*aspect end
+        self.canvas:image(entry.handle,x+(size-w)/2,y+(size-h)/2,w,h,
+            {colours=entry.monochrome and{r={255,255,238,255},g={0,0,0,0},b={0,0,0,0}}or nil,z=z})
+        return true
+    end
     if entry and entry.game then
         -- the game's own HUD icon through HD2Runtime: a stratagem's category layer in its category colour, the white
         -- layer white; a booster as the Runtime draws it (its yellow plate)

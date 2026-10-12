@@ -102,7 +102,9 @@ function M.entities(cat,H,filter)
         local components=e.components or(e.pendingControls and e.pendingControls.components)or{}
         local tags={}
         for _,component in ipairs(components)do tags[#tags+1]=component:gsub('ComponentData$','')end
+        local iconKind,iconName=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(key,e)
         list[#list+1]={key='en|'..key,name=title(label),subtitle=title(e.faction or e.kind),
+            iconKind=iconKind,iconName=iconName,
             search_terms=key..' '..table.concat(tags,' '),
             detail=table.concat(tags,', ')..'. Authored type values; existing instances may retain private copies.',
             build=function(o)return M.entity_rows(cat,H,o,key,W)end}

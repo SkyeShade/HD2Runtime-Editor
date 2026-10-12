@@ -2,7 +2,9 @@
 
 # HD2R Editor
 
-**Local 0.10.0 development build for HD2Runtime 0.32.0.** The Enemies pages now
+**Local 1.0.0 test build for HD2Runtime 0.32.0.** HUD atlas silhouettes now cover primaries, secondaries and throwables; enemies show faction symbols and structures use matching objective icons with a generic fallback.
+
+ The Enemies pages now
 include the expanded enemy and structure catalogue, size, shields, jammers,
 spawner settings, damage zones and attacks. Other Entities includes unnamed
 controllers and mounted shields. Search component names such as `HiveMind` or
