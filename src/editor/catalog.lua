@@ -665,6 +665,17 @@ local FIELD_NOTES={['heat.cool_per_second_overheated']='Lockout after overheatin
     ..'"Cooling rate" does not change it'}
 -- A field shown right after another one of the same section (where a player looks for it), by field id.
 local PLACED_AFTER={['heat.cool_per_second_overheated']='heat.cool_per_second'}
+local function field_note(f)
+    if f.reloadTiming then return f.reloadTiming.note end
+    if f.reviewedReloadHeat and f.semanticFieldId=='heat.cool_per_second_overheated' then
+        return 'Used only when cooling while charging or overheated is enabled. Disable Prevent cooling to use this rate.'
+    end
+    if f.semanticFieldId=='heat.fire_rate_curve_exponent' then
+        return 'Rate multiplier = 1 + (maximum multiplier - 1) * (heat / capacity) ^ exponent'
+    end
+    return FIELD_NOTES[f.semanticFieldId]
+end
+
 local function place_after(rows)
     for field,anchor in pairs(PLACED_AFTER)do
         local from,to
@@ -735,6 +746,20 @@ local function player_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
+        local timing=f.reloadTiming
+        if timing and timing.defaultAttachment then
+            local A=load('attachment_authoring')
+            local attachment=A and A.attachments[timing.defaultAttachment]
+            local duration=attachment and attachment.fields['attachment.reload_duration']
+            if duration then
+                local id=timing.defaultAttachment
+                rows[#rows+1]=make_row(object,{id='reload.default_magazine',label='Reload duration (default magazine)',
+                    vanilla=duration.currentDefault,min=duration.min,max=duration.max,type='number',storage='f32',
+                    unit='seconds',field='attachment.reload_duration',target=function()return hd2.weapon_attachment(id)end,
+                    shared=true,unverified=true,descriptor=duration,section='Ammo & Magazine',
+                    note='Edits the default magazine definition. Other equipped magazines use their own reload duration under Magazines.'})
+            end
+        end
         -- a field locked only by the weapon's blocked identity (not one that is read-only in itself)
         local locked=f.editable==false and entry.ordinaryWritesBlocked==true and f.reason~=nil
             and f.reason==entry.blockReason
@@ -777,7 +802,7 @@ local function player_rows(hd2,object,entry)
             end
             -- (fires_scope: the swap whose donor these rows give way to, "What a swapped weapon fires" below)
             local common={id=id,label=f.displayName,unit=f.unit,field=field,target=target,shared=shared_ack(f),
-                unverified=unverified(f),descriptor=f,section=section,fires_scope=fires,note=FIELD_NOTES[id]}
+                unverified=unverified(f),descriptor=f,section=section,fires_scope=fires,note=field_note(f)}
             if locked then common.editable,common.reason=false,BLOCKED_REASON end
             if numeric(f.type,f.currentDefault)then
                 common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,b.storage
