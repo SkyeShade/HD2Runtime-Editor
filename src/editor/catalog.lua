@@ -15,7 +15,8 @@ local M={}
 
 M.GROUPS={
     {id='weapons',label='WEAPONS',items={
-        {id='primary',label='Primary'},{id='secondary',label='Secondary'},{id='throwables',label='Throwables'}}},
+        {id='primary',label='Primary'},{id='secondary',label='Secondary'},{id='throwables',label='Throwables'},
+        {id='melee',label='Melee & Gun Bashes'}}},
     {id='stratagems',label='STRATAGEMS',items={
         {id='offensive',label='Offensive',tone='offensive'},{id='defensive',label='Defensive',tone='defensive'},
         {id='support_weapons',label='Support Weapons',tone='support'},
@@ -1759,6 +1760,13 @@ local function throwable_rows(hd2,object,entry)
         local target=throwable_target(hd2,name,t)
         local section=t.label and join(util.humanize(t.path),t.label)or util.humanize(t.path or key)
         if t.path=='throwable'then section='Throwable'end
+        if t.path=='flight'then
+            rows[#rows+1]=M.info_row(object,{id='flight:help',label='Launch controls',section=section,
+                text='A positive speed override bypasses the curve',
+                note='Curve: sqrt(18 * max(0, min + (max-min) * strength)). Movement adjusts strength. '
+                    ..'Spin uses native angular-velocity units; a zero minimum vector disables spin setup. '
+                    ..'These controls do not set trajectory gravity or drag.'})
+        end
         for _,id in ipairs(util.sorted_keys(t.fields or{}))do
             local f=t.fields[id]
             local min,max,integer=range_of(f)
@@ -2352,6 +2360,42 @@ function CATEGORY.throwables(cat)
     end
     return sorted_objects(list)
 end
+function CATEGORY.melee(cat)
+    local D,why=load('melee_authoring')
+    if not D then return nil,why end
+    local list={}
+    for name,e in pairs(D.entries or{})do
+        list[#list+1]={key='me|'..name,name=name,subtitle='Melee reach, damage & stamina',
+            build=function(object)
+                local rows={}
+                rows[#rows+1]=M.info_row(object,{id='melee:geometry',label='Melee reach',
+                    text='Hit volumes follow the animated weapon bone',
+                    note='Dimensions and offsets tune the hit volume. Absolute reach also depends on the animation '
+                        ..'and shape; individual axes may not affect every shape. Edits apply to the next attack.'})
+                for _,key in ipairs(util.sorted_keys(e.targets))do
+                    local t=e.targets[key]
+                    local target=function()
+                        local m=cat.hd2.melee(name)
+                        return key=='tuning'and m or m:zone(key)
+                    end
+                    if t.consumers then
+                        rows[#rows+1]=M.info_row(object,{id=key..':scope',label='Shared with',section=t.label,
+                            text=tostring(#t.consumers)..' weapons',note=table.concat(t.consumers,', ')})
+                    end
+                    for _,id in ipairs(util.sorted_keys(t.fields))do
+                        local f=t.fields[id]
+                        rows[#rows+1]=make_row(object,{id=key..':'..id,field=id,label=f.displayName,unit=f.unit,
+                            vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,storage=f.backing.storage,
+                            target=target,descriptor=f,shared=f.shared,unverified=true,editable=f.editable,
+                            exact=true,reason=f.reason,note=f.lifecycle,section=t.label,
+                            group=id:match('^damage%.')and'Melee Damage'or'Melee Reach & Stamina'})
+                    end
+                end
+                return rows
+            end}
+    end
+    return sorted_objects(list)
+end
 -- Status effects (HD2Runtime 0.31.0 hd2.status_effect): each status's own definition, for every attack that applies
 -- it: how long it lasts (status.duration) and the damage row it deals while active (:damage()).
 function CATEGORY.status_effects(cat)
@@ -2617,7 +2661,7 @@ CATEGORY.destruction_models=function(cat)return require('mods/skyeshade/hd2runti
 M.CATEGORY=CATEGORY
 
 -- The categories that can hold an object key's family (presets name rows by key; mods' claims name family objects).
-local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boosters'},
+local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},me={'melee'},bo={'boosters'},
     st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},ex={'resupply'},
@@ -2841,13 +2885,16 @@ local function traced(hd2)
     return setmetatable({},{__index=function(_,key)
         local tracing=export_module.tracing
         if tracing and type(hd2[key])=='function'then return tracing(key)end
-        if key=='enemies'and type(hd2[key])=='table'then
+        if(key=='enemies'or key=='melee')and type(hd2[key])=='table'then
             return setmetatable({},{__index=function(_,method)
                 if export_module.tracing and type(hd2[key][method])=='function'then
-                    return export_module.tracing('enemies.'..method)
+                    return export_module.tracing(key..'.'..method)
                 end
                 return hd2[key][method]
-            end,__call=function(_,...)return hd2[key](...)end})
+            end,__call=function(_,...)
+                if export_module.tracing then return export_module.tracing(key)(...)end
+                return hd2[key](...)
+            end})
         end
         return hd2[key]
     end})

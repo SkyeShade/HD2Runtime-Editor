@@ -1208,8 +1208,9 @@ do
     type_text('ar')
     results=H.app:search_results(H.app.gsearch.text)
     for _,r in ipairs(results)do
-        assert((r.object.name..' '..tostring(r.object.subtitle or'')):lower():find('ar',1,true),
-            '"ar" matches names only: '..r.label)
+        assert((r.object.name..' '..tostring(r.object.subtitle or'')..' '
+            ..tostring(r.object.search_terms or'')):lower():find('ar',1,true),
+            '"ar" matches names and aliases, not categories: '..r.label)
     end
     step({'ESCAPE'})
     assert(H.app.view=='search'and H.app.gsearch.text=='','Escape clears the query first')
@@ -1285,7 +1286,7 @@ do
     for _,r in ipairs(H.app:search_results('解放者'))do if r.object.name=='AR-23 Liberator'then found=r end end
     assert(found and found.label=='AR-23 解放者','search by the translated name')
     found=nil
-    for _,r in ipairs(H.app:search_results('liberator'))do if r.object.name=='AR-23 Liberator'then found=r end end
+    for _,r in ipairs(H.app:search_results('liberator'))do if r.object.key=='pw|AR-23 Liberator'then found=r end end
     assert(found,'search by the English name')
     H.app:goto_object(found.object)
     local d=step({},nil,'64_translated_browse')

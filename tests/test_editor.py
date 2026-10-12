@@ -33,6 +33,11 @@ class EditorTests(unittest.TestCase):
             'harness': (LUA/'ui_harness.lua').as_posix()})
         self.assertEqual(result, 'enemy controls apply/reset/export/render ok')
 
+    def test_knife_melee_apply_reset_export_and_render(self):
+        result=lua_file('test_knife_melee.lua', {'sim': (LUA/'sim.lua').as_posix(),
+            'harness': (LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result, 'knife and melee apply/reset/export/render ok')
+
     def test_util(self):
         result = lua_host.run(r'''
             local u=require('mods/skyeshade/hd2runtime_editor/editor/util')
