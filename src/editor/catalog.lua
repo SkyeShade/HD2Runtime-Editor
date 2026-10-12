@@ -1778,6 +1778,7 @@ local function throwable_target(hd2,name,t)
         return function()return hd2.throwable(name):status_effect(key)end
     end
     if path=='bomblet_explosion'then return function()return hd2.throwable(name):bomblets():explosion()end end
+    if path=='arc'then return function()return hd2.throwable(name):explosion():arc()end end
     return function()local th=hd2.throwable(name);return th[path](th)end
 end
 local function throwable_rows(hd2,object,entry)
@@ -1789,6 +1790,7 @@ local function throwable_rows(hd2,object,entry)
         local target=throwable_target(hd2,name,t)
         local section=t.label and join(util.humanize(t.path),t.label)or util.humanize(t.path or key)
         if t.path=='throwable'then section='Throwable'end
+        if t.path=='arc'then section='Explosion Arc'end
         if t.path=='flight'then
             rows[#rows+1]=M.info_row(object,{id='flight:help',label='Launch controls',section=section,
                 text='A positive speed override bypasses the curve',

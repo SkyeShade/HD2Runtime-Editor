@@ -252,6 +252,7 @@ return {
     'Explosion AP: extreme angle',
     'Explosion AP: large angle',
     'Explosion AP: slight angle',
+    'Explosion Arc',
     'Explosion demolition',
     'Explosion durable damage',
     'Explosion inner radius',

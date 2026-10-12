@@ -28,6 +28,11 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_explosion_arcs_apply_reset_export_render(self):
+        result=lua_file('test_explosion_arcs.lua', {'sim': (LUA/'sim.lua').as_posix(),
+            'harness': (LUA/'ui_harness.lua').as_posix()})
+        self.assertIn('explosion arcs apply reset export render ok',result)
+
     def test_reload_heat_apply_reset_export_render(self):
         result=lua_file('test_reload_heat.lua', {'sim': (LUA/'sim.lua').as_posix(),
             'harness': (LUA/'ui_harness.lua').as_posix()})
