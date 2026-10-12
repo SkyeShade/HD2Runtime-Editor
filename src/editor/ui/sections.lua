@@ -11,8 +11,10 @@
 --                    direct hit's status slots, missiles, its impact and expiry explosions (payload slot first, then
 --                    the explosion's stats and status); one set per feed when the weapon has several (Flak, HE ...)
 --   Damage           damage no round carries: a beam's, an arc's, a spray's or a melee hit's, then its status slots
---   Handling / Fire  handling, the weapon's own stats, fire modes, targeting, turret
---   Ammunition       ammunition and magazines, backpack ammunition
+--   Handling / Fire  handling, the weapon's own stats (fire rate ...), fire modes, targeting, turret
+--   Ammunition       the whole ammunition supply in one part ("Ammo & Magazine"): the magazine capacity first (a
+--                    weapon field the catalogue puts there, editor/catalog.lua AMMO_SUPPLY), then the spare, starting
+--                    and supply magazines or rounds, then the reload; backpack ammunition
 --   Heat / Charge    heat, charge, wind-up, recharge
 --   Beam / Arc       the beam swap first, then beam and arc stats
 --   Armory           what the armory shows

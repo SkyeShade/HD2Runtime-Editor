@@ -215,6 +215,11 @@ class EditorTests(unittest.TestCase):
         result = lua_host.run('local f=assert(loadfile(%s)) return f()' % lua_host._lua_string(
             (LUA / 'test_runtime_rows.lua').as_posix()))
         self.assertIn('beam conversion ok', result)
+        self.assertIn('ammunition together ok', result)
+        # HD2Runtime 0.31.3 (vehicle_weapon_authoring reloadComponent): the mounts without a reload
+        vw = lua_host.RUNTIME / 'domains' / 'vehicle_weapon_authoring.lua'
+        if vw.is_file() and 'reloadComponent' in vw.read_text(encoding='utf-8'):
+            self.assertIn('no reload note ok', result)
         pods = lua_host.RUNTIME / 'domains' / 'pod_payload_authoring.lua'
         if pods.is_file() and 'EAT-411 Leveller pod' in pods.read_text(encoding='utf-8'):
             self.assertIn('empty hellpod slots ok', result)

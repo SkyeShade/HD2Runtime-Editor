@@ -1604,6 +1604,40 @@ do
         starts(outline(apw),{'Projectile','  * Projectile','  Flight','  Direct hit','  Direct hit · Status',
             'Handling / Fire'},'APW-1')
     end
+    -- the ammunition supply in one place (0.9.4): the MG-43's capacity heads Ammunition, before its spare, starting and
+    -- supply magazines and its reload; Handling / Fire keeps the fire rate
+    local mg=H.catalog:object('sp|MG-43 Machine Gun')
+    H.app:reveal(mg.rows[1])
+    local function under(object,header)
+        local fields,inside={},false
+        for _,it in ipairs((H.app:field_items(object)))do
+            if it.header and(it.depth or 0)==0 then inside=it.header==header
+            elseif inside and it.row then fields[#fields+1]=it.row.field end
+        end
+        return fields
+    end
+    local ammo,fire=under(mg,'Ammunition'),under(mg,'Handling / Fire')
+    assert(ammo[1]=='weapon.capacity'and ammo[2]=='magazine.spare_magazines'and ammo[3]=='magazine.starting_magazines'
+        and ammo[4]=='magazine.magazines_from_supply'and ammo[5]=='reload.duration',
+        'MG-43 Ammunition: '..table.concat(ammo,', '))
+    assert(index_of(fire,'weapon.fire_rate')and not index_of(fire,'weapon.capacity'),
+        'MG-43 Handling / Fire: '..table.concat(fire,', '))
+    -- a vehicle mount (a group): the capacity in its Ammo & Magazine part, the fire rate alone in Weapon
+    local bastion=H.catalog:object('ve|TD-220 Bastion MK XVI')
+    if bastion then
+        H.app:reveal(bastion.rows[1])
+        H.app:toggle(bastion,'g|Weapon · Coaxial MG',true)
+        H.app:toggle(bastion,'s|Weapon · Coaxial MG|Ammo & Magazine',true)
+        local part,first,rate
+        for _,it in ipairs((H.app:field_items(bastion)))do
+            if it.header=='Ammo & Magazine'and it.parent=='g|Weapon · Coaxial MG'then part=it end
+            if part and not first and it.row and it.parent==part.key then first=it.row end
+            if it.row and it.row.field=='weapon.fire_rate'and it.parent=='g|Weapon · Coaxial MG'then rate=it end
+        end
+        assert(part and first and first.field=='weapon.capacity','Bastion MG: the capacity first in Ammo & Magazine: '
+            ..tostring(first and first.field))
+        assert(rate and rate.fold and rate.prefix=='Weapon','Bastion MG: the fire rate alone in Weapon')
+    end
     -- AR-2 Coyote: no swap; its payload slots alone are rows of Projectile after the direct hit
     local coyote=H.catalog:object('pw|AR-2 Coyote')
     H.app:reveal(coyote.rows[1])

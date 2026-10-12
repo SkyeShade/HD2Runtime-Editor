@@ -190,6 +190,70 @@ do
         out[#out+1]='vehicle mounts ok'
     end
 end
+-- the ammunition supply together (0.9.4): the magazine capacity (a weapon field) in "Ammo & Magazine" with the spare,
+-- starting and supply counts and the reload, in that order, on vehicle mounts, sentries and support weapons; the other
+-- weapon fields stay in Handling / Fire; row keys unchanged
+do
+    local RANK={'capacity','spare','starting','supply','reload'}
+    local function kind(field)
+        local rank=catalog.ammo_rank(field)
+        return rank and RANK[rank]or nil
+    end
+    -- the rows of one section, in order, by kind
+    local function order(list,group,field)
+        local anchor=find(list,function(r)return r.group==group and r.field==field end)
+        if not anchor then return nil end
+        local kinds={}
+        for _,r in ipairs(list)do
+            if r.group==group and r.section==anchor.section and kind(r.field)then kinds[#kinds+1]=kind(r.field)end
+        end
+        return table.concat(kinds,' '),anchor
+    end
+    local checked=0
+    for _,item in ipairs({{'ve|TD-220 Bastion MK XVI','Weapon · Cannon'},
+        {'ve|TD-220 Bastion MK XVI','Weapon · Coaxial MG'},{'ve|EXO-45 Patriot Exosuit','Weapon · Left gun'},
+        {'sp|MG-43 Machine Gun'},{'st|A/MG-43 Machine Gun Sentry'}})do
+        local list=rows(item[1])
+        local text,anchor=order(list or{},item[2],'weapon.capacity')
+        if text then
+            checked=checked+1
+            local where=item[1]..(item[2]and(' / '..item[2])or'')
+            check(sections.classify(anchor.section)=='ammo','capacity in Ammunition on '..where..': '..anchor.section)
+            check(anchor.section:find('Ammo & Magazine$'),'capacity in Ammo & Magazine on '..where..': '..anchor.section)
+            check(text:find('^capacity'),'capacity first on '..where..': '..text)
+            local last=0
+            for word in text:gmatch('%S+')do
+                local r
+                for i,k in ipairs(RANK)do if k==word then r=i end end
+                check(r>=last,'ammunition order on '..where..': '..text)
+                last=r
+            end
+            check(anchor.key:find('weapon.capacity',1,true)and not anchor.key:find('Ammo',1,true),
+                'row key unchanged: '..anchor.key)
+            -- the remaining weapon rows of the same object in Handling / Fire
+            local rate=find(list,function(r)return r.group==item[2]and r.field=='weapon.fire_rate'end)
+            check(not rate or sections.classify(rate.section)=='fire','fire rate in Handling / Fire on '..where)
+        end
+    end
+    check(checked>0,'no page with weapon.capacity')
+    -- rounds-fed weapons: the feed capacity first (the AC-8 and, HD2Runtime 0.31.3, the EXO-55 Breakthrough cannon)
+    for _,item in ipairs({{'sp|AC-8 Autocannon'},{'ve|EXO-55 Breakthrough Exosuit','Weapon · Right gun'}})do
+        local text=order(rows(item[1])or{},item[2],'rounds.spare_rounds')
+        if text then
+            check(text:find('^capacity')and text:find('spare starting supply',1,true),item[1]..' rounds order: '..text)
+        end
+    end
+    -- a mount without a reload (HD2Runtime 0.31.3 reloadComponent.present = false): its spare counts say so
+    local mg=rows('ve|TD-220 Bastion MK XVI')
+    local spare=find(mg,function(r)return r.group=='Weapon · Coaxial MG'and r.field=='magazine.spare_magazines'end)
+    if spare and type(spare.descriptor.reloadComponent)=='table'and spare.descriptor.reloadComponent.present==false then
+        check(spare.note and spare.note:find('expected to have no effect',1,true),'no-reload note: '..tostring(spare.note))
+        local cannon=find(mg,function(r)return r.group=='Weapon · Cannon'and r.field=='magazine.spare_magazines'end)
+        check(cannon and not cannon.note,'the cannon reloads: no note')
+        out[#out+1]='no reload note ok'
+    end
+    out[#out+1]='ammunition together ok'
+end
 -- damage zones by their native names where the Runtime's entity data has one ("Zone N" otherwise)
 do
     local E=require('hd2runtime/domains/entity_authoring')

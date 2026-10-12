@@ -93,9 +93,29 @@ local UI_GROUPS={backpack_ammo='Ammo',drone_magazines='Drone Magazines'}
 local WIND_UP={['heat.firing_charge']=true,['heat.charge_gain_per_second']=true,['heat.charge_loss_per_second']=true,
     ['heat.reset_charge_after_shot']=true}
 local HANDLING={recoil=true,spread=true,sway=true,ergonomics=true,reticle=true,aim=true,zoom=true}
+-- The ammunition supply, together in one section ("Ammo & Magazine", the page's Ammunition category) wherever its
+-- fields come from: the rounds a magazine or feed holds first (weapon.capacity is a weapon field, but a player looks
+-- for it beside the spare magazines), then the spare, starting and supply counts, then the reload. By field id; a rank
+-- orders the rows of one section (presentation only: row keys and preset keys are unchanged).
+local AMMO_SUPPLY={['weapon.capacity']=true,['weapon.base_capacity']=true,['weapon.feed_capacity_1']=true,
+    ['weapon.feed_capacity_2']=true}
+local AMMO_RANK={['weapon.capacity']=1,['weapon.base_capacity']=1,['weapon.feed_capacity_1']=1,
+    ['weapon.feed_capacity_2']=1,['magazine.capacity']=1,['rounds.capacity']=1,['rounds.feed_capacity_1']=1,
+    ['rounds.feed_capacity_2']=1,['attachment.magazine_capacity']=1,
+    ['magazine.spare_magazines']=2,['rounds.spare_rounds']=2,['attachment.spare_magazines']=2,
+    ['magazine.starting_magazines']=3,['rounds.starting_rounds']=3,['attachment.starting_magazines']=3,
+    ['magazine.magazines_from_supply']=4,['rounds.rounds_from_supply']=4,['attachment.magazines_from_supply']=4,
+    ['magazine.magazines_from_ammo_box']=4,['rounds.rounds_from_ammo_box']=4,
+    ['attachment.reload_duration']=5}
+local function ammo_rank(field)
+    field=tostring(field)
+    return AMMO_RANK[field]or(field:find('^reload%.')and 5)or nil
+end
+M.ammo_rank=ammo_rank
 local function domain_of(id)return tostring(id):match('^([^%.]+)')or'other'end
 local function domain_label(id)
     if WIND_UP[tostring(id)]then return 'Wind-up'end
+    if AMMO_SUPPLY[tostring(id)]then return DOMAIN_LABELS.magazine end
     local domain=domain_of(id)
     if domain=='weapon'then
         local name=tostring(id):match('^weapon%.(.+)$')or''
@@ -1470,6 +1490,10 @@ M.mount_label=mount_label
 -- Notes on a vehicle weapon's field, by the weapon (vehicle_weapon_authoring key) and field.
 local VW_NOTES={['TD-220 Bastion MK XVI / attach_tank_gun_mg']={
     ['weapon.capacity']='Single belt, no reload: at most 2047 rounds (the game\'s network limit)'}}
+-- (the Runtime's own note is a paragraph; the status line shows this short form of it)
+local VW_NO_RELOAD_NOTES={no_reload='No reload on this mount: expected to have no effect (HD2Runtime, not proven). '
+    ..'Magazine capacity is its whole supply'}
+local VW_NO_RELOAD_NOTE=VW_NO_RELOAD_NOTES.no_reload
 local function vehicle_rows(hd2,object,entry)
     local rows={}
     local name=entry.name
@@ -1654,6 +1678,10 @@ local function vehicle_weapon_rows(hd2,object,entry)
     for _,r in ipairs(rows)do
         r.mb_resource,r.mb_entity,r.mb_where='vehicle_weapon',entry.name,''
         if notes[r.field]and not r.note then r.note=notes[r.field]end
+        -- HD2Runtime 0.31.3: a mount without a WeaponReload (the Bastion coax, the magazine Exosuit arms) flags its
+        -- spare-magazine fields reloadComponent.present = false: writable, but expected to have no effect
+        local reload=r.descriptor and r.descriptor.reloadComponent
+        if type(reload)=='table'and reload.present==false and not r.note then r.note=VW_NO_RELOAD_NOTE end
     end
     -- Its projectile swap, as the primaries have it (HD2Runtime 0.30.x mounted projectile hosts: the EXO-45 Patriot
     -- minigun, both EXO-49 Emancipator autocannons, the EXO-51 Lumberer cannon, the FRV and GATER Oil Rig guns, the
@@ -3037,6 +3065,33 @@ local function status_children(rows)
     return out
 end
 M.status_children=status_children
+-- The ammunition rows of each section in their order (ammo_rank: capacity, spare, starting, supply, reload), in the
+-- places those rows already hold: any other row of the section (a magazine's ergonomics) stays where it is.
+local function ammo_order(rows)
+    local by={}
+    for i,r in ipairs(rows)do
+        local rank=r and ammo_rank(r.field)
+        if rank then
+            local key=tostring(r.group or'')..'\0'..tostring(r.section)
+            local list=by[key]
+            if not list then list={};by[key]=list end
+            list[#list+1]={i=i,rank=rank,row=r}
+        end
+    end
+    for _,list in pairs(by)do
+        if#list>1 then
+            local sorted={}
+            for n,e in ipairs(list)do sorted[n]=e end
+            table.sort(sorted,function(a,b)
+                if a.rank~=b.rank then return a.rank<b.rank end
+                return a.i<b.i
+            end)
+            for n,e in ipairs(list)do rows[e.i]=sorted[n].row end
+        end
+    end
+    return rows
+end
+M.ammo_order=ammo_order
 -- An object's rows and sections (built once): object.rows, object.sections = {{label, rows}}.
 function Catalog:open(object)
     if object.rows then return object end
@@ -3045,7 +3100,7 @@ function Catalog:open(object)
         object.rows,object.sections,object.error={},{},tostring(rows)
         return object
     end
-    rows=status_children(status_slots(rows))
+    rows=ammo_order(status_children(status_slots(rows)))
     object.rows,object.sections={},{}
     local by_label={}
     for _,row in ipairs(rows)do

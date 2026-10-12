@@ -409,6 +409,7 @@ return {
     'No preset files in %s yet',
     'No preset files yet. Drop one into the folder above, then press REFRESH.',
     'no published range',
+    'No reload on this mount: expected to have no effect (HD2Runtime, not proven). Magazine capacity is its whole supply',
     'no terminal explosion',
     'No values are available for this field',
     'None',
