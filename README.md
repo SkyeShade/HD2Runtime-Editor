@@ -18,6 +18,11 @@ repairs reloaded values through the normal guarded path. Apply/reset work and
 preset imports finish while closed. No import polling runs without a dialog or
 import job. The Runtime's language settings and performance graph are retained.
 
+Dev7 keeps that idle policy. Runtime's F10 Performance graph names the Editor's
+window as **HD2R Editor UI** and its updates/jobs as **HD2R Editor work**. The F10
+window's own cost is split into layout, GUI sync and resources/input. Unchanged
+graph geometry and repeated text measurements are cached; input stays responsive.
+
 Weapon and grenade silhouettes are now included as exact local atlas extracts
 using the same startup-loaded image path as boosters and stratagems, preserving
 their proportions. They no longer depend on the native mission atlas drawing
