@@ -25,7 +25,11 @@ M.GROUPS={
     {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'}}},
     {id='enemies',label='ENEMIES',items={
         {id='terminids',label='Terminids'},{id='automatons',label='Automatons'},{id='illuminate',label='Illuminate'},
-        {id='structures',label='Structures'}}},
+        {id='structures',label='Structures'},{id='enemy_entities',label='Other Entities'}}},
+    {id='enemy_director',label='SPAWNING & DESTRUCTION',items={
+        {id='enemy_difficulty',label='Mission Difficulty'},{id='enemy_rosters',label='Spawn Rosters'},
+        {id='enemy_compositions',label='Spawn Compositions'},{id='demolition_templates',label='Demolition Templates'},
+        {id='destruction_models',label='Destruction Models'}}},
 }
 
 local NUMERIC={number=true,integer=true}
@@ -45,6 +49,10 @@ end
 ---------------------------------------------------------------------------------------------- native identity --
 local shared_records
 local function location(descriptor,fallback)
+    if type(descriptor)=='table'and type(descriptor.target)=='table'and descriptor.target.resource=='enemy_director'then
+        local t=descriptor.target
+        return 'director/'..t.path..'/'..t.key..'/'..descriptor.semanticFieldId
+    end
     if shared_records==nil then
         local ok,value=pcall(require,'hd2runtime/core/shared_records')
         shared_records=ok and type(value)=='table'and value or false
@@ -2392,6 +2400,8 @@ function CATEGORY.boosters(cat)
 end
 local function enemy_category(filter)
     return function(cat)
+        local expanded=require('mods/skyeshade/hd2runtime_editor/editor/enemies').entities(cat,M,filter)
+        if expanded then return expanded end
         local EN,why=load('enemy_authoring')
         if not EN then return nil,why end
         local list={}
@@ -2596,6 +2606,14 @@ CATEGORY.terminids=enemy_category(function(e)return e.kind=='enemy'and e.faction
 CATEGORY.automatons=enemy_category(function(e)return e.kind=='enemy'and e.faction=='automatons'end)
 CATEGORY.illuminate=enemy_category(function(e)return e.kind=='enemy'and e.faction=='illuminate'end)
 CATEGORY.structures=enemy_category(function(e)return e.kind=='structure'end)
+CATEGORY.enemy_entities=enemy_category(function(e)return e.kind~='structure'and(e.kind~='enemy'
+    or(e.faction~='terminids'and e.faction~='automatons'and e.faction~='illuminate'))end)
+for category,kind in pairs({enemy_difficulty='difficulty',enemy_rosters='roster',enemy_compositions='composition',
+    demolition_templates='demolition_template'})do
+    local k=kind
+    CATEGORY[category]=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').director(cat,M,k)end
+end
+CATEGORY.destruction_models=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').models(cat,M)end
 M.CATEGORY=CATEGORY
 
 -- The categories that can hold an object key's family (presets name rows by key; mods' claims name family objects).
@@ -2603,7 +2621,8 @@ local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},bo={'boost
     st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},ex={'resupply'},
-    en={'terminids','automatons','illuminate','structures'},hd={'helldiver'},ar={'armor'},se={'status_effects'}}
+    en={'terminids','automatons','illuminate','structures','enemy_entities'},hd={'helldiver'},ar={'armor'},se={'status_effects'},
+    ed={'enemy_difficulty','enemy_rosters','enemy_compositions','demolition_templates'},dm={'destruction_models'}}
 
 ------------------------------------------------------------------------------ what a swapped weapon fires --
 -- After a projectile swap (staged or applied) the weapon fires the donor's projectile, and HD2Runtime refuses the
@@ -2822,6 +2841,14 @@ local function traced(hd2)
     return setmetatable({},{__index=function(_,key)
         local tracing=export_module.tracing
         if tracing and type(hd2[key])=='function'then return tracing(key)end
+        if key=='enemies'and type(hd2[key])=='table'then
+            return setmetatable({},{__index=function(_,method)
+                if export_module.tracing and type(hd2[key][method])=='function'then
+                    return export_module.tracing('enemies.'..method)
+                end
+                return hd2[key][method]
+            end,__call=function(_,...)return hd2[key](...)end})
+        end
         return hd2[key]
     end})
 end

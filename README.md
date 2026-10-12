@@ -2,6 +2,19 @@
 
 # HD2R Editor
 
+**Local 0.10.0 development build for HD2Runtime 0.32.0.** The Enemies pages now
+include the expanded enemy and structure catalogue, size, shields, jammers,
+spawner settings, damage zones and attacks. Other Entities includes unnamed
+controllers and mounted shields. Search component names such as `HiveMind` or
+`Bughole` to find their controls.
+
+Under **Spawning & Destruction**, browse Mission Difficulty, Spawn Rosters,
+Spawn Compositions, Demolition Templates and Destruction Models. Apply spawn
+source changes aboard the ship before the next mission. Scale applies to new
+units; transport capacity is measured in cells; zero spawn weight is not a
+global enemy ban. Demolition templates affect every structure using that template.
+Unproven fields stay locked. See [local build notes](docs/releases/0.10.0-local.md).
+
 *HD2R Editor (formerly HD2Runtime Editor) is a mod built on HD2Runtime; it is not HD2Runtime itself.*
 
 **Live, in-game editing of every value [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) exposes, on top of the mods you have installed.**

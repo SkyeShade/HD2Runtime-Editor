@@ -68,7 +68,7 @@ function M.install(App)
                     if object.search_language~=names then
                         object.search_language=names
                         object.search_text=(object.name..' '..tostring(object.subtitle or'')..' '..name..' '
-                            ..tostring(sub or'')):lower()
+                            ..tostring(sub or'')..' '..tostring(object.search_terms or'')):lower()
                     end
                     local ok=not seen[object.key]
                     for _,w in ipairs(list)do

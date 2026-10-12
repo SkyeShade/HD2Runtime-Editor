@@ -44,6 +44,7 @@ local function object_key(spec)
     if kind=='throwable'and spec.throwable then return 'th|'..spec.throwable end
     if kind=='booster'and spec.booster then return 'bo|'..spec.booster end
     if kind=='enemy'and spec.enemy then return 'en|'..spec.enemy end
+    if kind=='enemy_director'and spec.row then return 'ed|'..spec.row end
     if kind=='attachment'and spec.attachment then return 'mg|'..spec.attachment end
     return nil
 end

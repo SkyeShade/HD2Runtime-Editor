@@ -116,7 +116,7 @@ function App:objects()
     for _,object in ipairs(list)do
         -- the English name and subtitle, and the ones shown (translated): either matches
         local hay=(object.name..' '..(object.subtitle or'')..' '..util.display_name(object)..' '
-            ..(util.display_subtitle(object)or'')):lower()
+            ..(util.display_subtitle(object)or'')..' '..(object.search_terms or'')):lower()
         if(not q or hay:find(q,1,true))and(not group or object.subtitle==group)then out[#out+1]=object end
     end
     self.filter_key,self.filtered=key,out

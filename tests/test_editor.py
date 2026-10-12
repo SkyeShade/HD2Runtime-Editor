@@ -28,6 +28,11 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_enemy_controls_apply_reset_export_and_render(self):
+        result=lua_file('test_enemy_controls.lua', {'sim': (LUA/'sim.lua').as_posix(),
+            'harness': (LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result, 'enemy controls apply/reset/export/render ok')
+
     def test_util(self):
         result = lua_host.run(r'''
             local u=require('mods/skyeshade/hd2runtime_editor/editor/util')
@@ -176,6 +181,9 @@ class EditorTests(unittest.TestCase):
     def test_catalogue_rows_pass_the_runtime_validator(self):
         src = (HERE / 'catalog_report.lua').read_text(encoding='utf-8')
         report = lua_host.run('local f=assert(loadstring(%s,"@catalog_report")) return f(nil)' % lua_host._lua_string(src))
+        # Optional categories may report unavailable on an older/development Runtime;
+        # an object offered for browsing must always build successfully.
+        self.assertNotRegex(report, r'(?m)^OBJECT .* failed:', report)
         total = re.search(r'TOTAL rows=(\d+) editable=(\d+) valid=(\d+)', report)
         self.assertIsNotNone(total, report)
         rows, editable, valid = map(int, total.groups())

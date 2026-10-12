@@ -100,8 +100,8 @@ function Presets:put(list)
     local size=json_size(list)
     for _,key in ipairs({'session','settings'})do size=size+json_size(self.store:get(key,{}))+#key+4 end
     if size>M.STORE_LIMIT-M.HEADROOM then
-        return false,('the saved presets would take %d KB; HD2Runtime keeps at most %d KB per mod with room for the '
-            ..'session: delete a preset, or keep this one as a shared file (SHARE)'):format(math.ceil(size/1024),
+        return false,('saved presets would take %d KB (limit %d KB). Keep this as a shared file (SHARE), '
+            ..'or delete saved presets.'):format(math.ceil(size/1024),
             math.floor((M.STORE_LIMIT-M.HEADROOM)/1024))
     end
     local ok,why=pcall(self.store.set,self.store,'presets',list)
