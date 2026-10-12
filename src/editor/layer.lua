@@ -160,7 +160,22 @@ local Layer={};Layer.__index=Layer
 
 function M.new(opts)
     return setmetatable({hd2=opts.hd2,id=opts.id,ledger=opts.ledger,catalog=opts.catalog,
-        log=opts.log or function()end,slots={},groups={},released={},counter=0,version=0,history={},touched={}},Layer)
+        log=opts.log or function()end,slots={},groups={},released={},counter=0,version=0,history={},touched={},
+        visible=opts.visible~=false},Layer)
+end
+
+-- Visibility controls upkeep, never ownership or unfinished writes. Reopening wakes held ensures for verification.
+function Layer:set_visible(visible)
+    visible=visible==true
+    if self.visible==visible then return end
+    self.visible=visible
+    if visible then self.pending=true;self.next_refresh=nil end
+    for _,slot in pairs(self.slots)do
+        for _,key in ipairs({'watch','next_watch'})do
+            local w=slot[key]
+            if w and type(w.set_verification_enabled)=='function'then w.set_verification_enabled(visible)end
+        end
+    end
 end
 
 local function note(self,text)
@@ -543,7 +558,7 @@ function Layer:register(row,handle)
             for key,on in pairs(patch)do if key:match('^allow_')and on then t[key]=true end end
             body={transaction=t}
         end
-        local request={patch=body.patch,transaction=body.transaction,startup_delay=0,interval=30,recover=true,
+        local request={patch=body.patch,transaction=body.transaction,startup_delay=0,interval=1,max_interval=1,recover=true,
             on_status=function(status,info)
                 self.pending=true
                 note(self,'ensure '..id..' ('..tostring(row.object and row.object.name)..') '
@@ -554,6 +569,7 @@ function Layer:register(row,handle)
     end)
     if not ok then return {status='rejected',error=tostring(watch)}end
     if type(watch)~='table'then return {status='rejected',error='the Runtime returned no operation'}end
+    if type(watch.set_verification_enabled)=='function'then watch.set_verification_enabled(self.visible)end
     return watch
 end
 
@@ -922,12 +938,12 @@ local function swap_wait(self,slot)
     return false
 end
 
--- Drive unfinished work every update. A settled layer wakes on an edit/reset or an ensure status notification.
--- Perk handles have no status callback, so compare that one handle without walking all held fields.
+-- Drive unfinished work every update; refresh held state once a second while open. No idle polling while closed.
 function Layer:tick(dt)
     self.clock=(self.clock or 0)+(dt or 0)
-    local perks=self.perks
-    if self.pending==false and not(perks and perks.handle and perks.handle.status~=perks.status)then return end
+    local refresh=self.visible and self.clock>=(self.next_refresh or 0)
+    if refresh then self.next_refresh=self.clock+1 end
+    if self.pending==false and not refresh then return end
     step_perks(self)
     for i=#self.groups,1,-1 do
         if step_group(self,self.groups[i])then table.remove(self.groups,i)end

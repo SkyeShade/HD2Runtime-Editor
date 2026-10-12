@@ -250,9 +250,10 @@ function M.start(hd2,id)
     local background_error
     mod:on_frame(function(dt)
         clock=clock+(dt or 0)
-        layer:tick(dt or 0)
-        -- a preset import (and the Windows dialog it waits for) goes on while the window is closed
         local visible=overlay:status().visible
+        layer:set_visible(visible)
+        if visible or layer.pending~=false then layer:tick(dt or 0)end
+        -- a preset import (and the Windows dialog it waits for) goes on while the window is closed
         if not visible and(app.pf_job or app.pf_picking)then
             local ok,why=pcall(app.background_tick,app)
             if not ok and why~=background_error then background_error=why;log('preset import failed: '..tostring(why))end

@@ -15,5 +15,5 @@
       "module": "mods/skyeshade/hd2runtime"
     }
   },
-  "sdk": "../HD2Runtime/sdk"
+  "sdk": "../HD2Runtime-dev6/sdk"
 }

@@ -469,7 +469,10 @@ do
             read_only=read_only+1
         end
     end
-    if read_only==2 then out[#out+1]='read-only swaps ok'end
+    -- The GL-28 becomes writable with the local 0.32.0 backpack-host proof; the Maxigun remains locked.
+    local belt=hd2.support_weapon('GL-28 Belt-Fed Grenade Launcher'):projectile_source('primary')
+    check(read_only==(belt.writable and 1 or 2),'read-only host coverage')
+    out[#out+1]='read-only swaps ok'
 end
 -- player weapons: the swap on the attack, or on the default ammunition (the Liberator), takes the projectile rows
 do

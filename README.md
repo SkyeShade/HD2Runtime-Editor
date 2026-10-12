@@ -11,12 +11,12 @@ PLAS-39 exposes charged-burst count/interval, charge times, multipliers, and
 Single/Unsafe modes. Unsafe can destroy the weapon at its overcharge threshold;
 the destruction switch is also editable. These controls need gameplay testing.
 
-Dev5 reduces the cost of settled presets: the Editor stops scanning held fields
-until an edit, reset or operation status change wakes it. The matching Runtime
-build sleeps each ensure between periodic verification checks (30 seconds at
-first, backing off to 600 seconds). Those checks let presets recover when game
-data reloads. Apply/reset work and preset imports continue while the window is
-closed; no import polling runs unless a dialog or import job is active.
+Dev6 is based on Runtime 0.31.3 and Editor 0.9.4, with the local additions carried
+forward. Held values refresh once per second while the Editor is open. Closing
+it pauses periodic verification and field refreshes; opening resumes checks and
+repairs reloaded values through the normal guarded path. Apply/reset work and
+preset imports finish while closed. No import polling runs without a dialog or
+import job. The Runtime's language settings and performance graph are retained.
 
 Weapon and grenade silhouettes are now included as exact local atlas extracts
 using the same startup-loaded image path as boosters and stratagems, preserving
@@ -360,11 +360,12 @@ The build uses the HD2Runtime SDK (the `sdk/` folder of an HD2Runtime checkout, 
 py build.py      # or double-click build.cmd
 ```
 
-`build.py` finds the SDK through `HD2RUNTIME_SDK`, then the `sdk` path in `hd2runtime.json` (`../HD2Runtime/sdk`), then the parent folders. It runs `hd2.py build`, which packs every `src/**/*.lua` and ships the icon as `thumbnail.png` (the manifest's `IconPath`). It then writes the Arsenal description into `manifest.json`. The result is `build/HD2REditor-<version>.zip`.
+`build.py` finds the SDK through `HD2RUNTIME_SDK`, then the `sdk` path in `hd2runtime.json` (`../HD2Runtime-dev6/sdk` on this local branch), then the parent folders. It runs `hd2.py build`, which packs every `src/**/*.lua` and ships the icon as `thumbnail.png` (the manifest's `IconPath`). It then writes the Arsenal description into `manifest.json`. The result is `build/HD2REditor-<version>.zip`.
 
 ## Tests
 
 ```powershell
+$env:HD2RUNTIME_ROOT='../HD2Runtime-dev6'
 py -m unittest discover -s tests -v
 ```
 

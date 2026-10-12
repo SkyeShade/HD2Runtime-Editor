@@ -17,7 +17,7 @@ for name,e in pairs(D.weapons)do
   local r=find(name,expected);assert(r.editable,tostring(r.reason));firearms=firearms+1
  end end
 end
-assert(firearms==73,'reload coverage '..firearms)
+assert(firearms==74,'reload coverage '..firearms) -- Includes the 0.31.3 LAS-22 Shear.
 local excluded=false
 for _,r in ipairs(rows('ARC-12 Blitzer'))do if r.id=='reload.not_applicable'or r.label=='Reload'then
  assert(not r.editable);excluded=true
@@ -27,6 +27,7 @@ local function settle()for _=1,240 do H.sim.tick(0.1);H.layer:tick(0.1)end end
 for _,item in ipairs({
  {'AR-23 Liberator','attachment.reload_duration',1.5},
  {'P-4 Senator','reload.duration',1.25},
+ {'LAS-22 Shear','reload.duration',1.5},
  {'LAS-17 Double-Edge Sickle','heat.fire_rate_multiplier_max',2},
  {'LAS-17 Double-Edge Sickle','heat.fire_rate_curve_exponent',2},
  {'LAS-17 Double-Edge Sickle','heat.level_1.damage.standard_damage',150},
@@ -41,4 +42,4 @@ for _,item in ipairs({
  assert(H.layer:reset(r));settle();assert(math.abs(H.sim.value(r)-r.held_vanilla)<0.00001)
  H.app:reveal(r);local frame=H.frame({});assert(#frame.refused==0,tostring(frame.refused[1]))
 end
-return '73 reloads and heat controls apply reset export render ok'
+return '74 reloads and heat controls apply reset export render ok'
