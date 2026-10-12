@@ -747,6 +747,10 @@ local function player_rows(hd2,object,entry)
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
         local timing=f.reloadTiming
+        if timing and timing.noReloadAbility then
+            rows[#rows+1]=info_row(object,{id='reload.not_applicable',label='Reload',text='Not applicable',
+                reason=f.reason,section='Ammo & Magazine'})
+        end
         if timing and timing.defaultAttachment then
             local A=load('attachment_authoring')
             local attachment=A and A.attachments[timing.defaultAttachment]

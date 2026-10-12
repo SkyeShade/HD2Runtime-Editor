@@ -12,12 +12,17 @@ local function find(name,field)
  error(name..' missing '..field)
 end
 for name,e in pairs(D.weapons)do
- for _,f in ipairs(e.fields)do if f.reloadTiming then
+ for _,f in ipairs(e.fields)do if f.reloadTiming and not f.reloadTiming.noReloadAbility then
   local expected=f.reloadTiming.defaultAttachment and 'attachment.reload_duration'or'reload.duration'
   local r=find(name,expected);assert(r.editable,tostring(r.reason));firearms=firearms+1
  end end
 end
-assert(firearms==74,'reload coverage '..firearms)
+assert(firearms==73,'reload coverage '..firearms)
+local excluded=false
+for _,r in ipairs(rows('ARC-12 Blitzer'))do if r.id=='reload.not_applicable'or r.label=='Reload'then
+ assert(not r.editable);excluded=true
+end end
+assert(excluded,'Blitzer must explain why no reload control exists')
 local function settle()for _=1,240 do H.sim.tick(0.1);H.layer:tick(0.1)end end
 for _,item in ipairs({
  {'AR-23 Liberator','attachment.reload_duration',1.5},
@@ -36,4 +41,4 @@ for _,item in ipairs({
  assert(H.layer:reset(r));settle();assert(math.abs(H.sim.value(r)-r.held_vanilla)<0.00001)
  H.app:reveal(r);local frame=H.frame({});assert(#frame.refused==0,tostring(frame.refused[1]))
 end
-return '74 reloads and heat controls apply reset export render ok'
+return '73 reloads and heat controls apply reset export render ok'

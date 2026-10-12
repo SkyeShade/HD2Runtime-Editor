@@ -528,6 +528,7 @@ return {
     'REGISTERED',
     'Releases an electric arc',
     'Releases shrapnel or bomblets of its own',
+    'Reload',
     'Reload duration (default magazine)',
     'RELOAD LANGUAGES',
     'REMOVING',
