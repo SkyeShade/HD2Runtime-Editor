@@ -20,7 +20,39 @@ local function entity_name(name,W)
 end
 local function section(id)return TITLES[tostring(id):match('^([^%.]+)')]or title(tostring(id):match('^([^%.]+)'))end
 local function sorted(list)
-    table.sort(list,function(a,b)return a.name:lower()..a.key<b.name:lower()..b.key end);return list
+    table.sort(list,function(a,b)
+        if (a.control_rank or 0)~=(b.control_rank or 0)then return(a.control_rank or 0)<(b.control_rank or 0)end
+        return a.name:lower()..a.key<b.name:lower()..b.key
+    end);return list
+end
+-- Use the same descriptors and restore limits as the rows. Cache once per
+-- canonical entity so navigation does not rebuild its field descriptors.
+local control_groups=setmetatable({},{__mode='k'})
+local function control_group(e,W)
+    if control_groups[e] then return unpack(control_groups[e])end
+    local gameplay,size=0,0
+    for _,f in ipairs(e.fields or{})do
+        local d=W.descriptor(e,f);local value=d.currentDefault
+        if d.editable and type(value)=='number'and(not d.min or value>=d.min)and(not d.max or value<=d.max)then
+            if f.id:match('^unit%.')then size=size+1 else gameplay=gameplay+1 end
+        end
+    end
+    local group,rank='Inspection only',3
+    if gameplay>0 then group,rank='Gameplay controls',1 elseif size>0 then group,rank='Size only',2 end
+    control_groups[e]={group,rank}
+    return group,rank
+end
+local SECTION_RANK={['Health & Armor']=10,['Damage Zones']=20,Attacks=30,Spawning=40,
+    ['Director Multipliers']=40,Transport=45,['Bug Breach']=45,Shield=50,['Stratagem Jammer']=50,
+    Destruction=60,Demolition=60,['Size & Geometry']=80,Behavior=90}
+local function useful_rows_first(rows)
+    for i,r in ipairs(rows)do r.control_order=i end
+    table.sort(rows,function(a,b)
+        local ar=SECTION_RANK[a.group or a.section]or 70
+        local br=SECTION_RANK[b.group or b.section]or 70
+        return ar<br or(ar==br and a.control_order<b.control_order)
+    end)
+    return rows
 end
 local function info(H,rows,o,id,label,text,section,group,note)
     text=tostring(text or'Unresolved')
@@ -98,23 +130,26 @@ function M.entity_rows(cat,H,o,name,W)
             m.association=='direct_unit'and'Direct model association.'or'Embedded model reference; this is not proof every placed variant uses it.')
         stage_rows(H,rows,o,m.stages,'model:'..i,'Destruction models')
     end
-    return rows
+    return useful_rows_first(rows)
 end
 function M.entities(cat,H,filter)
     local ok,W=pcall(require,'hd2runtime/domains/enemy_writes')
     if not ok or type(W.entries)~='function'then return nil end
     local list={}
     for name,e in pairs(W.entries())do if filter(e)then
+        e=W.entry(name)
+        local control,rank=control_group(e,W)
         local key=name;local label=e.displayName or e.wikiName or e.name or key
         local components=e.components or(e.pendingControls and e.pendingControls.components)or{}
         local tags={}
         for _,component in ipairs(components)do tags[#tags+1]=component:gsub('ComponentData$','')end
         local iconKind,iconName,iconFaction=require('mods/skyeshade/hd2runtime_editor/editor/icons').entity(key,e)
-        local subtitle=title(e.faction or e.kind)
+        local subtitle=title(e.faction or e.kind)..' / '..control
         local full=e.fullDisplayName or(e.displayName and(e.displayName..(e.variantLabel and(' - '..e.variantLabel)or'')))
         list[#list+1]={key='en|'..key,name=full or title(label),subtitle=subtitle,
+            filter_group=control,control_rank=rank,
             iconKind=iconKind,iconName=iconName,iconFaction=iconFaction,
-            search_terms=key..' '..(e.className or'')..' '..(e.gameName or'')..' '..table.concat(tags,' '),
+            search_terms=key..' '..control..' '..(e.className or'')..' '..(e.gameName or'')..' '..table.concat(tags,' '),
             detail=table.concat(tags,', ')..'. Authored type values; existing instances may retain private copies.',
             build=function(o)return M.entity_rows(cat,H,o,key,W)end}
     end end

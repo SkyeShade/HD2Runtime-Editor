@@ -1,4 +1,4 @@
-"""The game's own stratagem and booster icons as the editor's images (a local, opt-in build step).
+"""The game's own HUD icons as the editor's images (a local, opt-in build step).
 
     py tools/game_icons.py                        # from the installed game (read-only), then build normally
     py tools/game_icons.py --game "D:\\SteamLibrary\\steamapps\\common\\Helldivers 2\\data"
@@ -16,7 +16,9 @@ Every icon is the game's own pixels: nothing is drawn, traced or converted from 
 4. The accent colour of a stratagem (what the overlay paints R with) is the colour the game's own loadout icon
    library gives that stratagem's icon; a stratagem that library leaves out takes its family's colour from the same
    library.
-5. Writes images/si_<id>.png and images/bi_<id>.png, and src/editor/generated/game_icons.lua: name -> {image,
+5. Weapon and throwable silhouettes use the exact red-mask atlas pixels, proportionally fitted and padded to a square.
+6. Writes images/si_<id>.png, images/bi_<id>.png, images/wi_<id>.png, images/ti_<id>.png,
+   and src/editor/generated/game_icons.lua: name -> {image,
    accent}. An item without a sprite (SG-88 and CQC-72 have no call-in stratagem) gets no icon; the editor
    then draws a plain colour square.
 
@@ -39,7 +41,7 @@ LIBRARIES = {
     'stratagem': 'content/ui/shared/resources/generated_icons/stratagem_icons',
     'booster': 'content/ui/shared/resources/generated_icons/booster_icons',
 }
-PREFIX = {'stratagem': 'si_', 'booster': 'bi_'}
+PREFIX = {'stratagem': 'si_', 'booster': 'bi_', 'weapon': 'wi_', 'throwable': 'ti_'}
 # Reviewed by hand: the library icon of a stratagem whose type binding is missing (uiIcon state 'unbound').
 UNBOUND = {'AC-8 Autocannon': 'StratagemWeaponAutocannon'}
 NS = '{http://schemas.microsoft.com/winfx/2006/xaml/presentation}'
@@ -212,7 +214,7 @@ def main():
         counts = by_family.get(s.get('family')) or by_family.get('support') or {(255, 255, 255): 1}
         return max(counts.items(), key=lambda kv: kv[1])[0]
 
-    images, mapping, missing = {}, {'stratagem': {}, 'booster': {}}, []
+    images, mapping, missing = {}, {kind: {} for kind in PREFIX}, []
     for s in stratagems:
         got = hud.icon('stratagem', s['name'])
         if got is None:
@@ -233,6 +235,27 @@ def main():
         images[iid] = mask
         mapping['booster'][b['name']] = {'image': iid, 'accent': plate}
 
+    # Use the exact HUD red mask, padded to a square without stretching. These
+    # local assets use the same startup-loaded material path as our other icons.
+    for kind, group in (('weapon', 'weapons'), ('throwable', 'throwables')):
+        for name in hud.names.get(group, {}):
+            got = hud.icon(kind, name)
+            if got is None:
+                missing.append(name)
+                continue
+            w, h, rgba = got
+            source = Image.frombytes('RGBA', (w, h), rgba)
+            red = source.getchannel('R')
+            scale=248/max(w,h)
+            red=red.resize((max(1,round(w*scale)),max(1,round(h*scale))),Image.Resampling.LANCZOS)
+            mask = Image.new('RGB', (256, 256))
+            black = Image.new('L', red.size)
+            mask.paste(Image.merge('RGB', (red, black, black)),
+                       ((256-red.width)//2, (256-red.height)//2))
+            iid = image_id(kind, name)
+            images[iid] = mask
+            mapping[kind][name] = {'image': iid, 'accent': (255, 255, 238)}
+
     clean(quiet=True)
     IMAGES.mkdir(exist_ok=True)
     for iid, image in images.items():
@@ -243,7 +266,8 @@ def main():
              % hud.names.get('build', '?'),
              'return {format=2,source=%s,' % lua_string('hud_atlas'),
              'missing={%s},' % ','.join(lua_string(n) for n in sorted(missing))]
-    for kind, field in (('stratagem', 'stratagems'), ('booster', 'boosters')):
+    for kind, field in (('stratagem', 'stratagems'), ('booster', 'boosters'),
+                        ('weapon', 'weapons'), ('throwable', 'throwables')):
         lines.append(field + '={')
         for name in sorted(mapping[kind]):
             e = mapping[kind][name]
@@ -253,8 +277,8 @@ def main():
         lines.append('},')
     lines.append('}')
     GENERATED.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
-    print('%d stratagem and %d booster icons from the game\'s HUD atlases -> images/ (%s)%s' % (
-        len(mapping['stratagem']), len(mapping['booster']), GENERATED.relative_to(PROJECT),
+    print('%d HUD icons (including %d weapon and %d throwable silhouettes) -> images/ (%s)%s' % (
+        len(images),len(mapping['weapon']),len(mapping['throwable']), GENERATED.relative_to(PROJECT),
         ('; no sprite in the game: ' + ', '.join(sorted(missing))) if missing else ''))
     return 0
 

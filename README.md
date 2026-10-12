@@ -4,7 +4,19 @@
 
 **Local 1.0.0 test build for HD2Runtime 0.32.0.** HUD atlas silhouettes now cover primaries, secondaries and throwables; enemies show faction symbols and structures use matching objective icons with a faction fallback. Enemy and structure lists show the game name and variant together on the main line; canonical IDs remain searchable and unchanged in presets and exports. Faction symbols use red/yellow/purple, objective icons use blue, and the editor preloads the two UI atlas packages through Runtime so weapon and grenade silhouettes can appear aboard the ship.
 
- The Enemies pages now
+Dev4 groups enemies and structures into Gameplay controls, Size only, and
+Inspection only, with gameplay entries and their useful sections first.
+The G/SH-39 Shield page includes recharge rate and both recharge delays.
+PLAS-39 exposes charged-burst count/interval, charge times, multipliers, and
+Single/Unsafe modes. Unsafe can destroy the weapon at its overcharge threshold;
+the destruction switch is also editable. These controls need gameplay testing.
+
+Weapon and grenade silhouettes are now included as exact local atlas extracts
+using the same startup-loaded image path as boosters and stratagems, preserving
+their proportions. They no longer depend on the native mission atlas drawing
+path. Generated game artwork remains excluded from source control.
+
+The Enemies pages now
 include the expanded enemy and structure catalogue, size, shields, jammers,
 spawner settings, damage zones and attacks. Other Entities includes unnamed
 controllers and mounted shields. Search component names such as `HiveMind` or

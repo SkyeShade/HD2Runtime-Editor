@@ -76,6 +76,9 @@ local function category_item(self)return self.categories[self.cat]end
 local WEAPON_GROUPS={
     primary={'Assault Rifle','Marksman Rifle','Submachine Gun','Shotgun','Explosive','Energy-Based','Special'},
     secondary={'Pistol','Melee','Special'}}
+for _,category in ipairs({'terminids','automatons','illuminate','structures','enemy_entities'})do
+    WEAPON_GROUPS[category]={'Gameplay controls','Size only','Inspection only'}
+end
 local GROUP_LABELS={['Assault Rifle']='Assault',['Marksman Rifle']='Marksman',['Submachine Gun']='SMG',
     ['Energy-Based']='Energy'}
 -- The weapon groups present in a weapon category (nil for every other category): {'All', groups...}.
@@ -83,7 +86,7 @@ function App:weapon_groups(category)
     local order=WEAPON_GROUPS[category]
     if not order then return nil end
     local present={}
-    for _,object in ipairs(self.catalog:objects(category))do present[object.subtitle or'']=true end
+    for _,object in ipairs(self.catalog:objects(category))do present[object.filter_group or object.subtitle or'']=true end
     local out={'All'}
     for _,g in ipairs(order)do if present[g]then out[#out+1]=g end end
     for g in pairs(present)do
@@ -117,7 +120,7 @@ function App:objects()
         -- the English name and subtitle, and the ones shown (translated): either matches
         local hay=(object.name..' '..(object.subtitle or'')..' '..util.display_name(object)..' '
             ..(util.display_subtitle(object)or'')..' '..(object.search_terms or'')):lower()
-        if(not q or hay:find(q,1,true))and(not group or object.subtitle==group)then out[#out+1]=object end
+        if(not q or hay:find(q,1,true))and(not group or(object.filter_group or object.subtitle)==group)then out[#out+1]=object end
     end
     self.filter_key,self.filtered=key,out
     return out

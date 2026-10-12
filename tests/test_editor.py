@@ -28,6 +28,11 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_dev4_controls_and_groups(self):
+        result=lua_file('test_dev4.lua', {'sim': (LUA/'sim.lua').as_posix(),
+            'harness': (LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'dev4 controls and capability groups ok')
+
     def test_atlas_icons(self):
         result=lua_file('test_atlas_icons.lua', {'sim': (LUA/'sim.lua').as_posix(),
             'harness': (LUA/'ui_harness.lua').as_posix()})

@@ -622,6 +622,9 @@ local function mode_row(object,common,f)
     common.kind,common.modes,common.max_modes='modes',modes,f.maxModes or#modes
     common.vanilla=util.copy(f.currentDefault)
     common.section='Fire Mode'
+    if f.modeValues and f.modeValues.unsafe then
+        common.note='Unsafe permits overcharging. With explosion enabled, reaching the overcharge time destroys the weapon. Modes apply to newly built weapons.'
+    end
     return make_value_row(object,common)
 end
 local function rate_row(object,common,f)
@@ -1797,6 +1800,11 @@ local function throwable_rows(hd2,object,entry)
                 note='Curve: sqrt(18 * max(0, min + (max-min) * strength)). Movement adjusts strength. '
                     ..'Spin uses native angular-velocity units; a zero minimum vector disables spin setup. '
                     ..'These controls do not set trajectory gravity or drag.'})
+        end
+        if t.path=='shield'then
+            rows[#rows+1]=M.info_row(object,{id='shield:help',label='Recharge',section=section,
+                text='Set a positive recharge rate to enable regeneration',
+                note='The native rate is zero. Delays alone do not enable recharge; the deployed device still has its own expiry timer.'})
         end
         for _,id in ipairs(util.sorted_keys(t.fields or{}))do
             local f=t.fields[id]

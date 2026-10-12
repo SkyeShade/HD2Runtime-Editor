@@ -8,6 +8,12 @@ local icons,count=I.load({resources={image=function(id)return{image=id}end,
 assert(count>390 and icons.stratagems['Orbital Precision Strike'].handle.image=='existing')
 assert(icons.weapons['AR-23 Liberator'].game and icons.throwables['G-109 Urchin'].game,
  'generated stratagems must not suppress native silhouettes')
+local packed=I.load({resources={image=function(id)return{image=id}end,
+ game_icon=function()error('native atlas unavailable')end,game_icons=api.game_icons}},
+ {weapons={['AR-23 Liberator']={image='wi_ar_23_liberator',accent={255,255,238}}},
+ throwables={['G-16 Impact']={image='ti_g_16_impact',accent={255,255,238}}}})
+assert(I.entry(packed,{key='pw|AR-23 Liberator',name='AR-23 Liberator'}).handle.image=='wi_ar_23_liberator')
+assert(I.entry(packed,{key='th|G-16 Impact',name='G-16 Impact'}).handle.image=='ti_g_16_impact')
 H.frame({})
 local original=H.app.canvas.image;local seen={}
 H.app.ctx.icons=icons
