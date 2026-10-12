@@ -28,6 +28,11 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_throwable_four_statuses(self):
+        result=lua_file('test_throwable_statuses.lua', {'sim': (LUA/'sim.lua').as_posix(),
+            'harness': (LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result, 'throwable four-status apply reset preset export render ok')
+
     def test_enemy_controls_apply_reset_export_and_render(self):
         result=lua_file('test_enemy_controls.lua', {'sim': (LUA/'sim.lua').as_posix(),
             'harness': (LUA/'ui_harness.lua').as_posix()})

@@ -3115,8 +3115,16 @@ local function status_children(rows)
                 local list=after[anchor]or{}
                 after[anchor]=list
                 for _,c in ipairs({strength,duration})do
-                    c.section,c.group=t.section,t.group
-                    list[#list+1]=c
+                    local own=t.status_slot.strength
+                    if c==strength and own and own.loc==c.loc then
+                        -- The new direct slot strength and the legacy named-status target are the same bytes.
+                        -- Keep old preset keys as aliases without drawing a second strength control.
+                        own.alias_keys=own.alias_keys or{}
+                        own.alias_keys[#own.alias_keys+1]=c.key
+                    else
+                        c.section,c.group=t.section,t.group
+                        list[#list+1]=c
+                    end
                     moved[c]=true
                 end
             else
@@ -3181,6 +3189,7 @@ function Catalog:open(object)
         if row and not self.rows[row.key]then
             object.rows[#object.rows+1]=row
             self.rows[row.key]=row
+            for _,alias in ipairs(row.alias_keys or{})do self.rows[alias]=row end
             local list=self.by_loc[row.loc]
             if not list then list={};self.by_loc[row.loc]=list end
             list[#list+1]=row
