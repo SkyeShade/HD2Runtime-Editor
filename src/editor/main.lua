@@ -259,6 +259,9 @@ function M.start(hd2,id)
             local ok,why=pcall(app.background_tick,app)
             if not ok and why~=background_error then background_error=why;log('preset import failed: '..tostring(why))end
         end
+        if not visible and app.spawn_job then
+            require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').tick(app)
+        end
         if can_block and visible and presets:setting('block_game_input',true)then block(true)end
         if not session.restored and clock>=RESTORE_MIN then
             local ready=others_settled(hd2,id)

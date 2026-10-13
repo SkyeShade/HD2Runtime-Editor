@@ -25,6 +25,7 @@ M.GROUPS={
     {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'},{id='status_effects',label='Status Effects'}}},
     {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'}}},
     {id='enemies',label='ENEMIES',items={
+        {id='enemy_overview',label='Enemy Overview'},
         {id='terminids',label='Terminids'},{id='automatons',label='Automatons'},{id='illuminate',label='Illuminate'},
         {id='structures',label='Structures'},{id='enemy_entities',label='Other Entities'}}},
     {id='enemy_director',label='SPAWNING & DESTRUCTION',items={
@@ -2712,6 +2713,7 @@ for category,kind in pairs({enemy_difficulty='difficulty',enemy_rosters='roster'
     CATEGORY[category]=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').director(cat,M,k)end
 end
 CATEGORY.destruction_models=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').models(cat,M)end
+CATEGORY.enemy_overview=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').overview(cat,M)end
 M.CATEGORY=CATEGORY
 
 -- The categories that can hold an object key's family (presets name rows by key; mods' claims name family objects).
@@ -2720,7 +2722,7 @@ local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},me={'melee
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},ex={'resupply'},
     en={'terminids','automatons','illuminate','structures','enemy_entities'},hd={'helldiver'},ar={'armor'},se={'status_effects'},
-    ed={'enemy_difficulty','enemy_rosters','enemy_compositions','demolition_templates'},dm={'destruction_models'}}
+    ed={'enemy_difficulty','enemy_rosters','enemy_compositions','demolition_templates'},dm={'destruction_models'},eo={'enemy_overview'}}
 
 ------------------------------------------------------------------------------ what a swapped weapon fires --
 -- After a projectile swap (staged or applied) the weapon fires the donor's projectile, and HD2Runtime refuses the

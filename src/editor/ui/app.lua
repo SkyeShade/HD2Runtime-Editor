@@ -79,6 +79,13 @@ local WEAPON_GROUPS={
 for _,category in ipairs({'terminids','automatons','illuminate','structures','enemy_entities'})do
     WEAPON_GROUPS[category]={'Gameplay controls','Size only','Inspection only'}
 end
+for _,category in ipairs({'enemy_rosters','enemy_compositions'})do
+    WEAPON_GROUPS[category]={'Terminids','Automatons','Illuminate','Super Earth','Unknown'}
+end
+local FACTION_FILTER_ICONS={}
+for name,id in pairs({Terminids='terminids',Automatons='automatons',Illuminate='illuminate',['Super Earth']='super_earth'})do
+    FACTION_FILTER_ICONS[name]={key='filter|'..id,iconKind='faction',iconName=id}
+end
 local GROUP_LABELS={['Assault Rifle']='Assault',['Marksman Rifle']='Marksman',['Submachine Gun']='SMG',
     ['Energy-Based']='Energy'}
 -- The weapon groups present in a weapon category (nil for every other category): {'All', groups...}.
@@ -996,6 +1003,7 @@ function App:stage_map(map,origin)
     return missing,dropped
 end
 function App:apply()
+    if self.spawn_job then self:toast(L('Spawn changes are still being prepared'),C.pending);return end
     if self.pending_n==0 then self:toast(L('Nothing to apply'),C.dim);return end
     local n,failed=0,0
     for key,p in pairs(self.pending)do
@@ -1007,12 +1015,14 @@ function App:apply()
     self.save_session=true
 end
 function App:discard()
+    self.spawn_job=nil
     local n=self.pending_n
     self.pending,self.pending_n={},0
     self:toast(n>0 and(n==1 and L('Discarded 1 pending change')or Lf('Discarded %d pending changes',n))
         or L('Nothing pending'),C.dim)
 end
 function App:reset_defaults()
+    self.spawn_job=nil
     local n=self.layer:reset_all()+self:untune_custom_all()
     -- the saved values that did not come back at this start go too (editor/session.lua)
     if self.ctx.forget_saved then self.ctx.forget_saved()end
@@ -1484,6 +1494,7 @@ end
 ------------------------------------------------------------------------------------------------- frame --
 function App:frame(d,dt)
     self.time=self.time+(dt or 0)
+    if self.spawn_job then require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').tick(self)end
     -- the native-bytes index of the whole catalogue, a few objects a frame (shared values, markers)
     if not self.catalog.indexed then
         local before=self.catalog.indexed
@@ -1816,6 +1827,8 @@ function App:draw_objects(y0,h)
             local label=GROUP_LABELS[g]or g
             label=L(label)
             local w=cv:measure(label,SZ.tiny,'title')+18
+            local icon=(item.id=='enemy_rosters'or item.id=='enemy_compositions')and FACTION_FILTER_ICONS[g]
+            if icon then w=w+22 end
             if cx+w>x0+OBJ_W-12 then cx,cy=x0+12,cy+28 end
             local key=item.id..'|'..g
             local action=self.group_actions[key]
@@ -1827,7 +1840,8 @@ function App:draw_objects(y0,h)
             local on=g==current
             cv:rect(cx,cy,w,22,on and C.gold or(self.hover==action and C.hover or C.box),3)
             if not on then cv:frame(cx,cy,w,22,C.line_strong,4)end
-            cv:text(label,cx+w/2,cy+11,{size=SZ.tiny,font='title',colour=on and C.inverse or C.dim,align='center',z=5})
+            if icon then self:draw_icon(icon,cx+6,cy+3,16,5)end
+            cv:text(label,cx+w/2+(icon and 11 or 0),cy+11,{size=SZ.tiny,font='title',colour=on and C.inverse or C.dim,align='center',z=5})
             cv:hit(cx,cy,w,22,action)
             cx=cx+w+6
         end
@@ -1892,6 +1906,10 @@ function App:draw_fields(y0,h)
         return
     end
     -- object header
+    if object.spawnFaction then
+        require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').draw(self,object,x0,y0,w,button)
+        return
+    end
     local hx=x0+20
     if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end
     -- collapse or expand every category and part of the page (Ctrl+Up / Ctrl+Down)

@@ -6,7 +6,7 @@
 -- unavailable.
 local M={}
 
-local ffi,kernel,shell,user,comdlg,wide_ok
+local ffi,kernel,shell,user,comdlg,wide_ok,find_first,find_next
 local function load()
     if ffi~=nil then return ffi~=false end
     local ok=pcall(function()
@@ -49,6 +49,11 @@ local function load()
         end
         kernel=ffi.load('kernel32')
         shell=ffi.load('shell32')
+        -- FFI function declarations are process-wide. Another addon may have declared
+        -- these exports with its own (layout-compatible, type-distinct) FIND_DATA.
+        -- Call through our explicit ABI instead of the first module's struct type.
+        find_first=ffi.cast('void * (__stdcall *)(const uint16_t *, HD2REditorFindW *)',kernel.FindFirstFileW)
+        find_next=ffi.cast('int (__stdcall *)(void *, HD2REditorFindW *)',kernel.FindNextFileW)
     end)
     if not ok then ffi=false end
     -- (the wide-character file reader, declared on its own: without it only M.reader is unavailable)
@@ -101,9 +106,10 @@ end
 function M.list(folder,pattern)
     if not load()then return nil,'no FFI'end
     local out={}
+    local handle
     local ok,why=pcall(function()
         local data=ffi.new('HD2REditorFindW')
-        local handle=kernel.FindFirstFileW(M.wide(folder..'\\'..(pattern or'*')),data)
+        handle=find_first(M.wide(folder..'\\'..(pattern or'*')),data)
         if handle==nil or tonumber(ffi.cast('intptr_t',handle))==-1 then return end
         repeat
             local name=narrow(data.name)
@@ -114,9 +120,9 @@ function M.list(folder,pattern)
                     out[#out+1]={name=name,folder=dir,size=tonumber(data.size_lo)+tonumber(data.size_hi)*4294967296}
                 end
             end
-        until kernel.FindNextFileW(handle,data)==0
-        kernel.FindClose(handle)
+        until find_next(handle,data)==0
     end)
+    if handle~=nil and tonumber(ffi.cast('intptr_t',handle))~=-1 then pcall(kernel.FindClose,handle)end
     if not ok then return nil,tostring(why)end
     table.sort(out,function(a,b)
         if a.folder~=b.folder then return a.folder end

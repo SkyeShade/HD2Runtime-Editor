@@ -48,6 +48,22 @@ check(S.value(rof)==vanilla,'bytes back at vanilla: '..tostring(S.value(rof)))
 check(layer:slot_of(rof)==nil,'no slot left')
 out[#out+1]='vanilla set/reset ok'
 
+-- A held Gas preset and Gloom expose the exact same damage scalar. Editing an
+-- alias steers the existing owner, and resetting either restores it once.
+local gas=row('se|gas','damage.standard_damage')
+local gloom=row('se|gloom','damage.standard_damage')
+check(gas.loc==gloom.loc,'Gas/Gloom must share their damage record')
+assert(layer:set(gas,45,{kind='preset',name='Gas Overhaul'}))
+check(settle(gas)=='active','gas preset applied')
+local gas_slot=layer:slot_of(gas)
+assert(layer:set(gloom,10))
+check(settle(gloom)=='active'and S.value(gas)==10,'shared alias edit applied')
+check(layer:slot_of(gloom)==gas_slot,'alias edit must keep one owner')
+check(layer:overrides()[gas.key]==10 and layer:overrides()[gloom.key]==nil,'save one canonical shared value')
+layer:reset(gloom)
+check(settle(gas)=='idle'and S.value(gas)==gas.vanilla,'reset through alias restored vanilla')
+out[#out+1]='shared scalar alias set/reset ok'
+
 -- 2. A mod's ensure holds a transaction (fire rate + ergonomics). The editor takes the fire rate over: every field of
 -- the operation is adopted first, then the mod's ensure is stopped; reset returns to the mod's value and keeps it.
 local erg=row('pw|AR-23 Liberator','weapon.ergonomics')

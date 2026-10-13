@@ -157,6 +157,16 @@ function M.entities(cat,H,filter)
 end
 
 local SHIP='Apply aboard the ship before the next mission. Existing compiled waves are not rebuilt.'
+function M.overview(cat,H)
+    if type(cat.real_hd2.enemies.spawn_multiplier)~='function'then return {}end
+    local list={}
+    for _,faction in ipairs({'terminids','automatons','illuminate'})do
+        local f=faction
+        list[#list+1]={key='eo|'..f,name=title(f),subtitle='Enemy Overview',spawnFaction=f,
+            iconKind='faction',iconName=f,build=function()return {}end}
+    end
+    return list
+end
 function M.director_rows(cat,H,o,kind,key)
     local function target()return cat.hd2.enemies[kind](key)end
     local d=target():describe();local rows={}
@@ -201,12 +211,16 @@ function M.director(cat,H,kind)
             for _,candidate in ipairs(g.candidates or{})do search[#search+1]=candidate end
             for _,candidate in ipairs(g.candidateNames or{})do search[#search+1]=candidate end
         end
-        if kind=='difficulty'then name=string.format('Difficulty %02d',tonumber(key));sub='Mission budgets and cooldown'
+        if kind=='difficulty'then name=(m.displayName or'Mission Difficulty')..' - '..key;sub='Mission budgets and cooldown'
         elseif kind=='roster'then name=m.fullDisplayName or m.displayName or title(m.path and m.path:match('([^/]+)$')or key)
             sub=title(m.roster)..' · Row '..m.row
         elseif kind=='composition'then name=title(m.faction)..' · Family '..m.family..' · Row '..m.row;sub='Spawn composition'
         else name=key;sub='Shared demolition threshold'end
         list[#list+1]={key='ed|'..kind..'/'..key,name=name,subtitle=sub,detail=d.lifecycle,
+            control_rank=kind=='difficulty'and tonumber(key)or nil,
+            filter_group=(kind=='roster'or kind=='composition')and title(m.faction or'unknown')or nil,
+            iconKind=kind=='difficulty'and'difficulty'or m.faction and'faction'or nil,
+            iconName=kind=='difficulty'and key or m.faction,
             search_terms=table.concat(search,' '),
             build=function(o)return M.director_rows(cat,H,o,kind,key)end}
     end

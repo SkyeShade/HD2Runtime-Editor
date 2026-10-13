@@ -30,6 +30,20 @@ page header. Switching pages or closing the Editor cancels the active check;
 completed batches are reused when returning. Apply/reset still performs fresh
 guarded resolution. Inspections appear under **HD2R Editor work** in F10.
 
+Dev9 lets equivalent shared scalar fields be edited from any of their pages
+(for example Gas and Gloom) while retaining one active override. Shared preset
+folder listing also tolerates other addons' Windows FFI declarations.
+
+**Enemy Overview** offers faction shortcuts for 0.5x, 1x, 2x and 3x authored
+composition counts. Preparation is incremental; review the normal Changes list
+and Apply aboard the ship. Counts round and cap at supported limits; transport
+capacity, budgets and scripted spawns still apply. The resulting ordinary fields
+work with presets, export and reset. Roster/composition filters use faction icons;
+difficulties show their game names, number last, and all ten native atlas icons.
+Six newly proven health controls cover health-change rate, its initial disabled
+flag, regeneration cooldown/segments/rate, and zone bleedout rate. Other fields
+remain read-only where their mapping or native values are not yet supported.
+
 Weapon and grenade silhouettes are now included as exact local atlas extracts
 using the same startup-loaded image path as boosters and stratagems, preserving
 their proportions. They no longer depend on the native mission atlas drawing

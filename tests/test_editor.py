@@ -28,6 +28,11 @@ def lua_file(name, args):
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
 
+    def test_enemy_overview_factions_and_difficulties(self):
+        result=lua_file('test_spawn_overview.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'faction spawn staging cache cancellation presets icons names health controls ok')
+
     def test_page_inspections_are_incremental_cached_and_cancelled(self):
         result=lua_file('test_owner_queue.lua', {})
         self.assertEqual(result,'incremental owners cancellation cache overflow stale callbacks ok')

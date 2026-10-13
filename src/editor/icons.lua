@@ -1,7 +1,7 @@
 -- Game atlas handles, with locally generated images retained for older icon categories.
 local M={}
 local KINDS={stratagem='stratagems',booster='boosters',weapon='weapons',throwable='throwables',
-    faction='factions',objective='objectives'}
+    faction='factions',objective='objectives',difficulty='difficulties'}
 local FACTION_COLOURS={automatons={255,80,80,255},terminids={255,201,45,255},
     illuminate={183,116,255,255},super_earth={95,195,245,255}}
 local OBJECTIVE_COLOUR={95,195,245,255}
@@ -45,7 +45,7 @@ end
 function M.warm(hd2,icons,log)
     if not icons or type(hd2.require_assets)~='function'or type(hd2.asset_dependency)~='function'then return end
     local targets,seen={},{}
-    for _,key in ipairs({'weapons','throwables','factions','objectives'})do
+    for _,key in ipairs({'weapons','throwables','factions','objectives','difficulties'})do
         for _,entry in pairs(icons[key]or{})do if entry.game then
             local ok,info=pcall(hd2.asset_dependency,entry.handle)
             if ok and type(info)=='table'and info.known and info.autoLoadSupported and info.package and not seen[info.package]then

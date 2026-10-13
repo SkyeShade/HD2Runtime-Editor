@@ -50,6 +50,19 @@ local function hold(row,value)
 end
 M.hold=hold
 
+-- Alternate catalogue pages can expose the same scalar. Keep one owner/ensure
+-- and steer it through either page. Overlapping compound views (traits versus
+-- penetration, references, lists) still require an explicit reset first.
+local function scalar_alias(a,b)
+    local ab=a.descriptor and a.descriptor.backing
+    local bb=b.descriptor and b.descriptor.backing
+    return not a.kind and not b.kind and a.loc==b.loc
+        and type(ab)=='table'and type(bb)=='table'
+        and type(a.storage)=='string'and a.storage==b.storage
+        and ab.width~=nil and ab.width==bb.width
+        and a.field==b.field and util.same(a.vanilla,b.vanilla)
+end
+
 local FAILED={rejected=true,blocked=true,cancelled=true,unavailable=true}
 -- A steer the Runtime has not even started to apply after STALL seconds (its ensure never settled on the new value:
 -- live r52 log) is taken over by a fresh ensure: the field is adopted again at the value it holds and steered from
@@ -379,7 +392,7 @@ function Layer:set(row,value,origin)
     -- one at a time
     local existing=self.slots[row.loc]
     if existing and existing.row and not existing.row.mirror and existing.row.key~=row.key
-        and(existing.user or existing.watch)then
+        and(existing.user or existing.watch)and not scalar_alias(existing.row,row)then
         return false,'this field shares its game data with "'..tostring(existing.row.label)
             ..'", which the editor holds: reset that field first'
     end
