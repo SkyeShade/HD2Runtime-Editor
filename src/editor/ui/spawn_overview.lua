@@ -5,6 +5,16 @@ local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local L,Lf=i18n.L,i18n.Lf
 local C=theme.colour
 local M={}
+local FACTION_CHOICES={
+        {id='patrol',label='Patrol enemy count',note='Size of ordinary patrol groups.'},
+        {id='reinforcement',label='Reinforcement enemy count',note='Bug breaches and Automaton / Illuminate transport groups.'},
+        {id='map',label='Map guard amount (budget)',note='Lowers group cost for more guards; not an exact count multiplier.'},
+        {id='frequency',label='Patrol frequency',note='Faster patrol clock; population caps and mission gates still apply.'}}
+local DIFFICULTY_CHOICES={
+        {id='encounter_budget',label='Encounter budget',note='Budget for director selections, not a guaranteed head count.'},
+        {id='map_budget',label='Map guard budget',note='Budget for map guards at this difficulty.'},
+        {id='spawner_frequency',label='Shared spawner frequency',note='Inverse cooldown: 2x halves the shared spawner gate.'}}
+
 local function recipe(app,kind,identity,multiplier,channel)
     local api=app.catalog.real_hd2.enemies
     if kind=='difficulty'then return api.difficulty_multiplier(identity,channel,multiplier)end
@@ -97,14 +107,9 @@ function M.draw(app,object,x,y,w,button,h)
     app:draw_icon(object,x+24,y+16,58)
     cv:text(L(object.name),x+100,y+37,{font='title',size=25,colour=C.text,max=w-120})
     cv:text(L('PREPARE SPAWN MULTIPLIERS'),x+100,y+64,{font='title',size=12,colour=C.faint})
-    local choices={
-        {'patrol','Patrol enemy count','Size of ordinary patrol groups.'},
-        {'reinforcement','Reinforcement enemy count','Bug breaches and Automaton / Illuminate transport groups.'},
-        {'map','Map guard amount (budget)','Lowers group cost for more guards; not an exact count multiplier.'},
-        {'frequency','Patrol frequency','Faster patrol clock; population caps and mission gates still apply.'}}
     local gap=math.min(85,math.max(57,((h or 600)-220)/4))
-    for i,s in ipairs(choices)do
-        slider(app,object.key..'/'..s[1],s[2],s[3],x+24,y+107+(i-1)*gap,w-48,object.spawnFaction,s[1],'faction',button)
+    for i,s in ipairs(FACTION_CHOICES)do
+        slider(app,object.key..'/'..s.id,s.label,s.note,x+24,y+107+(i-1)*gap,w-48,object.spawnFaction,s.id,'faction',button)
     end
     local foot=y+112+4*gap
     status(app,x+24,foot,w-48)
@@ -115,13 +120,9 @@ end
 -- Compact block above the real difficulty rows, retaining advanced editing and
 -- honest source/value feedback below. Each difficulty has independent native fields.
 function M.draw_difficulty(app,object,x,y,w,button)
-    local choices={
-        {'encounter_budget','Encounter budget','Budget for director selections, not a guaranteed head count.'},
-        {'map_budget','Map guard budget','Budget for map guards at this difficulty.'},
-        {'spawner_frequency','Shared spawner frequency','Inverse cooldown: 2x halves the shared spawner gate.'}}
     app.canvas:text(L('PREPARE DIFFICULTY MULTIPLIERS'),x+24,y+19,{size=13,font='title',colour=C.gold})
-    for i,s in ipairs(choices)do
-        slider(app,object.key..'/'..s[1],s[2],s[3],x+24,y+48+(i-1)*73,w-48,object.spawnDifficulty,s[1],'difficulty',button)
+    for i,s in ipairs(DIFFICULTY_CHOICES)do
+        slider(app,object.key..'/'..s.id,s.label,s.note,x+24,y+48+(i-1)*73,w-48,object.spawnDifficulty,s.id,'difficulty',button)
     end
     status(app,x+24,y+270,w-48)
     app.canvas:text(L('0.1x to 5x from defaults. Apply before launch; exact values below.'),x+24,y+294,
