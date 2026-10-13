@@ -1460,7 +1460,9 @@ function App:handle_mouse(f)
     self.hover=action
     self.mouse_units={x=ux,y=uy,moved=m.moved}
     if self.drag then
-        if m.left then self.drag.move(uy)else self.drag=nil end
+        local drag=self.drag
+        if m.left then drag.move(drag.axis=='x'and ux or uy)
+        else self.drag=nil;if drag.finish then drag.finish()end end
         return
     end
     if f.wheel~=0 then
@@ -1907,8 +1909,12 @@ function App:draw_fields(y0,h)
     end
     -- object header
     if object.spawnFaction then
-        require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').draw(self,object,x0,y0,w,button)
+        require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').draw(self,object,x0,y0,w,button,h)
         return
+    end
+    if object.spawnDifficulty then
+        local used=require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').draw_difficulty(self,object,x0,y0,w,button)
+        y0=y0+used;h=h-used
     end
     local hx=x0+20
     if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end

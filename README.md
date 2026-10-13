@@ -410,3 +410,15 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 ## License and credit
 
 See [LICENSE](LICENSE). HD2R Editor is built on [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) by SkyeShade, and uses its public API and its in-game catalogues. It is an unofficial fan project, not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment.
+
+
+Local dev10 adds Enemy Overview sliders (0.1x to 5x) for patrol count,
+reinforcement count, map guard budget, and patrol frequency. Mission Difficulty
+has independent encounter/map budgets and shared-spawner frequency sliders.
+Release to prepare, review Changes, then Apply before launch. These shortcuts
+stage normal fields for presets/export/reset; map amounts use budget cost and
+are not exact counts. Slider positions are preparation choices, not live counts.
+
+Bombardment orbital pages include walking speed (0 disables forward drift) and
+random aim-step endpoints. Mission uses is labeled for the next launch because
+changing the definition after launch leaves current mission counters unchanged.

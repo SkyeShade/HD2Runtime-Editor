@@ -1432,9 +1432,9 @@ local function stratagem_rows(hd2,object,entry)
             local unlimited=vanilla=='unlimited'or allowed.finite_to_unlimited==true
             if pooled and vanilla~='unlimited'then unlimited=false end
             rows[#rows+1]=make_value_row(object,{id=f.instanceKey or'stratagem.max_uses',kind='uses',
-                label=f.displayName or'Mission uses',field=f.semanticFieldId,target=stratagem_target(hd2,name,t),
+                label='Mission uses (next launch)',field=f.semanticFieldId,target=stratagem_target(hd2,name,t),
                 vanilla=vanilla,descriptor=f,section='Call-in',min=f.min or 1,max=f.max or 100,unlimited=unlimited,
-                unverified=unverified(f),
+                unverified=unverified(f),note=f.caveat or'Apply on the ship before launch. Current mission counters keep their old uses.',
                 labels={{value='unlimited',label='Unlimited'}}})
         elseif f.type=='enum'and type(f.allowedValues)=='table'and(f.editable or READ_ONLY_CHOICES[f.semanticFieldId])then
             -- (an option's own label first: the rearm pool's 'Own cooldown (mission uses)')

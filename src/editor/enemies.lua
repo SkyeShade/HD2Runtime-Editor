@@ -193,7 +193,7 @@ function M.director_rows(cat,H,o,kind,key)
     for _,g in ipairs(d.metadata.groups or{})do
         for i,candidate in ipairs(g.candidates or{})do
             info(H,rows,o,'group:'..g.slot..':'..i,(g.candidateNames or{})[i]or title(candidate),'Candidate','Group '..g.slot,nil,
-                'Candidate group only. Family numbers do not identify a proven patrol, dropship or breach role.')
+                'Candidate group only. Native consumer: '..tostring(d.metadata.role or'unresolved')..'. Eligibility and mission scripts still apply.')
         end
     end
     return rows
@@ -214,9 +214,10 @@ function M.director(cat,H,kind)
         if kind=='difficulty'then name=(m.displayName or'Mission Difficulty')..' - '..key;sub='Mission budgets and cooldown'
         elseif kind=='roster'then name=m.fullDisplayName or m.displayName or title(m.path and m.path:match('([^/]+)$')or key)
             sub=title(m.roster)..' · Row '..m.row
-        elseif kind=='composition'then name=title(m.faction)..' · Family '..m.family..' · Row '..m.row;sub='Spawn composition'
+        elseif kind=='composition'then name=title(m.faction)..' · '..title(m.role~='unresolved'and m.role or('Family '..m.family))..' · Row '..m.row;sub='Spawn composition'
         else name=key;sub='Shared demolition threshold'end
         list[#list+1]={key='ed|'..kind..'/'..key,name=name,subtitle=sub,detail=d.lifecycle,
+            spawnDifficulty=kind=='difficulty'and tonumber(key)or nil,
             control_rank=kind=='difficulty'and tonumber(key)or nil,
             filter_group=(kind=='roster'or kind=='composition')and title(m.faction or'unknown')or nil,
             iconKind=kind=='difficulty'and'difficulty'or m.faction and'faction'or nil,

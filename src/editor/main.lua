@@ -198,6 +198,7 @@ function M.start(hd2,id)
             overlay:hide()
             app.input:reset()
             app.edit=nil
+            app.drag=nil -- Closing cancels an uncommitted slider gesture.
         else
             -- (texts cached in the game's language before it changed are built again)
             local changed=follow_game_language()
