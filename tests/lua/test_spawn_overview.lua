@@ -23,7 +23,7 @@ finish();assert(app.pending_n>100,'faction composition counts missing')
 local values={}
 for key,p in pairs(app.pending)do
     assert(key:find('ed|composition/terminids/',1,true)==1,'another faction was modified')
-    assert(p.row.field:match('_count$')and p.value==math.min(64,math.floor(p.row.vanilla*2+0.5)))
+    assert(p.row.field:match('_count$')and p.value<=math.min(32,math.floor(p.row.vanilla*2+0.5)))
     values[key]=p.value
 end
 local encoded=app:encode_values(values)

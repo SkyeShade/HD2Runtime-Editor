@@ -83,6 +83,15 @@ check(catalog.rate_binding(rates,{450,640,950})~=nil,'the Liberator needs its se
 check(catalog.rate_binding(rates,{0,700,0})==nil,'one rate needs no binding')
 check(catalog.probe(rates,{450,640,950}),'three rates pass as a transaction')
 cycle(rates,{450,640,950},'rate slots with selector binding')
+local variable=row_of('pw|VG-70 Variable',function(r)return r.kind=='rates'end)
+check(catalog.rate_binding(variable,{350,600,800})==nil,'Variable keeps its existing selector')
+cycle(variable,{350,600,800},'Variable rate slots')
+local warrant=row_of('pw|P-92 Warrant',function(r)return r.kind=='modes'end)
+local warrant_binding=catalog.rate_binding(warrant,{'burst','single','automatic'})
+check(warrant_binding and warrant_binding.field=='weapon_function.right','Warrant uses its free right input')
+cycle(warrant,{'burst','single','automatic'},'Warrant selectable modes')
+local warrant_burst=row_of('pw|P-92 Warrant',function(r)return r.field=='fire_mode.burst_rounds'end)
+cycle(warrant_burst,5,'Warrant burst rounds')
 -- HD2Runtime 0.31.0: a second fire mode on a weapon without a fire-mode selector binds the fire-mode selector with it
 local hotshot=row_of('pw|R/40-K Hot-Shot Marksman Rifle',function(r)return r.kind=='modes'end)
 if hotshot.descriptor and hotshot.descriptor.fireModeState=='addable'then

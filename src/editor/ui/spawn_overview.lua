@@ -27,7 +27,7 @@ function M.start(app,identity,multiplier,channel,kind)
     local job={identity=identity,kind=kind,channel=channel,multiplier=multiplier,done=0,total=0}
     job.worker=coroutine.create(function()
         local r=recipe(app,kind,identity,multiplier,channel)
-        job.total,job.clamped=r.fields,r.clamped
+        job.total,job.clamped,job.cappedCompositions=r.fields,r.clamped,r.cappedCompositions or 0
         coroutine.yield()
         for _,tx in ipairs(r.transactions)do
             local key=tx.target.resource=='enemy'and('en|'..tx.target.enemy)
@@ -57,7 +57,9 @@ function M.tick(app)
     elseif coroutine.status(job.worker)=='dead'then
         app.spawn_job=nil
         app.spawn_result=job
-        app:toast(Lf('Prepared %d spawn fields; review Changes, then Apply',job.done),C.gold)
+        if job.cappedCompositions>0 then
+            app:toast(Lf('Prepared %d fields; %d compositions capped at 32 enemies',job.done,job.cappedCompositions),C.pending)
+        else app:toast(Lf('Prepared %d spawn fields; review Changes, then Apply',job.done),C.gold)end
     end
 end
 -- Exposed for the input regression test. No periodic work and no writes while
@@ -114,7 +116,7 @@ function M.draw(app,object,x,y,w,button,h)
     local foot=y+112+4*gap
     status(app,x+24,foot,w-48)
     cv:text(L('0.1x to 5x, from defaults. Shown values are preparation choices.'),x+24,foot+28,{size=13,colour=C.dim,max=w-48})
-    cv:text(L('Apply on the ship before launch. Counts round and respect field limits.'),x+24,foot+52,{size=13,colour=C.dim,max=w-48})
+    cv:text(L('Apply before launch. Each composition is limited to 32 enemies to prevent a crash.'),x+24,foot+52,{size=13,colour=C.dim,max=w-48})
     cv:text(L('Transport capacity and budgets still apply; larger spawns cost performance.'),x+24,foot+76,{size=13,colour=C.dim,max=w-48})
 end
 -- Compact block above the real difficulty rows, retaining advanced editing and

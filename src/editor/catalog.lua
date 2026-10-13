@@ -811,6 +811,13 @@ local function player_rows(hd2,object,entry)
             -- (fires_scope: the swap whose donor these rows give way to, "What a swapped weapon fires" below)
             local common={id=id,label=f.displayName,unit=f.unit,field=field,target=target,shared=shared_ack(f),
                 unverified=unverified(f),descriptor=f,section=section,fires_scope=fires,note=field_note(f)}
+            if id=='reload.duration'and timing then
+                common.label=entry.kind=='underbarrel'and'Reload duration (underbarrel)'
+                    or(name=='AR-11 Arbitrator'and'Reload duration (AR mode)'or'Reload duration')
+                if timing.nativeAbilitySeconds then
+                    common.note=string.format('Native ability: %.2f s. ',timing.nativeAbilitySeconds)..(common.note or'')
+                end
+            end
             if locked then common.editable,common.reason=false,BLOCKED_REASON end
             if numeric(f.type,f.currentDefault)then
                 common.vanilla,common.min,common.max,common.type,common.storage=f.currentDefault,f.min,f.max,f.type,b.storage

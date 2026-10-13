@@ -2,6 +2,17 @@
 
 # HD2R Editor
 
+Dev11 adds the Variable's RPM slots, Warrant fire modes/burst length, and separate
+underbarrel reload duration controls. Arbitrator reloads are labelled AR mode and
+underbarrel; zero uses native ability timing. Runtime's graph splits event-engine
+costs into named polling, dispatch, scheduling and subscription work.
+
+Spawn count recipes now cap each composition at 32 enemies total. Two crash dumps
+identified overflow of the game's fixed squad queue; oversized direct edits and
+older presets are refused too. The Editor reports capped compositions. Use a
+fresh game launch for testing, and regenerate previous high-count spawn settings
+with the sliders. This fix has offline validation but still needs gameplay testing.
+
 **Local 1.0.0 test build for HD2Runtime 0.32.0.** HUD atlas silhouettes now cover primaries, secondaries and throwables; enemies show faction symbols and structures use matching objective icons with a faction fallback. Enemy and structure lists show the game name and variant together on the main line; canonical IDs remain searchable and unchanged in presets and exports. Faction symbols use red/yellow/purple, objective icons use blue, and the editor preloads the two UI atlas packages through Runtime so weapon and grenade silhouettes can appear aboard the ship.
 
 Dev4 groups enemies and structures into Gameplay controls, Size only, and
