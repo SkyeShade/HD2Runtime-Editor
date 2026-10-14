@@ -22,6 +22,7 @@ local function deep(v)
 end
 function store:get(k,default)local v=self.data[k];if v==nil then return default end return deep(v)end
 function store:set(k,v)self.data[k]=deep(v)end
+function store:save()self.disk=deep(self.data);self.saves=(self.saves or 0)+1;return true end
 local presets=presets_module.new(store)
 
 -- Scripted input: keys pressed this frame, keys held, mouse.

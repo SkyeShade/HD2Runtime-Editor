@@ -51,7 +51,8 @@ def block(text, start):
 
 
 def collect():
-    found = []
+    import json
+    found = list(json.loads((PROJECT / 'localization/builtin.json').read_text(encoding='utf8'))['de'])
     for path in sorted(SRC.rglob('*.lua')):
         if 'generated' in path.parts or path == OUTPUT:
             continue

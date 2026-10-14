@@ -2,80 +2,7 @@
 
 # HD2R Editor
 
-Dev11 adds the Variable's RPM slots, Warrant fire modes/burst length, and separate
-underbarrel reload duration controls. Arbitrator reloads are labelled AR mode and
-underbarrel; zero uses native ability timing. Runtime's graph splits event-engine
-costs into named polling, dispatch, scheduling and subscription work.
-
-Spawn count recipes now cap each composition at 32 enemies total. Two crash dumps
-identified overflow of the game's fixed squad queue; oversized direct edits and
-older presets are refused too. The Editor reports capped compositions. Use a
-fresh game launch for testing, and regenerate previous high-count spawn settings
-with the sliders. This fix has offline validation but still needs gameplay testing.
-
-**Local 1.0.0 test build for HD2Runtime 0.32.0.** HUD atlas silhouettes now cover primaries, secondaries and throwables; enemies show faction symbols and structures use matching objective icons with a faction fallback. Enemy and structure lists show the game name and variant together on the main line; canonical IDs remain searchable and unchanged in presets and exports. Faction symbols use red/yellow/purple, objective icons use blue, and the editor preloads the two UI atlas packages through Runtime so weapon and grenade silhouettes can appear aboard the ship.
-
-Dev4 groups enemies and structures into Gameplay controls, Size only, and
-Inspection only, with gameplay entries and their useful sections first.
-The G/SH-39 Shield page includes recharge rate and both recharge delays.
-PLAS-39 exposes charged-burst count/interval, charge times, multipliers, and
-Single/Unsafe modes. Unsafe can destroy the weapon at its overcharge threshold;
-the destruction switch is also editable. These controls need gameplay testing.
-
-Dev6 is based on Runtime 0.31.3 and Editor 0.9.4, with the local additions carried
-forward. Held values refresh once per second while the Editor is open. Closing
-it pauses periodic verification and field refreshes; opening resumes checks and
-repairs reloaded values through the normal guarded path. Apply/reset work and
-preset imports finish while closed. No import polling runs without a dialog or
-import job. The Runtime's language settings and performance graph are retained.
-
-Dev7 keeps that idle policy. Runtime's F10 Performance graph names the Editor's
-window as **HD2R Editor UI** and its updates/jobs as **HD2R Editor work**. The F10
-window's own cost is split into layout, GUI sync and resources/input. Unchanged
-graph geometry and repeated text measurements are cached; input stays responsive.
-
-Dev8 restores stratagem icons for support weapons. Page definitions stay cached
-for the session and appear immediately on revisits. Live field checks prepare
-incrementally, then inspect one target batch at a time with progress shown in the
-page header. Switching pages or closing the Editor cancels the active check;
-completed batches are reused when returning. Apply/reset still performs fresh
-guarded resolution. Inspections appear under **HD2R Editor work** in F10.
-
-Dev9 lets equivalent shared scalar fields be edited from any of their pages
-(for example Gas and Gloom) while retaining one active override. Shared preset
-folder listing also tolerates other addons' Windows FFI declarations.
-
-**Enemy Overview** offers faction shortcuts for 0.5x, 1x, 2x and 3x authored
-composition counts. Preparation is incremental; review the normal Changes list
-and Apply aboard the ship. Counts round and cap at supported limits; transport
-capacity, budgets and scripted spawns still apply. The resulting ordinary fields
-work with presets, export and reset. Roster/composition filters use faction icons;
-difficulties show their game names, number last, and all ten native atlas icons.
-Six newly proven health controls cover health-change rate, its initial disabled
-flag, regeneration cooldown/segments/rate, and zone bleedout rate. Other fields
-remain read-only where their mapping or native values are not yet supported.
-
-Weapon and grenade silhouettes are now included as exact local atlas extracts
-using the same startup-loaded image path as boosters and stratagems, preserving
-their proportions. They no longer depend on the native mission atlas drawing
-path. Generated game artwork remains excluded from source control.
-
-The Enemies pages now
-include the expanded enemy and structure catalogue, size, shields, jammers,
-spawner settings, damage zones and attacks. Other Entities includes unnamed
-controllers and mounted shields. Search component names such as `HiveMind` or
-`Bughole` to find their controls.
-
-Under **Spawning & Destruction**, browse Mission Difficulty, Spawn Rosters,
-Spawn Compositions, Demolition Templates and Destruction Models. Apply spawn
-source changes aboard the ship before the next mission. Scale applies to new
-units; transport capacity is measured in cells; zero spawn weight is not a
-global enemy ban. Demolition templates affect every structure using that template.
-Unproven fields stay locked. See [local build notes](docs/releases/0.10.0-local.md).
-
-*HD2R Editor (formerly HD2Runtime Editor) is a mod built on HD2Runtime; it is not HD2Runtime itself.*
-
-**Live, in-game editing of every value [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) exposes, on top of the mods you have installed.**
+**New in 1.0.0** (for HD2Runtime 0.40.0): enemies, structures and spawning pages, Mission Overview with timer sliders (up to 41:40), a host-controlled timer freeze and "Freeze automatically", armor perks, reload / heat / melee / throwable controls, RESET ITEM, the game's keybind page (MODS tab) and a GameGuard warning on the Helldiver's stats. See [docs/releases/1.0.0.md](docs/releases/1.0.0.md).
 
 HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mod you have deployed and what each HD2Runtime mod changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
@@ -218,7 +145,8 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
 - **Your language, your sounds.** The game's menu sounds play on the buttons (Settings). Every interface text can be translated with a plain text file (see [Localisation](#localisation)).
 - **Edit over mods, safely.** If a mod sets the Liberator's fire rate to 1200 and you set 1300, the editor takes that field over through the Runtime's guarded writes, and 1300 applies. **Reset to defaults** puts it back to 1200, the mod's value, not the game's.
 - **Optimised apply.** Edits are staged as pending changes and applied together. Only fields whose value changed are written, and each change is a single guarded write.
-- **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last are restored automatically when the game starts (Settings). A value that cannot come back at one start (for example a mod that is missing this time) stays saved and is tried again at the next start, until you change or reset it.
+- **Interrupted application recovery.** Before startup restoration or pressing Apply, the editor saves the requested values and an application marker to disk. It clears the marker only after all requested changes finish successfully. If the next startup finds that marker, automatic restoration is skipped and the saved changes stay pending, including custom stratagem tunes and unavailable fields. Opening the editor shows a notice; closing it does not apply anything. Review the Changes list, then Apply or Discard. A crash, forced exit, early shutdown, or failed application can leave the marker. This does not detect crashes that happen after application has already completed, and cannot detect interruptions from older builds without the marker. Named presets remain intact.
+- **Presets.** Save the current values as a named preset, then load, overwrite, rename or delete it. The values you applied last are restored automatically when the game starts (Settings). A value that cannot come back at one start (for example a mod that is missing this time) stays saved. An incomplete application leaves the saved values pending on the next start for you to review, apply or discard.
 - **Share presets as files.** SHARE writes a preset to `Documents\HD2R Editor\Presets` as a small `.hd2rpreset.json` file. The Presets tab lists that folder under SHARED PRESET FILES, so a file someone sends you shows up as soon as it is there. LOAD stages a file's values; SAVE AS PRESET keeps them with your presets.
 - **Import presets.** **IMPORT PRESET...**, right under NEW PRESET, shows the exact folder the editor reads, its files and four buttons: CHOOSE A FILE... (the Windows file dialog: the file is checked, copied into the folder and opened), IMPORT SELECTED (adds the file picked on that page to your presets), REFRESH and OPEN THE FOLDER. A ModBuilder project file (`project.hd2mod.json`) is converted to a preset of the edits the editor can take. Large presets (tens of thousands of fields, up to 16 MB) are read a few milliseconds a frame, with their progress on the status line, and go on while the window is closed. Every result is a message, stays on the import page and the status line, and is a line in the Logs tab: what was imported and how many fields, or why not (a JSON error with its line and column, an unreadable field count, a file too large, not a preset file). HD2Runtime keeps at most 1 MB of saved data per mod: a preset that would not fit is refused with its size (keep it as a shared file) instead of being lost at the next start.
 - **Preset icons.** ICON (next to RENAME, and on a shared file) gives a preset a game icon (any stratagem or booster, searchable) or one of your own pictures. The icon shows in the list and the preset's header, and travels in the shared file (`"icon"`; an older editor reads the file as before). Your own pictures must be built into the editor: HD2Runtime draws only images compiled into a mod, so a picture file cannot be loaded while the game runs (see [Preset pictures](#preset-pictures)).
@@ -229,13 +157,13 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - It never overwrites a project ModBuilder made. Reopen ModBuilder's project list to see a new one.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 0.9.4, for HD2Runtime 0.30.0 or later (0.31.3 recommended).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 1.0.0, for HD2Runtime 0.40.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 
 - Helldivers 2
 - Bingus Shared Loader v15+
-- **HD2Runtime 0.30.0 or later.**
+- **HD2Runtime 0.40.0 or later** (the editor's manifest requires it).
   - Everything the editor uses is part of HD2Runtime 0.30.0: the UI overlay, script values and choices, the native mouse wheel and input blocking, every mod's options, custom stratagem tuning, and the Helldiver, armor and attachment fields.
   - If a Runtime lacks one of these, the part that needs it says so, or simply stays absent; the rest keeps working. Without the UI services at all, the editor stays inactive and writes the reason to `HD2Runtime.log`.
 
@@ -422,14 +350,3 @@ The tests run on the game's own LuaJIT (`Helldivers 2/bin/lua51.dll`). Only that
 
 See [LICENSE](LICENSE). HD2R Editor is built on [HD2Runtime](https://github.com/SkyeShade/HD2Runtime) by SkyeShade, and uses its public API and its in-game catalogues. It is an unofficial fan project, not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment.
 
-
-Local dev10 adds Enemy Overview sliders (0.1x to 5x) for patrol count,
-reinforcement count, map guard budget, and patrol frequency. Mission Difficulty
-has independent encounter/map budgets and shared-spawner frequency sliders.
-Release to prepare, review Changes, then Apply before launch. These shortcuts
-stage normal fields for presets/export/reset; map amounts use budget cost and
-are not exact counts. Slider positions are preparation choices, not live counts.
-
-Bombardment orbital pages include walking speed (0 disables forward drift) and
-random aim-step endpoints. Mission uses is labeled for the next launch because
-changing the definition after launch leaves current mission counters unchanged.

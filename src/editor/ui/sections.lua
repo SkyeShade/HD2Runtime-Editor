@@ -51,7 +51,7 @@ end
 local SUB_TITLES={flight='Flight',swap='Projectile type',impact='Impact explosion',expiry='Expiry explosion',
     explosion='Explosion',direct='Direct hit',damage='Damage'}
 M.SUB_TITLES=SUB_TITLES
-M.TITLES={projectile='Projectile',damage='Damage',fire='Handling / Fire',ammo='Ammunition',heat='Heat / Charge',
+M.TITLES={projectile='Projectile',damage='Damage',fire='Handling / Fire',ammo='Ammunition',heatsinks='Heatsinks',heat='Heat / Charge',
     beam='Beam / Arc',armory='Armory',call_in='Hellpod / Call-in'}
 -- The category of a section's head (or, for an attack, mount or mine, of its last part).
 local HEAD={Projectile='projectile',Explosion='projectile',Missile='projectile',['Function Missile']='projectile',
@@ -59,7 +59,7 @@ local HEAD={Projectile='projectile',Explosion='projectile',Missile='projectile',
     Damage='damage',['Status Damage']='damage',
     Handling='fire',Weapon='fire',['Fire Mode']='fire',Targeting='fire',Turret='fire',['Mounted Weapon']='fire',
     ['Ammo & Magazine']='ammo',Ammo='ammo',Backpack='ammo',Functions='ammo',['Drone Magazines']='ammo',Magazine='ammo',
-    Heat='heat',Charge='heat',['Wind-up']='heat',Recharge='heat',
+    Heatsinks='heatsinks',Heat='heat',Charge='heat',['Wind-up']='heat',Recharge='heat',
     Beam='beam',Arc='beam',
     Armory='armory',
     ['Call-in']='call_in',Hellpod='call_in',['Eagle Rearm']='call_in',['Granted Stratagem']='call_in'}
@@ -69,7 +69,7 @@ local NESTED={Attack=true,['Mounted Weapon']=true,Mine=true}
 local RANK={swap=0,flight=1,direct=2,missile=3,impact=4,expiry=5,other=6}
 M.RANK=RANK
 -- the order of the categories on a weapon's page; any other category comes before Armory, in page order
-local ORDER={'projectile','damage','fire','ammo','heat','beam'}
+local ORDER={'projectile','damage','fire','ammo','heatsinks','heat','beam'}
 -- pages of a weapon: the stratagem side (call-in, hellpod) last; on every other page it comes first
 local WEAPON_PAGES={primary=true,secondary=true,support_weapons=true,throwables=true}
 -- explosion phases (a single word after "Explosion", alone or after a feed)
@@ -289,7 +289,7 @@ function M.layout(sections,object_category)
             -- explosion it names, ui/app.lua payload_sections, right under it)
             local refs,rest={},{}
             for _,r in ipairs(s.rows)do
-                if r.field=='terminal.explosion'or r.shown_by then refs[#refs+1]=r else rest[#rest+1]=r end
+                if r.field=='terminal.explosion'or r.throwable_payload or r.shown_by then refs[#refs+1]=r else rest[#rest+1]=r end
             end
             if#refs>0 then
                 for _,r in ipairs(rest)do refs[#refs+1]=r end

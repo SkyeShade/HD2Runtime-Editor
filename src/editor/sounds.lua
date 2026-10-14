@@ -12,7 +12,9 @@ local GAP=0.04   -- at most one sound per 40 ms (the Runtime allows 32 calls per
 function M.new(hd2,enabled)
     local self={hd2=hd2,enabled=enabled,last=-1,clock=0,failed={}}
     function self.tick(dt)self.clock=self.clock+(dt or 0)end
-    function self.play(kind)
+    function self.play(kind,now)
+        -- Opening uses the existing session clock so time spent closed counts toward sound backoff.
+        if now then self.clock=math.max(self.clock,now)end
         if not self.enabled()then return end
         local sounds=type(self.hd2.sounds)=='table'and self.hd2.sounds
         if not sounds or type(sounds.play)~='function'then return end

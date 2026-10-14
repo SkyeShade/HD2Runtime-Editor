@@ -82,6 +82,9 @@ end
 for _,category in ipairs({'enemy_rosters','enemy_compositions'})do
     WEAPON_GROUPS[category]={'Terminids','Automatons','Illuminate','Super Earth','Unknown'}
 end
+for _,category in ipairs({'missions_terminids','missions_automatons','missions_illuminate'})do
+    WEAPON_GROUPS[category]={'Named missions','Unidentified missions'}
+end
 local FACTION_FILTER_ICONS={}
 for name,id in pairs({Terminids='terminids',Automatons='automatons',Illuminate='illuminate',['Super Earth']='super_earth'})do
     FACTION_FILTER_ICONS[name]={key='filter|'..id,iconKind='faction',iconName=id}
@@ -352,7 +355,7 @@ function App:payload_staged(slot,origin)
     if not(view and view.other)then return 0 end
     local dropped=0
     for _,r in ipairs(slot.payload_rows or{})do
-        if self.pending[r.key]then self.pending[r.key]=nil;self.pending_n=self.pending_n-1;dropped=dropped+1 end
+        if self:drop_pending(r.key)then dropped=dropped+1 end
     end
     if dropped>0 and not(origin and origin.kind=='preset')then
         self:toast(Lf('%s: %d pending values of the weapon\'s own explosion dropped (HD2Runtime refuses them while it '
@@ -679,6 +682,7 @@ end
 
 -- What a row shows: value, kind ('pending' | 'editor' | 'mod' | 'vanilla'), state, holder, error.
 function App:row_view(row)
+    if row.calculate then return row.calculate(function(input)return self:row_view(input)end),'derived','idle'end
     local pending=self.pending[row.key]
     if not pending then
         -- the same bytes staged through another object's row (a shared value): shown here too
@@ -696,7 +700,8 @@ end
 function App:markers()
     local key=self.layer.version..':'..self.ledger.version..':'..self.pending_n
     if self.marker_key==key then return self.marker_cache end
-    local m={pending={},editor={},mod={},error={},row_pending={},loc_editor={},loc_mod={},loc_error={},category={}}
+    local m={pending={},editor={},mod={},error={},row_pending={},loc_pending={},loc_editor={},loc_mod={},loc_error={},
+        category={}}
     local function in_category(object,kind)
         local category=object and object.category
         if not category then return end
@@ -715,6 +720,7 @@ function App:markers()
         end
         m.pending[p.row.object.key]=true
         m.row_pending[p.row.key]=true
+        if p.row.loc~=nil then m.loc_pending[p.row.loc]=true end
         in_category(p.row.object,'pending')
     end
     for loc,slot in pairs(self.layer.slots)do
@@ -754,6 +760,18 @@ function App:markers()
     m.key=key
     self.marker_key,self.marker_cache=key,m
     return m
+end
+-- Whether rows of the newly opened objects sit on bytes the current markers show (they would mark those objects too).
+function App:marks_reach(objects)
+    local m=self.marker_key and self.marker_cache
+    if not m then return false end
+    for _,object in ipairs(objects or{})do
+        for _,row in ipairs(object.rows or{})do
+            local loc=row.loc
+            if loc~=nil and(m.loc_pending[loc]or m.loc_editor[loc]or m.loc_mod[loc]or m.loc_error[loc])then return true end
+        end
+    end
+    return false
 end
 -- What a collapsible header's rows hold: {pending, editor, mod, error} (cached on the item per marker state).
 function App:header_marks(item,m)
@@ -796,7 +814,7 @@ end
 -- Drops pending values staged on other rows of the same native bytes (one value per location).
 function App:unstage_siblings(row)
     for _,other in ipairs(self.catalog:siblings(row))do
-        if other~=row and self.pending[other.key]then self.pending[other.key]=nil;self.pending_n=self.pending_n-1 end
+        if other.key~=row.key then self:drop_pending(other.key)end
     end
 end
 -- 'AR-23 Liberator, AR-23P Liberator Penetrator (+2)': the other objects a shared row's value also changes.
@@ -844,7 +862,12 @@ function App:slot_refusal(row,value)
 end
 -- Why a status slot row is greyed out now: the slot before it holds no status and this one holds nothing to take
 -- back (a pending or applied value stays editable, so it can be reset).
+function App:spawn_block(row)
+    return require('mods/skyeshade/hd2runtime_editor/editor/spawn_compatibility').reason(self.catalog.real_hd2,row)
+end
 function App:slot_block(row)
+    local blocked=self:spawn_block(row)
+    if blocked then return L(blocked)end
     local s=row.status_slot
     if not(s and s.prev)or self:holds_status(s.prev)then return nil end
     local _,source=self:row_view(row)
@@ -871,9 +894,12 @@ App.slot_order=slot_order
 function App:stage(row,value,origin)
     -- (a setting of the explosion a payload slot names is its owner's row: staged there, under that row's key)
     local shown=row
+    local blocked=self:spawn_block(row)
+    if blocked then self:toast(L(blocked),C.pending);return false end
     row=row.canonical or row
     if not row.editable then self:toast(Lf('%s: %s',L(row.label),L(tostring(row.reason or'not editable'))),C.error);return false end
     local staged=self:stage_value(row,value,origin)
+    if staged then self.changes_key=nil end
     -- accepted: any value staged on another row of the same bytes gives way to it
     if staged then self:unstage_siblings(row)end
     if staged and row.swap_scope then self:swap_staged(row,origin)end
@@ -882,9 +908,12 @@ function App:stage(row,value,origin)
         local names=self:shared_names(shown)
         if names then self:toast(Lf('Shared value: this also changes %s',names),C.pending)end
         -- once a session: the edits GameGuard was reported to react to
-        if row.risk=='gameguard'and not self.gameguard_warned then
-            self.gameguard_warned=true
-            self:toast(Lf('Careful: %s',L(catalog_module.GAMEGUARD_RISK)),C.error)
+        -- (once a session per reason: the armor tables' and the Helldiver stats' are separate warnings)
+        local note=row.risk=='gameguard'and(row.risk_note or catalog_module.GAMEGUARD_RISK)
+        self.gameguard_warned=type(self.gameguard_warned)=='table'and self.gameguard_warned or{}
+        if note and not self.gameguard_warned[note]then
+            self.gameguard_warned[note]=true
+            self:toast(Lf('Careful: %s',L(note)),C.error)
         end
     end
     return staged
@@ -903,7 +932,7 @@ function App:stage_value(row,value,origin)
             if not ok then self:toast(Lf('%s: %s',L(row.label),tostring(why)),C.error);return false end
         end
         if util.same(current,value)then
-            if existing then self.pending[row.key]=nil;self.pending_n=self.pending_n-1 end
+            if existing then self:drop_pending(row.key)end
             return true
         end
         if not existing then self.pending_n=self.pending_n+1 end
@@ -924,7 +953,7 @@ function App:stage_value(row,value,origin)
     local current=self.layer:value(row)
     local existing=self.pending[row.key]
     if util.representable(current,row.integer,row.storage)==held then
-        if existing then self.pending[row.key]=nil;self.pending_n=self.pending_n-1 end
+        if existing then self:drop_pending(row.key)end
         return true
     end
     if not existing then self.pending_n=self.pending_n+1 end
@@ -938,7 +967,7 @@ function App:swap_staged(swap,origin)
     if not id then return end
     local dropped,applied=0,0
     for _,r in ipairs(swap.fires_rows or{})do
-        if self.pending[r.key]then self.pending[r.key]=nil;self.pending_n=self.pending_n-1;dropped=dropped+1 end
+        if self:drop_pending(r.key)then dropped=dropped+1 end
         local _,source=self.layer:value(r)
         if source=='editor'then applied=applied+1 end
     end
@@ -953,9 +982,14 @@ function App:swap_staged(swap,origin)
     end
     return dropped,applied
 end
+function App:drop_pending(key)
+    if not self.pending[key]then return false end
+    self.pending[key]=nil;self.pending_n=self.pending_n-1;self.changes_key=nil
+    if self.ctx.pending_removed then self.ctx.pending_removed(key)end
+    return true
+end
 function App:unstage(row)
-    if self.pending[row.key]then
-        self.pending[row.key]=nil;self.pending_n=self.pending_n-1
+    if self:drop_pending(row.key)then
         -- a status slot left empty takes the pending values of the slots after it along (they would leave a gap)
         local s=row.status_slot
         if s and s.kind=='type'and not self:holds_status(row)then
@@ -1002,13 +1036,58 @@ function App:stage_map(map,origin)
     for _,item in ipairs(slot_order(staged,function(x)return x.row end))do self:stage(item.row,item.value,origin)end
     return missing,dropped
 end
+-- Recovery must never call stage_values: its custom-stratagem branch applies immediately.
+function App:stage_recovered(values)
+    local carried,keys={},{}
+    for key in pairs(values)do keys[#keys+1]=key end
+    table.sort(keys)
+    for _,key in ipairs(keys)do
+        local value,row=values[key],nil
+        if not self.is_custom_key(key)then
+            local ok,r,v=pcall(self.decode_value,self,key,value)
+            if ok and r and v~=nil then row,value=r.canonical or r,v end
+        end
+        if not row then
+            local name,label=key,L('Unavailable saved field')
+            if self.is_custom_key(key)then name,label=self:custom_value_text(key,value)end
+            row={key=key,loc='recovered|'..key,recovered_key=key,kind='recovered',editable=false,
+                label=label,object={key='recovered|'..key,name=name,category='recovered'}}
+        end
+        if not self.pending[row.key]then self.pending_n=self.pending_n+1 end
+        self.pending[row.key]={row=row,value=value,origin={kind='session'}}
+        carried[row.key]=values[key]
+    end
+    self.changes_key=nil
+    return carried
+end
+function App:apply_recovered(row,value,origin)
+    local key=row.recovered_key
+    if self.is_custom_key(key)then
+        local ok,why=self:apply_custom_value(key,value)
+        if ok then self.layer:touch(key)end
+        return ok,why
+    end
+    local real,decoded=self:decode_value(key,value)
+    if not real or decoded==nil then return false,L('Unavailable saved field')end
+    return self.layer:set(real,decoded,origin)
+end
 function App:apply()
     if self.spawn_job then self:toast(L('Spawn changes are still being prepared'),C.pending);return end
     if self.pending_n==0 then self:toast(L('Nothing to apply'),C.dim);return end
+    local mission_block=require('mods/skyeshade/hd2runtime_editor/editor/missions').apply_block(self.catalog,self.pending)
+    if mission_block then self:ask('mission_timer_block',mission_block);return end
+    if self.ctx.before_apply and not self.ctx.before_apply()then return end
     local n,failed=0,0
     for key,p in pairs(self.pending)do
-        local ok,why=self.layer:set(p.row,p.value,p.origin)
-        if ok then self.pending[key]=nil;n=n+1 else failed=failed+1;self:toast(Lf('%s: %s',L(p.row.label),tostring(why)),C.error)end
+        local ok,why
+        if p.row.recovered_key then ok,why=self:apply_recovered(p.row,p.value,p.origin)
+        else ok,why=self.layer:set(p.row,p.value,p.origin)end
+        if ok then self.pending[key]=nil;n=n+1
+        else
+            failed=failed+1
+            if self.ctx.apply_failed then self.ctx.apply_failed(key)end
+            self:toast(Lf('%s: %s',L(p.row.label),tostring(why)),C.error)
+        end
     end
     self.pending_n=failed
     if failed==0 then self:toast(n==1 and L('Applying 1 change')or Lf('Applying %d changes',n),C.gold)end
@@ -1017,7 +1096,9 @@ end
 function App:discard()
     self.spawn_job=nil
     local n=self.pending_n
+    local pending=self.pending
     self.pending,self.pending_n={},0
+    if self.ctx.discard_pending then self.ctx.discard_pending(pending)end
     self:toast(n>0 and(n==1 and L('Discarded 1 pending change')or Lf('Discarded %d pending changes',n))
         or L('Nothing pending'),C.dim)
 end
@@ -1347,6 +1428,36 @@ end
 App.DEFAULT_HOTKEY='F8'
 M.DEFAULT_HOTKEY=App.DEFAULT_HOTKEY
 function App:hotkey()return tostring(self.ctx.hotkey or App.DEFAULT_HOTKEY)end
+-- Whether an input bound on the game's keybind page (MODS tab, Mod Bindings Menu) controls the binding with this id
+-- now, so its own key is ignored (HD2Runtime rc22: binding:describe().native.bound, or .owned from an older build).
+function App:native_key(id)
+    local input=type(self.hd2)=='table'and self.hd2.input
+    if type(input)~='table'or type(input.bindings)~='function'then return false end
+    -- (read once per frame: the footer asks every frame)
+    local list=self.native_list_time==self.time and self.native_list or nil
+    if not list then
+        local ok,value=pcall(input.bindings)
+        list=ok and type(value)=='table'and value or{}
+        self.native_list,self.native_list_time=list,self.time
+    end
+    for _,b in ipairs(list)do
+        if b.id==id then
+            local n=type(b.native)=='table'and b.native
+            if not(n and n.registered)then return false end
+            if n.bound~=nil then return n.bound==true end
+            return n.owned==true
+        end
+    end
+    return false
+end
+-- A key name struck out (right-aligned at x): the key the MODS keybind replaces.
+function App:struck_key(text,x,y)
+    local cv=self.canvas
+    local size=theme.size.label
+    cv:text(text,x,y,{size=size,font='title',colour=C.faint,align='right'})
+    local w=cv:measure(text,size,'title')or 0
+    cv:rect(x-w-2,y-1,w+4,2,C.faint,2)
+end
 -- Why a chord cannot open and close the editor, or nil: the keys the editor reads while open (with any modifier),
 -- the keys it types with (unless Ctrl or Alt is held), Ctrl+F (search), Ctrl+E (errors) and Alt+F4. name: an hd2.input
 -- key name.
@@ -1439,11 +1550,68 @@ function App:ask(kind,data)
     end
     self.confirm={kind=kind,data=data}
 end
+-- RESET ITEM: the rows of an object holding one of the editor's changes (pending, applied or failed), one per native
+-- location (cached per marker state: the button asks every frame). A value another mod set is never one of them.
+function App:item_changes(object)
+    if not object then return {}end
+    local key=self:markers().key..'|'..tostring(object.key)
+    if self.item_changes_key==key then return self.item_changes_cache end
+    local rows,seen={},{}
+    for _,row in ipairs(object.rows or{})do
+        local r=row.canonical or row
+        if r.loc~=nil and not seen[r.loc]and not r.info then
+            local slot=self.layer:slot_of(r)
+            local pending=self.pending[r.key]~=nil
+            if not pending then
+                for _,o in ipairs(self.catalog:siblings(r))do if self.pending[o.key]then pending=true;break end end
+            end
+            if pending or slot and(slot.user or slot.error)then seen[r.loc]=true;rows[#rows+1]=r end
+        end
+    end
+    self.item_changes_key,self.item_changes_cache=key,rows
+    return rows
+end
+-- The other items whose values reset with this one's (shared values): 'AR-23P Liberator Penetrator, ... (+2)' or nil.
+function App:item_shared_names(object,rows)
+    local names,seen={},{}
+    for _,r in ipairs(rows)do
+        for _,other in ipairs(self.catalog:shared_with(r))do
+            local o=other.object
+            if o and o~=object and o.key~=object.key then
+                local name=util.display_name(o)
+                if name and not seen[name]then seen[name]=true;names[#names+1]=name end
+            end
+        end
+    end
+    if#names==0 then return nil end
+    table.sort(names,util.natural_less)
+    local shown={}
+    for i=1,math.min(3,#names)do shown[i]=names[i]end
+    return table.concat(shown,', ')..(#names>3 and(' (+'..(#names-3)..')')or'')
+end
+-- Resets every change of the item now, as RESET TO DEFAULTS does for every field: pending values are dropped and
+-- applied editor values go back to the base (the mod's value, or the game's when no mod set it).
+function App:reset_item(object)
+    local rows=self:item_changes(object)
+    local n=0
+    for _,r in ipairs(rows)do
+        local dropped=self:unstage(r)
+        self:unstage_siblings(r)
+        local slot=self.layer:slot_of(r)
+        local reset=slot and(slot.user or slot.error)and self.layer:reset(r)
+        if reset then self.save_session=true end
+        if reset or dropped then n=n+1 end
+    end
+    self.item_changes_key=nil
+    self:toast(Lf('%s: %d fields back to default',util.display_name(object),n),C.gold)
+    return n
+end
 function App:confirm_yes()
     local c=self.confirm
     self.confirm=nil
     if not c then return end
     if c.kind=='reset'then self:reset_defaults()
+    elseif c.kind=='reset_item'then self:reset_item(c.data.object)
     elseif c.kind=='delete_preset'then
         self.presets:delete(c.data)
         self:toast(Lf('Deleted preset %s',c.data),C.dim)
@@ -1495,12 +1663,20 @@ end
 
 ------------------------------------------------------------------------------------------------- frame --
 function App:frame(d,dt)
+    local recovery_opening=self.recovery_notice~=nil
+    if self.recovery_notice then
+        self.confirm={kind='recovery',data=self.recovery_notice}
+        self.recovery_notice=nil
+        self.view='changes'
+        self.edit,self.drag,self.errors_popup,self.picker,self.coder,self.moder,self.rater,self.traiter=nil,nil,nil,nil,nil,nil,nil,nil
+    end
     self.time=self.time+(dt or 0)
     if self.spawn_job then require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').tick(self)end
-    -- the native-bytes index of the whole catalogue, a few objects a frame (shared values, markers)
+    -- the native-bytes index of the whole catalogue, a few objects a frame (shared values, markers); the markers are
+    -- redone once it completes, or at once when a page it opens shares bytes that are edited, pending or mod-written
     if not self.catalog.indexed then
-        local before=self.catalog.indexed
-        if self.catalog:index_step(1,0.0005)and not before then self.marker_key=nil end
+        local done,opened=self.catalog:index_step(1,0.0005)
+        if done or self:marks_reach(opened)then self.marker_key=nil end
     end
     self.frame_dt=dt or 0
     if self.ctx.sounds and self.ctx.sounds.tick then self.ctx.sounds.tick(dt or 0)end
@@ -1528,8 +1704,10 @@ function App:frame(d,dt)
     self.frame_input=f
     -- a preset import reads a few milliseconds a frame, on any tab (presets_view.lua)
     self:import_tick()
-    self:handle_keys(f)
-    if f.mouse then self:handle_mouse(f)end
+    if not recovery_opening then
+        self:handle_keys(f)
+        if f.mouse then self:handle_mouse(f)end
+    end
     self:draw()
     if self.catalog.owners_step then
         self.catalog:owners_step(self.view=='browse'and self:object()or nil,self.held_by_runtime)
@@ -1790,8 +1968,15 @@ function App:draw_categories(y0,h)
             local count=self.catalog:count(item.id)
             local cw=cv:text(tostring(count),CAT_W-20,y+rh/2,{size=SZ.small,colour=C.faint,align='right'})
             local mx=self:draw_marks(cat_marks[item.id]or{},CAT_W-28-(tonumber(cw)or 24),y+rh/2,26)
-            cv:text(L(item.label),22,y+rh/2,{size=SZ.label,colour=selected and C.text or C.dim,
-                max=math.min(CAT_W-80,mx-30)})
+            local tx=22
+            local front=item.id:match('^missions_(.+)$')
+                or((item.id=='terminids'or item.id=='automatons'or item.id=='illuminate')and item.id)
+            if front then
+                local icon=FACTION_FILTER_ICONS[front:sub(1,1):upper()..front:sub(2)]
+                if icon then self:draw_icon(icon,22,y+6,19);tx=47 end
+            end
+            cv:text(L(item.label),tx,y+rh/2,{size=SZ.label,colour=selected and C.text or C.dim,
+                max=math.min(CAT_W-80,mx-tx-8)})
             cv:hit(8,y,CAT_W-16,rh,action)
         end
     end
@@ -1897,6 +2082,19 @@ local function name_x(depth)
     return FX.label+(depth>0 and(depth+1)*INDENT or 0)
 end
 App.name_x,App.header_x,App.FX=name_x,header_x,FX
+function App:draw_spawn_owner(x,y,w,button)
+    self.canvas:text(L('Spawn controls managed by Pick your bots/bugs/squids'),x,y+16,
+        {size=12,colour=C.pending,max=w-210})
+    self.btn_spawn_picker=self.btn_spawn_picker or{click=function()
+        local api=self.catalog.real_hd2.enemies
+        local ok,why=api.open_spawn_picker(self.ctx.close)
+        if not ok then
+            if self.ctx.open then self.ctx.open()end
+            self:toast(L(tostring(why)),C.error)
+        end
+    end}
+    button(self,L('OPEN SPAWN PICKER'),x+w-202,y+2,202,28,'normal',self.btn_spawn_picker)
+end
 function App:draw_fields(y0,h)
     local cv=self.canvas
     local x0=CAT_W+OBJ_W
@@ -1908,13 +2106,17 @@ function App:draw_fields(y0,h)
         return
     end
     -- object header
+    if object.missionFaction then
+        require('mods/skyeshade/hd2runtime_editor/editor/ui/mission_overview').draw(self,object,x0,y0,w,button,h)
+        return
+    end
+    if object.missionTimer then
+        require('mods/skyeshade/hd2runtime_editor/editor/ui/mission_overview').draw_timer(self,object,x0,y0,w,button,h)
+        return
+    end
     if object.spawnFaction then
         require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').draw(self,object,x0,y0,w,button,h)
         return
-    end
-    if object.spawnDifficulty then
-        local used=require('mods/skyeshade/hd2runtime_editor/editor/ui/spawn_overview').draw_difficulty(self,object,x0,y0,w,button)
-        y0=y0+used;h=h-used
     end
     local hx=x0+20
     if self:draw_icon(object,x0+20,y0+8,48)then hx=x0+80 end
@@ -1926,7 +2128,16 @@ function App:draw_fields(y0,h)
     end}
     local bw=142
     button(self,any_open and L('COLLAPSE ALL')or L('EXPAND ALL'),x0+w-bw-14,y0+12,bw,28,'normal',self.btn_page_open)
-    cv:text(util.display_name(object),hx,y0+24,{size=20,font='title',colour=C.text,max=w-60-bw-(hx-x0)})
+    -- RESET ITEM: every change of this item back to default, after a confirmation (shared values named there)
+    local rw=132
+    local changed=self:item_changes(object)
+    self.btn_reset_item=self.btn_reset_item or{click=function()
+        local o=self:object()
+        local rows=self:item_changes(o)
+        if#rows>0 then self:ask('reset_item',{object=o,count=#rows,shared=self:item_shared_names(o,rows)})end
+    end}
+    button(self,L('RESET ITEM'),x0+w-bw-rw-24,y0+12,rw,28,#changed>0 and'danger'or'disabled',self.btn_reset_item)
+    cv:text(util.display_name(object),hx,y0+24,{size=20,font='title',colour=C.text,max=w-70-bw-rw-(hx-x0)})
     local items,selectable=self:field_items(object)
     local markers=self:markers()
     local edited=0
@@ -1944,12 +2155,16 @@ function App:draw_fields(y0,h)
     end
     cv:text(sub,hx,y0+47,{size=SZ.small,colour=C.faint,max=w-40-(hx-x0)})
     if object.error then cv:text(Lf('Could not read: %s',object.error),x0+20,y0+70,{size=SZ.small,colour=C.error,max=w-40})end
+    local spawn_locked=false
+    for _,row in ipairs(object.rows)do if self:spawn_block(row)then spawn_locked=true;break end end
+    local banner=spawn_locked and 42 or 0
+    if spawn_locked then self:draw_spawn_owner(x0+14,y0+64,w-28,button)end
     -- column titles
+    y0=y0+banner;h=h-banner
     local hy=y0+66
     cv:rect(x0,hy,w,22,C.header,2)
     cv:text(L('FIELD'),x0+FX.label,hy+11,{size=SZ.tiny,font='title',colour=C.faint})
     cv:text(L('DEFAULT'),x0+FX.default_right,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
-    cv:text(L('VALUE'),x0+FX.box+FX.box_w-8,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
     cv:text(L('SOURCE'),x0+w+FX.badge_right,hy+11,{size=SZ.tiny,font='title',colour=C.faint,align='right'})
     self.field=clamp_index(self.field,#selectable)
     local selected_item=selectable[self.field]
@@ -1964,6 +2179,7 @@ function App:draw_fields(y0,h)
         self.fields_actions,self.fields_actions_items={},items
     end
     local actions=self.fields_actions
+    local visible_weights,visible_values=false,false
     self:list({x=x0,y=ly,w=w,h=y0+h-ly-4,count=#items,row_h=rh,selected=selected_item,scroll_key='field_scroll',
         focused=focused,actions=nil,
         draw=function(i,x,y,lw)
@@ -1996,6 +2212,8 @@ function App:draw_fields(y0,h)
                 elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
                 local cy=y+rh/2
                 cv:text(item.open and'↓'or'→',x+indent,cy,{size=SZ.small,colour=C.gold,font='title'})
+                local faction_icon=object.section_icons and object.section_icons[item.header]
+                if faction_icon then self:draw_icon(faction_icon,x+indent+18,y+5,rh-10);indent=indent+rh-6 end
                 -- what its fields hold, so an edit inside a closed group is visible without opening it
                 local mx=self:draw_marks(self:header_marks(item,markers),x+lw-14,cy,28)
                 local right=mx<x+lw-14 and mx-8 or x+lw-18
@@ -2013,6 +2231,7 @@ function App:draw_fields(y0,h)
                 return
             end
             local row=item.row
+            if row.spawn_weight then visible_weights=true else visible_values=true end
             local selected=i==selected_item
             local action=actions[i]
             if not action then
@@ -2039,6 +2258,10 @@ function App:draw_fields(y0,h)
             elseif self.hover==action then cv:rect(x+6,y+1,lw-12,rh-2,C.hover,2)end
             local cy=y+rh/2
             local lx=name_x(item.depth)
+            if row.field_icon then
+                local size=math.min(rh-8,24)
+                self:draw_icon(row.field_icon,x+lx-size-6,y+(rh-size)/2,size)
+            end
             -- (a status slot whose earlier slot is empty is greyed out until that one holds a status; a row a projectile
             -- swap sets aside stays locked while it is shown, holding a value of yours to reset)
             local fires_lock=self:fires_block(row)
@@ -2051,6 +2274,7 @@ function App:draw_fields(y0,h)
             local label_max=wide and(FX.box-16-lx)or(FX.default_right-math.max(dw,24)-12-lx)
             cv:text(self:item_label(item,label_max),x+lx,cy,{size=SZ.label,
                 colour=open and(selected and C.text or C.dim)or C.faint,max=label_max})
+            if self:spawn_block(row)then cv:rect(x+lx,cy,math.min(label_max,cv:measure(L(row.label),SZ.label)),1,C.faint,5)end
             if not wide then
                 cv:text(default,x+FX.default_right,cy,{size=SZ.small,colour=C.faint,align='right',max=84})
             end
@@ -2081,7 +2305,16 @@ function App:draw_fields(y0,h)
             -- source badge (an error first: a refused value on a field that is locked or waiting for its order now
             -- still says why it failed)
             local bxr=x+lw+FX.badge_right
-            if state=='error'then chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
+            if state=='error'then
+                chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
+                local slot=self.layer:slot_of(row)
+                if slot and slot.error then
+                    row.reset_error_action=row.reset_error_action or{click=function()
+                        self:reset_change({row=row})
+                        if self.edit and self.edit.row==row then self.edit=nil end
+                    end}
+                    button(self,L('RESET'),bxr-126,y+5,62,rh-10,'danger',row.reset_error_action)
+                end
             elseif row.link then chip(cv,L('LINK'),bxr,cy,C.gold,C.gold_wash,'right')
             elseif not row.editable then chip(cv,row.info and L('INFO')or L('LOCKED'),bxr,cy,C.faint,C.line,'right')
             elseif fires_lock then chip(cv,L('LOCKED'),bxr,cy,C.faint,C.line,'right')
@@ -2093,8 +2326,11 @@ function App:draw_fields(y0,h)
             elseif source=='editor'then chip(cv,L('EDITED'),bxr,cy,C.gold,C.gold_wash,'right')
             elseif source=='mod'then chip(cv,L('MOD'),bxr,cy,C.mod,C.mod_soft,'right')end
         end})
+    -- Use the rows actually drawn, including wheel scrolling, without scanning the whole catalogue.
+    local value_title=visible_weights and(visible_values and L('VALUE / WEIGHT')or L('WEIGHT'))or L('VALUE')
+    cv:text(value_title,x0+FX.box+FX.box_w-8,hy+11,
+        {size=SZ.tiny,font='title',colour=C.faint,align='right',max=FX.box_w})
 end
-
 function App:draw_status(y,h)
     local cv=self.canvas
     local P=theme.panel
@@ -2155,7 +2391,7 @@ function App:draw_status(y,h)
         elseif row.kind=='uses'then
             range=row.unlimited and Lf('unlimited, or %d to %d',row.min or 1,row.max or 100)
                 or Lf('%d to %d',row.min or 1,row.max or 100)
-        elseif row.kind=='reference'and row.field=='terminal.explosion'then range=L('Enter to pick an explosion')
+        elseif row.kind=='reference'and(row.field=='terminal.explosion'or row.throwable_payload)then range=L('Enter to pick an explosion')
         elseif row.kind=='reference'then range=L('Enter to pick a donor')
         elseif row.kind then range=L('Enter to choose, ←→ to step')
         elseif row.min or row.max then
@@ -2171,7 +2407,8 @@ function App:draw_status(y,h)
         if row.unverified then x=x+chip(cv,L('UNVERIFIED EFFECT'),x,cy,C.faint,C.line)+6 end
         local _,base_holder=self.layer:base(row)
         if row.risk=='gameguard'and not base_holder then
-            cv:text(L(catalog_module.GAMEGUARD_RISK),x+10,cy,{size=SZ.small,colour=C.error,max=math.max(40,maxw-x-10)})
+            cv:text(L(row.risk_note or catalog_module.GAMEGUARD_RISK),x+10,cy,{size=SZ.small,colour=C.error,
+                max=math.max(40,maxw-x-10)})
             return
         end
         if shared_names and not base_holder then
@@ -2229,7 +2466,9 @@ function App:draw_footer(y,h)
         hint=L('F8 close   ←→ adjust (Shift x10, Ctrl ÷10)   digits type a value   Del revert   F9 apply')
     else hint=L('F8 close   ↑↓ select   ←→ panes   Tab next pane   Shift+Tab next tab   F9 apply') end
     -- the key chosen in Settings (the translated hints keep naming F8)
-    if self:hotkey()~='F8'then hint=hint:gsub('F8',(self:hotkey():gsub('%%','%%%%')),1)end
+    -- (the key that closes it: the MODS keybind while that controls it)
+    local closer=self:native_key('hd2runtime_editor.toggle')and L('MODS keybind')or self:hotkey()
+    if closer~='F8'then hint=hint:gsub('F8',(closer:gsub('%%','%%%%')),1)end
     local hw=cv:text(hint,18,y+h/2,{size=SZ.small,colour=C.faint,max=P.w-560})
     -- the wheel is off (the player's HD2Runtime install choice): say how to scroll, after the hints
     if self:wheel_notice()then
@@ -2259,23 +2498,50 @@ function App:draw_confirm()
     local cv=self.canvas
     local P=theme.panel
     cv:rect(0,0,P.w,P.h,C.scrim,8)
-    local w,h=560,190
+    local recovery=c.kind=='recovery'or c.kind=='mission_timer_block'or c.kind=='mission_timer_report'
+    local w,h=560,recovery and 270 or 190
     local x,y=(P.w-w)/2,(P.h-h)/2-40
-    cv:rect(x,y,w,h,C.panel_alt,9)
-    cv:frame(x,y,w,h,C.line_strong,10)
-    cv:rect(x,y,w,3,c.kind=='reset'and C.error or C.gold,10)
     local title,body
-    if c.kind=='reset'then
+    if c.kind=='mission_timer_report'then
+        title=L('MISSION TIMER CHECK');body=c.data
+    elseif c.kind=='mission_timer_block'then
+        title=L('MISSION TIMERS UNAVAILABLE')
+        body={L('Deselect the mission and return to the ship before applying timers.'),
+            L('All edits remain pending. Choose Apply again when ready.')}
+    elseif recovery then
+        title=L('CHANGES LEFT PENDING')
+        body={c.data=='storage'and L('Changes could not be saved safely. Application was skipped.')
+            or L('The previous application did not finish successfully.'),
+            L('The game may have crashed or closed before it finished.'),
+            L('No saved changes were automatically applied this time.'),
+            L('Review the pending changes, then choose Apply or Discard.')}
+        if c.data=='storage'then body={body[1],body[4]}end
+    elseif c.kind=='reset'then
         local active,applying,errors,removing=self.layer:counts()
         title=L('RESET TO DEFAULTS?')
         body={L('Every field the editor changed goes back to the value its mod applies,'),
             L('or to the game\'s own value.')..' '..Lf('%d active, %d applying, %d failed, %d pending.',active,
                 applying-removing,errors,self.pending_n)}
+    elseif c.kind=='reset_item'then
+        title=L('RESET ITEM?')
+        body={Lf('%d changed fields of %s go back to their mod\'s value or the game\'s own.',c.data.count,
+            util.display_name(c.data.object))}
+        if c.data.shared then body[2]=Lf('Shared values: this also resets %s.',c.data.shared)end
     elseif c.kind=='delete_preset'then
         title=L('DELETE PRESET?');body={Lf('"%s" will be removed from your saved presets.',tostring(c.data))}
     elseif c.kind=='overwrite_preset'then
         title=L('OVERWRITE PRESET?');body={Lf('"%s" will be replaced with the current values.',tostring(c.data))}
     end
+    if recovery or c.kind=='reset_item'then
+        local lines={}
+        for _,line in ipairs(body)do
+            for _,part in ipairs(self.wrap(cv,line,w-48,SZ.small))do lines[#lines+1]=part end
+        end
+        body=lines;h=120+#body*22;y=(P.h-h)/2
+    end
+    cv:rect(x,y,w,h,C.panel_alt,9)
+    cv:frame(x,y,w,h,C.line_strong,10)
+    cv:rect(x,y,w,3,(c.kind=='reset'or c.kind=='reset_item')and C.error or C.gold,10)
     cv:text(title,x+24,y+34,{size=19,font='title',colour=C.text,z=11})
     for i,line in ipairs(body)do cv:text(line,x+24,y+62+(i-1)*22,{size=SZ.small,colour=C.dim,max=w-48,z=11})end
     self.btn_confirm=self.btn_confirm or{click=function()self:confirm_yes()end}
@@ -2292,9 +2558,13 @@ function App:draw_confirm()
         cv:text(label,bx+bw/2,by+bh/2,{size=SZ.tab,font='title',colour=style=='danger'and C.error or C.text,align='center',z=12})
         cv:hit(bx,by,bw,bh,action)
     end
-    modal_button(L('CANCEL'),x+w-24-bw*2-12,'normal',self.btn_cancel)
-    modal_button(L('CONFIRM'),x+w-24-bw,'danger',self.btn_confirm)
-    cv:text(L('Enter / Ins confirm   Esc / Del cancel'),x+24,by+bh/2,{size=SZ.tiny,colour=C.faint,z=11})
+    if recovery then
+        modal_button(L('CLOSE'),x+w-24-bw,'normal',self.btn_confirm)
+    else
+        modal_button(L('CANCEL'),x+w-24-bw*2-12,'normal',self.btn_cancel)
+        modal_button(L('CONFIRM'),x+w-24-bw,'danger',self.btn_confirm)
+        cv:text(L('Enter / Ins confirm   Esc / Del cancel'),x+24,by+bh/2,{size=SZ.tiny,colour=C.faint,z=11})
+    end
 end
 
 ------------------------------------------------------------------------------------------------- mods view --
@@ -2326,6 +2596,11 @@ end
 -- into view. True when the row is shown on its page (a row of a mount's original weapon is not while the mount holds
 -- another weapon: then only the object is selected).
 function App:reveal(row)
+    if row.recovered_key then
+        if self.is_custom_key(row.recovered_key)then self:set_view('custom')
+        else self:toast(L('Unavailable saved field'),C.pending)end
+        return
+    end
     local object=row.object
     self:goto_object(object)
     self.catalog:open(object)
@@ -2367,9 +2642,9 @@ end
 ---------------------------------------------------------------------------------------------- presets view --
 function App:current_values()
     local values=self.layer:overrides()
-    for key,p in pairs(self.pending)do values[key]=p.value end
-    -- custom stratagem tunes (applied at once, never pending)
+    -- Recovery can leave custom tunes pending; those requested values take precedence in saved presets.
     for key,value in pairs(self:custom_values())do values[key]=value end
+    for key,p in pairs(self.pending)do values[key]=p.value end
     return values
 end
 -- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the
@@ -2424,12 +2699,15 @@ function App:draw_ui_icon(name,x,y,size,colour)
     return true
 end
 -- A value's text for a row (its labels, arrows for codes, names for references).
-function App:text(row,value)return catalog_module.text(row,value)end
+function App:text(row,value)
+    if row.recovered_key then return value==nil and'-'or util.value_label(value)end
+    return catalog_module.text(row,value)
+end
 -- Values by key as presets and the saved session store them (reference handles by what names them).
 function App:encode_values(values)
     local out={}
     for key,value in pairs(values)do
-        if App.is_custom_key(key)then out[key]=value
+        if App.is_custom_key(key)or(self.pending[key]and self.pending[key].row.recovered_key)then out[key]=value
         else
             local row=self.catalog:row(key)
             local stored=row and catalog_module.encode(row,value)

@@ -12,6 +12,7 @@
 -- then every name, section and field the catalogue shows (weapons, stratagems, enemies ...). L() looks every one up.
 local M={}
 
+local builtin=require('mods/skyeshade/hd2runtime_editor/editor/locale')
 local current={}          -- English -> translation
 local language='English'
 local parts_cache={}      -- composite labels ('Damage · Flak') translated part by part, per language
@@ -234,7 +235,16 @@ function M.use(name,languages)
     for _,l in ipairs(languages or M.languages())do
         if l.name==name and l.file then
             local text=read(M.folder()..'\\'..l.file)
-            if text then switch((M.parse(text)),l.name);return true end
+            if text then
+                local map=M.parse(text)
+                for code,extra in pairs(builtin)do
+                    if M.match_game_language(code,{l})then
+                        for key,value in pairs(extra)do if map[key]==nil then map[key]=value end end
+                        break
+                    end
+                end
+                switch(map,l.name);return true
+            end
         end
     end
     switch({},'English')
@@ -280,6 +290,7 @@ function M.use_game_language(hd2)
     local languages=M.languages()
     local name=M.match_game_language(code,languages)
     if name and M.use(name,languages)then return name end
+    if builtin[code]then switch(builtin[code],code);return code end
     return nil
 end
 

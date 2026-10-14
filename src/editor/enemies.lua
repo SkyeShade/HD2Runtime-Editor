@@ -1,4 +1,4 @@
--- Expanded enemy controls from HD2Runtime 0.32.0. Catalogue access only; the
+-- Expanded enemy controls from HD2Runtime 0.40.0. Catalogue access only; the
 -- editor's normal override layer owns all writes, resets, presets and exports.
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local M={}
@@ -178,17 +178,50 @@ function M.director_rows(cat,H,o,kind,key)
         local note=d.lifecycle
         if kind=='roster'then note=SHIP..' Zero suppresses ordinary picks only: native bypasses and authored squads can still spawn this enemy.'
         elseif kind~='demolition_template'then note=SHIP..' '..note end
+        local label
+        if kind=='roster'then
+            local difficulty=tonumber(id:match('^spawn%.weight_(%d+)$'))
+            if difficulty then label='Difficulty '..difficulty..' weight'end
+        end
         local part=section(id)
         if kind=='composition'then
             local slot=id:match('group_(%d+)_');if slot then part='Group '..slot end
         end
-        local row=H.make_row(o,{id=id,field=id,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
+        local row=H.make_row(o,{id=id,field=id,label=label,vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,
             storage=f.backing and f.backing.storage,target=target,descriptor=f,shared=true,unverified=true,
             section=part,editable=f.editable,reason=f.reason,note=note})
+        local difficulty=kind=='roster'and id:match('^spawn%.weight_(%d+)$')
+        if difficulty then
+            row.field_icon={iconKind='difficulty',iconName=difficulty}
+            row.spawn_weight=true
+        end
         -- Stable across reloads and shared with ledger claims of the same target.
         row.loc='director/'..kind..'/'..key..'/'..id
         row.exact=true -- enforce ordered eligibility bounds on the desired value, not an arbitrary slider range
         rows[#rows+1]=row
+    end
+    if kind=='difficulty'then
+        local difficulty=d.metadata.techLevel or tonumber(key)
+        local roster_objects=cat:objects('enemy_rosters')
+        o.section_icons={}
+        for _,faction in ipairs({'terminids','automatons','illuminate'})do
+            local heading=title(faction)
+            o.section_icons[heading]={iconKind='faction',iconName=faction}
+            local names={}
+            for _,roster in ipairs(roster_objects)do if roster.rosterFaction==faction then
+                names[roster.name]=(names[roster.name]or 0)+1
+            end end
+            for _,roster in ipairs(roster_objects)do if roster.rosterFaction==faction then
+                cat:open(roster)
+                for _,original in ipairs(roster.rows)do if original.field=='spawn.weight_'..difficulty then
+                    -- One stable key, target, ledger location and preset entry in both pages.
+                    local row={};for k,v in pairs(original)do row[k]=v end
+                    row.canonical=original;row.object=o;row.section=heading;row.group=nil;row.field_icon=nil
+                    row.label=roster.name..(names[roster.name]>1 and(' / '..roster.rosterName..' row '..roster.rosterRow)or'')
+                    rows[#rows+1]=row
+                end end
+            end end
+        end
     end
     for _,g in ipairs(d.metadata.groups or{})do
         for i,candidate in ipairs(g.candidates or{})do
@@ -217,6 +250,7 @@ function M.director(cat,H,kind)
         elseif kind=='composition'then name=title(m.faction)..' · '..title(m.role~='unresolved'and m.role or('Family '..m.family))..' · Row '..m.row;sub='Spawn composition'
         else name=key;sub='Shared demolition threshold'end
         list[#list+1]={key='ed|'..kind..'/'..key,name=name,subtitle=sub,detail=d.lifecycle,
+            rosterFaction=kind=='roster'and m.faction or nil,rosterName=m.roster,rosterRow=m.row,
             spawnDifficulty=kind=='difficulty'and tonumber(key)or nil,
             control_rank=kind=='difficulty'and tonumber(key)or nil,
             filter_group=(kind=='roster'or kind=='composition')and title(m.faction or'unknown')or nil,

@@ -8,6 +8,7 @@ import importlib.util
 import json
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,6 +28,124 @@ def lua_file(name, args):
 
 @unittest.skipUnless(lua_host.available(), 'needs Helldivers 2 bin/lua51.dll and an HD2Runtime checkout')
 class EditorTests(unittest.TestCase):
+    def test_mission_diagnostic(self):
+        result=lua_file('test_mission_diagnostic.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'mission diagnostic explicit read only log popup failure ok')
+
+    def test_mission_overview(self):
+        result=lua_file('test_mission_overview.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'mission overview canonical sliders state warning apply reset ok')
+
+    def test_helldiver_risk(self):
+        result=lua_file('test_helldiver_risk.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'helldiver gameguard warning ok')
+
+    def test_reset_item(self):
+        result=lua_file('test_reset_item.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'reset item ok')
+
+    def test_auto_freeze(self):
+        result=lua_file('test_auto_freeze.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'auto freeze ok')
+
+    def test_native_keys(self):
+        result=lua_file('test_native_keys.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'native keys settings ok')
+
+    def test_mission_markers(self):
+        result=lua_file('test_mission_markers.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'mission markers immediate shared pages ok')
+
+    def test_armor_perks(self):
+        result=lua_file('test_armor_perks.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'armor perks catalogue icons legacy selectors apply reset export render ok')
+
+    def test_spawn_picker_compatibility(self):
+        result=lua_file('test_spawn_compatibility.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'spawn ownership pending restore render bridge ok')
+
+    def test_missions(self):
+        result=lua_file('test_missions.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'mission fronts shared timers apply reset export render ok')
+
+    def test_wasp_swaps(self):
+        result=lua_file('test_wasp_swaps.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'wasp mode selectors and melee visibility ok')
+
+    def test_supply_pack(self):
+        result=lua_file('test_supply_pack.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'supply pack controls shared stim alias apply reset export render ok')
+
+    def test_application_recovery_across_fresh_boots(self):
+        for phases in (('interrupted','recovery','recovery','retry','success'),
+                       ('interrupted','discard'),('interrupted','remove_one'),('failure','missing'),
+                       ('storage',),('clear_failure',),('immediate_failure',)):
+            with tempfile.TemporaryDirectory() as folder:
+                for phase in phases:
+                    with self.subTest(phase=phase):
+                        result=lua_file('test_recovery.lua',{'sim':(LUA/'sim.lua').as_posix(),
+                            'harness':(LUA/'ui_harness.lua').as_posix(),'folder':folder,'phase':phase})
+                        self.assertEqual(result,phase+' ok')
+
+    def test_shared_delivery_controls(self):
+        result=lua_file('test_delivery_dedup.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertIn('delivery identity dedup presets imports apply reset render ok',result)
+
+    def test_heatsinks(self):
+        result=lua_file('test_heatsinks.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'magazines and heatsinks coverage independent apply reset derived render ok')
+
+    def test_builtin_names_follow_game_language_and_keep_overrides(self):
+        result=lua_host.run(r'''
+local i=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
+local data=require('mods/skyeshade/hd2runtime_editor/editor/locale')
+i.languages=function()return{{name='English'}}end
+local count=0
+for code,rows in pairs(data)do
+    assert(i.use_game_language({ui={language=function()return code end}})==code)
+    for key,text in pairs(rows)do assert(i.L(key)==text)end
+    count=count+1
+end
+assert(count==13)
+i.set({['Landing thrust']='Custom landing'},'Custom')
+assert(i.L('Landing thrust')=='Custom landing')
+i.use('English');assert(i.L('Landing thrust')=='Landing thrust')
+return 'ok'
+''')
+        self.assertEqual(result,'ok')
+        spec=importlib.util.spec_from_file_location('locale_builtin',HERE.parent/'tools/locale_builtin.py')
+        mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+        self.assertEqual(mod.build(),(HERE.parent/'src/editor/locale.lua').read_text(encoding='utf8'))
+        data=json.loads((HERE.parent/'localization/builtin.json').read_text(encoding='utf8'))
+        fonts=lua_host.RUNTIME/'domains'
+        glyphs=lambda path:set(map(int,re.findall(r'\[(\d+)\]=',path.read_text(encoding='utf8'))))
+        role=glyphs(fonts/'ui_fonts.lua')
+        font_of={'ru':'ru','jp':'ja','ko':'ko','cn':'zh_hans','tc':'zh_hant'}
+        for code,rows in data.items():
+            available=role|glyphs(fonts/('ui_fonts_'+font_of.get(code,'default')+'.lua'))
+            missing={ch for text in rows.values() for ch in text if ord(ch)not in available}
+            self.assertFalse(missing,(code,missing))
+
+
+
+    def test_derived_heat_and_difficulty_roster_aliases(self):
+        result=lua_file('test_derived_difficulty.lua',{'sim':(LUA/'sim.lua').as_posix(),
+            'harness':(LUA/'ui_harness.lua').as_posix()})
+        self.assertEqual(result,'derived pending applied reset zero rates and difficulty canonical aliases sync presets render ok')
 
     def test_enemy_overview_factions_and_difficulties(self):
         result=lua_file('test_spawn_overview.lua',{'sim':(LUA/'sim.lua').as_posix(),

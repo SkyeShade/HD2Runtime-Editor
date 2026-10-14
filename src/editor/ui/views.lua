@@ -862,7 +862,17 @@ function M.install(App)
         end
     end
     -- The settings that are on/off switches (the first rows of SETTINGS), then the interface size and the open key.
-    App.SETTINGS_TOGGLES=5
+    App.SETTINGS_TOGGLES=6
+    function App:set_optimized_application(on)
+        local control=type(self.hd2.diagnostics)=='table'and self.hd2.diagnostics.application_optimizations
+        if type(control)~='function'then
+            self:toast(L('This Runtime build does not support the application toggle.'),C.pending);return false
+        end
+        local ok,result=pcall(control,on)
+        if not ok or result~=on then self:toast(tostring(result),C.error);return false end
+        self.presets:set_setting('optimized_application',on)
+        return true
+    end
     -- "Use the game's names": the game's own names of weapons, stratagems, boosters ... in its language
     -- (editor/game_names.lua), shown at once.
     function App:set_game_names(on)
@@ -912,14 +922,22 @@ function M.install(App)
                     pcall(self.hd2.input.block,false)
                 end
             end},
-            {click=function()self:set_game_names(not self.presets:setting('game_names',true))end}}
+            {click=function()self:set_game_names(not self.presets:setting('game_names',true))end},
+            {click=function()
+                local control=type(self.hd2.diagnostics)=='table'and self.hd2.diagnostics.application_optimizations
+                local current=type(control)=='function'and control()or self.presets:setting('optimized_application',true)
+                self:set_optimized_application(not current)
+            end}}
         local labels={L('Restore my last applied values when the game starts'),
             L('Free the mouse from the camera while open (experimental)'),L('Menu sounds on buttons'),
             L('Keep keys, clicks and the wheel from the game while open (experimental)'),
-            L('Use the game\'s names (weapons, stratagems, boosters, in the game\'s language)')}
+            L('Use the game\'s names (weapons, stratagems, boosters, in the game\'s language)'),
+            L('Optimized application (runtime-wide)')}
         local values={self.presets:setting('restore_session',true),self.presets:setting('free_cursor',true),
             self.presets:setting('ui_sounds',true),self.presets:setting('block_game_input',true),
-            self.presets:setting('game_names',true)}
+            self.presets:setting('game_names',true),self.presets:setting('optimized_application',true)}
+        local application_mode=type(self.hd2.diagnostics)=='table'and self.hd2.diagnostics.application_optimizations
+        if type(application_mode)=='function'then values[6]=application_mode()end
         local toggles=App.SETTINGS_TOGGLES
         for i=1,#labels do
             if self.settings_index==i then cv:rect(x-8,y-14,560,28,C.select,1)end
@@ -931,6 +949,13 @@ function M.install(App)
                 if not(names and game_names_module.available(self.hd2))then note=L('needs HD2Runtime 0.31.2')
                 elseif values[i]and not names.ready then note=L('the game\'s texts are not available yet')end
                 if note then cv:text(note,x+552,y,{size=SZ.tiny,colour=C.faint,max=W-x-576})end
+            elseif i==6 then
+                cv:text(type(application_mode)=='function'
+                    and L('Off: slower, no shared discovery/decode caches. Write checks remain.')
+                    or L('This Runtime build does not support the application toggle.'),
+                    x+552,y-6,{size=SZ.tiny,colour=C.faint,max=W-x-576})
+                cv:text(L('Diagnostic only. Both modes use buffers; not a confirmed WASP crash fix.'),
+                    x+552,y+8,{size=SZ.tiny,colour=C.faint,max=W-x-576})
             end
             y=y+34
         end
@@ -956,20 +981,31 @@ function M.install(App)
         end}
         self.btn_hotkey_default=self.btn_hotkey_default or{click=function()self:set_hotkey(App.DEFAULT_HOTKEY)end}
         local capturing=self.key_capture~=nil
-        cv:text(capturing and(self.key_capture.chord or L('press a key...'))or self:hotkey(),x+390,y,
-            {size=SZ.label,font='title',colour=capturing and C.gold or C.text,align='right'})
-        button(self,capturing and L('CANCEL')or L('CHANGE'),x+400,y-13,140,26,'normal',self.btn_hotkey)
-        button(self,L('DEFAULT'),x+552,y-13,110,26,self:hotkey()~=App.DEFAULT_HOTKEY and'normal'or'disabled',
-            self.btn_hotkey_default)
+        -- an input bound on the game's keybind page (MODS tab) controls it: the key is shown struck out, emptying
+        -- that binding brings the key back (HD2Runtime runtime/mod_bindings_bridge.lua)
+        local native=not capturing and self:native_key('hd2runtime_editor.toggle')
+        if native then
+            self:struck_key(self:hotkey(),x+390,y)
+            cv:text(L('MODS keybind'),x+470,y,{size=SZ.label,font='title',colour=C.gold,align='center'})
+        else
+            cv:text(capturing and(self.key_capture.chord or L('press a key...'))or self:hotkey(),x+390,y,
+                {size=SZ.label,font='title',colour=capturing and C.gold or C.text,align='right'})
+            button(self,capturing and L('CANCEL')or L('CHANGE'),x+400,y-13,140,26,'normal',self.btn_hotkey)
+            button(self,L('DEFAULT'),x+552,y-13,110,26,self:hotkey()~=App.DEFAULT_HOTKEY and'normal'or'disabled',
+                self.btn_hotkey_default)
+        end
         y=y+34
         cv:text(capturing and L('Press the new key, or Ctrl / Shift / Alt with it. Esc cancels.')
+            or native and Lf('Set on the game\'s keybind page (MODS tab). Empty it there to use %s again.',self:hotkey())
             or Lf('Open the editor with %s. Edits apply live through HD2Runtime\'s guarded writes.',self:hotkey()),
             x,y+4,{size=SZ.tiny,colour=capturing and C.gold or C.faint,max=W-48})
         -- HD2Runtime's own settings panel (F10: its language, the messages it shows), HD2Runtime 0.31.1
         -- hd2.ui.open_settings: the editor closes first, so the two windows never share the cursor
         y=y+34
         local can_open=type(self.hd2.ui)=='table'and type(self.hd2.ui.open_settings)=='function'
-        cv:text(L('HD2Runtime settings (F10): its language and on-screen messages'),x,y,
+        cv:text(self:native_key('hd2runtime.settings')
+            and L('HD2Runtime settings (MODS keybind): its language and on-screen messages')
+            or L('HD2Runtime settings (F10): its language and on-screen messages'),x,y,
             {size=SZ.label,colour=C.dim,max=390})
         self.btn_runtime_settings=self.btn_runtime_settings or{click=function()
             if self.ctx.close then self.ctx.close()end

@@ -27,6 +27,7 @@
 -- a change stops the previous handle and sets again; resetting both stops it (the armor's own passives return).
 local util=require('mods/skyeshade/hd2runtime_editor/editor/util')
 local catalog_module=require('mods/skyeshade/hd2runtime_editor/editor/catalog')
+local spawn_compat=require('mods/skyeshade/hd2runtime_editor/editor/spawn_compatibility')
 local M={}
 
 -- The form the editor holds a value in for a row, or nil: numbers with three decimals (or whole), other kinds as given
@@ -318,6 +319,7 @@ end
 -- Whether a payload slot's value sets off another explosion than the weapon's own (editor/catalog.lua "What a payload
 -- slot sets off"): HD2Runtime then refuses the weapon's own explosion rows, their reset included.
 local function payload_other(self,slot_row,value)
+    if slot_row.throwable_payload and value=='none'then return catalog_module.payload_other(slot_row,value)end
     if not catalog_module.payload_identity(value)then return false end
     if self.catalog and self.catalog.payload_view then
         local ok,view=pcall(self.catalog.payload_view,self.catalog,slot_row,value)
@@ -371,6 +373,8 @@ end
 -- Ask for the user's value on a field. False and why when the value cannot be held exactly. origin: where the value
 -- came from, for the errors list ({kind = 'edit' | 'preset' | 'session' | 'mod', name}); a personal edit by default.
 function Layer:set(row,value,origin)
+    local blocked=spawn_compat.reason(self.catalog and self.catalog.real_hd2 or self.hd2,row)
+    if blocked then return false,blocked end
     local held=hold(row,value)
     if held==nil then
         if row.kind then return false,'not a value this field takes'end

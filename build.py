@@ -9,6 +9,7 @@ build/build-report.json's artifact digest.
 
 Usage: py build.py   (or build.cmd)
 """
+import argparse
 import hashlib
 import json
 import os
@@ -82,6 +83,14 @@ def describe(path):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--mod-icons', action='store_true',
+                        help='include installed mod artwork from the active mod manager (local test builds)')
+    args = parser.parse_args()
+    if args.mod_icons:
+        status = subprocess.run([sys.executable, '-B', str(ROOT / 'tools/mod_icons.py')]).returncode
+        if status != 0:
+            return status
     sdk = find_sdk()
     if sdk is None:
         print('HD2Runtime SDK not found. Set HD2RUNTIME_SDK to the SDK folder (the one holding hd2.py and '

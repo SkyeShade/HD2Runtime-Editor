@@ -14,6 +14,7 @@ local M={}
 -- The Runtime's kind of an object, by the family of its key ('pw|AR-23 Liberator'); the key is the object's English
 -- name. A support weapon, backpack or vehicle without a name of its kind is asked for as its stratagem.
 M.KINDS={pw='weapon',sp='support_weapon',th='throwable',sb='backpack',ve='vehicle',bo='booster',
+    mi='mission',ap='passive',
     st='stratagem',rs='stratagem',ex='stratagem'}
 local STRATAGEM_FALLBACK={sp=true,sb=true,ve=true}
 -- (the game is registering its texts or switching language: asked again when the window opens next)
@@ -101,7 +102,7 @@ function Names:name(object)
     local family=object.key:match('^(%a+)|')
     local kind=M.KINDS[family or'']
     if text and kind and type(object.name)=='string'then
-        name,transient=ask(text,kind,object.name)
+        name,transient=ask(text,kind,object.game_name_key or object.name)
         if not name and not transient and STRATAGEM_FALLBACK[family]and type(object.stratagem)=='string'then
             name,transient=ask(text,'stratagem',object.stratagem)
         end

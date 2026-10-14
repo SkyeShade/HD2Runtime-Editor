@@ -33,6 +33,9 @@ local M={}
 
 M.VERSION='1.0.0'
 M.HOTKEY='F8'
+-- The toggle on the game's own keybind page too (HD2Runtime rc20+ with Mod Bindings Menu installed; an older Runtime
+-- ignores it): any input bound there opens and closes the editor as the hotkey does.
+local NATIVE_BINDING={label=function()return i18n.L('Open / close HD2R Editor')end,category='HD2R Editor'}
 local RESTORE_MIN,RESTORE_MAX=6,90   -- game seconds: earliest restore, and the latest wait for other mods to settle
 local SETTLED={complete=true,rejected=true,cancelled=true,blocked=true,disabled=true,unavailable=true}
 
@@ -88,6 +91,12 @@ function M.start(hd2,id)
         if ok and value then store=value else log('saved data unavailable: '..tostring(value))end
     end
     local presets=presets_module.new(store)
+    -- Restore before session application. Older Runtime builds simply omit this diagnostic control.
+    local application_mode=type(hd2.diagnostics)=='table'and hd2.diagnostics.application_optimizations
+    if type(application_mode)=='function'then
+        local ok,why=pcall(application_mode,presets:setting('optimized_application',true))
+        if not ok then log('application mode unavailable: '..tostring(why))end
+    end
     local hotkey=presets:setting('hotkey',M.HOTKEY)
     -- the language chosen in Settings (a file in the localisation folder); none chosen yet: the game's language when a
     -- localisation file for it is there (hd2.ui.language, HD2Runtime 0.31.1), English otherwise. Checked again each
@@ -190,6 +199,7 @@ function M.start(hd2,id)
     local function block(on)
         if can_block then pcall(hd2.input.block,on and{keyboard=true,mouse=true}or false)end
     end
+    local clock=0
     local function toggle()
         if overlay:status().visible then
             catalog:pause_owners()
@@ -205,16 +215,18 @@ function M.start(hd2,id)
             if game_names:refresh()then changed=true end
             if changed then app.tab_actions,app.mods_cache,app.changes_key=nil,nil,nil end
             overlay:show()
+            sounds.play('open',clock)
         end
     end
     state.toggle=toggle
     app.ctx.close=function()if overlay:status().visible then toggle()end end
-    local binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle})
+    app.ctx.open=function()if not overlay:status().visible then toggle()end end
+    local binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle,native=NATIVE_BINDING})
     if type(binding)=='table'and binding.state=='rejected'and hotkey~=M.HOTKEY then
         log('the saved hotkey '..tostring(hotkey)..' is not a key ('..tostring(binding.reason)..'); using '..M.HOTKEY)
         hotkey=M.HOTKEY
         app.ctx.hotkey=hotkey
-        binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle})
+        binding=mod:bind('hd2runtime_editor.toggle',{key=hotkey,on_press=toggle,native=NATIVE_BINDING})
     end
     if type(binding)=='table'and binding.state=='conflict'then
         log('the hotkey '..hotkey..' is used by another mod; choose another in the editor\'s Settings tab')
@@ -244,10 +256,13 @@ function M.start(hd2,id)
     -- Every frame: advance unfinished layer work; restore once; save only when the session changes.
     -- The layer returns immediately once settled, waking on edits and ensure status callbacks.
     -- (editor/session.lua: a saved value that does not come back at this start stays saved).
+    -- Mission Overview's "Freeze automatically": the host's mission timer frozen at the start of a ticked mission type
+    pcall(function()require('mods/skyeshade/hd2runtime_editor/editor/auto_freeze').start(hd2,mod,presets,log)end)
     local session=session_module.new({app=app,layer=layer,presets=presets,log=log})
     state.session=session
     app.ctx.forget_saved=function()session:forget_all()end
-    local clock=0
+    -- Recovery is independent of the auto-restore preference and runs before the first visible frame.
+    session:recover_interrupted()
     local restore=presets:setting('restore_session',true)
     local background_error
     mod:on_frame(function(dt)

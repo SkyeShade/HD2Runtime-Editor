@@ -1,10 +1,11 @@
 -- Game atlas handles, with locally generated images retained for older icon categories.
 local M={}
 local KINDS={stratagem='stratagems',booster='boosters',weapon='weapons',throwable='throwables',
-    faction='factions',objective='objectives',difficulty='difficulties'}
+    faction='factions',objective='objectives',difficulty='difficulties',passive='passives'}
 local FACTION_COLOURS={automatons={255,80,80,255},terminids={255,201,45,255},
     illuminate={183,116,255,255},super_earth={95,195,245,255}}
 local OBJECTIVE_COLOUR={95,195,245,255}
+local PERK_COLOUR={255,221,31,255}
 function M.load(hd2,generated)
     local resources=hd2.resources
     if type(resources)~='table'then return nil,0 end
@@ -30,7 +31,8 @@ function M.load(hd2,generated)
                         local good,d=pcall(handle.describe,handle);if good then info=d end
                     end
                     icons[key][name]={handle=handle,game=true,atlas=kind~='stratagem'and kind~='booster',
-                        tint=kind=='faction'and FACTION_COLOURS[name]or kind=='objective'and OBJECTIVE_COLOUR or nil,
+                        tint=kind=='faction'and FACTION_COLOURS[name]or kind=='objective'and OBJECTIVE_COLOUR
+                            or kind=='passive'and PERK_COLOUR or nil,
                         monochrome=info.mode=='mask',
                         aspect=info.width and info.height and info.width/info.height or 1}
                     count=count+1
@@ -45,7 +47,7 @@ end
 function M.warm(hd2,icons,log)
     if not icons or type(hd2.require_assets)~='function'or type(hd2.asset_dependency)~='function'then return end
     local targets,seen={},{}
-    for _,key in ipairs({'weapons','throwables','factions','objectives','difficulties'})do
+    for _,key in ipairs({'weapons','throwables','factions','objectives','difficulties','passives'})do
         for _,entry in pairs(icons[key]or{})do if entry.game then
             local ok,info=pcall(hd2.asset_dependency,entry.handle)
             if ok and type(info)=='table'and info.known and info.autoLoadSupported and info.package and not seen[info.package]then

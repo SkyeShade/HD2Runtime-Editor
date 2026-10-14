@@ -36,6 +36,7 @@ end
 -- The editor catalogue object a validated spec writes (its kind and the target name the validator keeps).
 local function object_key(spec)
     local kind=spec.kind
+    if kind=='armor_perk'and spec.armor_perk then return 'ap|'..spec.armor_perk end
     if kind=='player_weapon'and spec.weapon then return 'pw|'..spec.weapon end
     if kind=='support_weapon'and spec.weapon then return 'sw|'..spec.weapon end
     if kind=='stratagem'and spec.stratagem then return 'st|'..spec.stratagem end

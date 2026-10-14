@@ -15,28 +15,33 @@ local M={}
 
 M.GROUPS={
     {id='weapons',label='WEAPONS',items={
-        {id='primary',label='Primary'},{id='secondary',label='Secondary'},{id='throwables',label='Throwables'},
-        {id='melee',label='Melee & Gun Bashes'}}},
+        {id='primary',label='Primary'},{id='secondary',label='Secondary'},{id='throwables',label='Throwables'}}},
     {id='stratagems',label='STRATAGEMS',items={
         {id='offensive',label='Offensive',tone='offensive'},{id='defensive',label='Defensive',tone='defensive'},
         {id='support_weapons',label='Support Weapons',tone='support'},
         {id='support_backpacks',label='Support Backpacks',tone='support'},
         {id='vehicles',label='Vehicles',tone='support'},{id='resupply',label='Mission',tone='support'}}},
     {id='equipment',label='EQUIPMENT',items={{id='boosters',label='Boosters'},{id='status_effects',label='Status Effects'}}},
-    {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'}}},
+    {id='helldiver',label='HELLDIVER',items={{id='helldiver',label='Helldiver'},{id='armor',label='Armor'},
+        {id='armor_perks',label='Armor perks'}}},
     {id='enemies',label='ENEMIES',items={
-        {id='enemy_overview',label='Enemy Overview'},
         {id='terminids',label='Terminids'},{id='automatons',label='Automatons'},{id='illuminate',label='Illuminate'},
         {id='structures',label='Structures'},{id='enemy_entities',label='Other Entities'}}},
     {id='enemy_director',label='SPAWNING & DESTRUCTION',items={
+        {id='enemy_overview',label='Enemy Overview'},
         {id='enemy_difficulty',label='Mission Difficulty'},{id='enemy_rosters',label='Spawn Rosters'},
         {id='enemy_compositions',label='Spawn Compositions'},{id='demolition_templates',label='Demolition Templates'},
         {id='destruction_models',label='Destruction Models'}}},
+    -- (the user's requests of 2026-10-14: one overview per front, its sliders capped at the game's 41:40, a freeze
+    -- button and "Freeze automatically" per duration. The per-mission pages and the Mission Timer page are kept,
+    -- unlisted: their categories still resolve saved and preset values, FAMILY_CATEGORIES below)
+    {id='missions',label='MISSIONS',items={{id='mission_overview',label='Mission Overview'}}},
 }
 
 local NUMERIC={number=true,integer=true}
--- The game's network limits of a weapon's ammunition (rounds in a magazine, magazine counts).
-local NETWORK_MAX={rounds=2047,magazines=31}
+-- The game's network limits of a weapon's ammunition (rounds in a magazine, magazine counts), and of the mission
+-- countdown (seconds): the host clamps its countdown every frame to the replicated timer field's range 0..2500.
+local NETWORK_MAX={rounds=2047,magazines=31,mission_seconds=2500}
 M.NETWORK_MAX=NETWORK_MAX
 local INTEGER_STORAGE={u8=true,u16=true,u32=true,u64=true,i8=true,i16=true,i32=true,i64=true}
 local STORAGE_LIMITS={u8={0,255},u16={0,65535},u32={0,4294967295},i8={-128,127},i16={-32768,32767},
@@ -51,6 +56,9 @@ end
 ---------------------------------------------------------------------------------------------- native identity --
 local shared_records
 local function location(descriptor,fallback)
+    if type(descriptor)=='table'and type(descriptor.backing)=='table'and descriptor.backing.kind=='mission_timer'then
+        return 'mission/'..descriptor.backing.source..'/'..descriptor.semanticFieldId
+    end
     if type(descriptor)=='table'and type(descriptor.target)=='table'and descriptor.target.resource=='enemy_director'then
         local t=descriptor.target
         return 'director/'..t.path..'/'..t.key..'/'..descriptor.semanticFieldId
@@ -87,7 +95,7 @@ M.location=location
 
 ------------------------------------------------------------------------------------------------- sections --
 local DOMAIN_LABELS={weapon='Weapon',magazine='Ammo & Magazine',rounds='Ammo & Magazine',ammo='Ammo & Magazine',
-    reload='Ammo & Magazine',fire_mode='Fire Mode',fire_rate='Fire Mode',heat='Heat',heatsink='Heat',
+    reload='Ammo & Magazine',fire_mode='Fire Mode',fire_rate='Fire Mode',heat='Heat',heatsink='Heatsinks',
     projectile='Projectile',damage='Damage',explosion='Explosion',arc='Arc',beam='Beam',charge='Charge',
     status='Status',spread='Handling',recoil='Handling',sway='Handling',reticle='Handling',movement='Handling',
     function_ammo='Functions',entity='Health & Armor',zone='Damage Zones',shield='Shield',turret='Turret',
@@ -97,7 +105,7 @@ local DOMAIN_LABELS={weapon='Weapon',magazine='Ammo & Magazine',rounds='Ammo & M
     -- HD2Runtime 0.31.0: the W.A.S.P., Spear, Commando, P-33 and P-92 missiles' own SeekingMissile records
     missile='Missile',function_missile='Function Missile',deposit='Ammo'}
 -- A backpack field's own group (the Runtime's uiGroup): its section name.
-local UI_GROUPS={backpack_ammo='Ammo',drone_magazines='Drone Magazines'}
+local UI_GROUPS={backpack_ammo='Ammo',drone_magazines='Drone Magazines',supply_boxes='Supply boxes'}
 -- The firing charge members of a heat weapon are its wind-up (HD2Runtime 0.31.0, research/windup-controls): shown with
 -- the spin-up fields under "Wind-up", where a player looking for the Sickle's wind-up finds them.
 local WIND_UP={['heat.firing_charge']=true,['heat.charge_gain_per_second']=true,['heat.charge_loss_per_second']=true,
@@ -220,6 +228,8 @@ local function make_row(object,spec)
             or(tostring(spec.field):find('^magazine%.')and NETWORK_MAX.magazines)or nil
         if cap and spec.vanilla<=cap then max=cap end
     end
+    -- (HD2Runtime 0.40.0 RC14 and earlier published 7200: anything above 2500 started at 41:40 in the mission)
+    if spec.field=='mission.duration_seconds'then max=math.min(max or NETWORK_MAX.mission_seconds,NETWORK_MAX.mission_seconds)end
     local limits=STORAGE_LIMITS[spec.storage or'']
     if limits then
         min=min and math.max(min,limits[1])or limits[1]
@@ -288,6 +298,10 @@ local function explosion_label(id)
 end
 function M.text(row,value)
     local L=i18n.L
+    if row.calculate then
+        if type(value)=='number'then return ('%.3f'):format(value):gsub('0+$',''):gsub('%.$','')..' s'end
+        return L(tostring(value))
+    end
     for _,item in ipairs(row.labels or{})do
         if util.same(item.value,value)then return L(item.label)end
     end
@@ -461,7 +475,7 @@ local function source_row(object,spec)
     local common={id=spec.id,kind='reference',label=spec.label,section=spec.section,descriptor=spec.descriptor,
         unverified=true,field=spec.field,swap_scope=spec.swap_scope,
         target=function()return spec.source().target end,expect=function()return spec.source().expect end,
-        options=spec.options}
+        options=spec.options,note=spec.note}
     if ok and type(src)=='table'and src.writable and src.expect then
         common.vanilla=src.expect
         if src.field then common.field=src.field end
@@ -746,7 +760,17 @@ end
 -- locked rows (their values, this reason) instead of being left out.
 local BLOCKED_REASON='read only for now: HD2Runtime cannot yet tell this weapon\'s two game records apart, so it blocks '
     ..'writes to it'
+-- Build Supply Pack views without expanding every weapon's damage and payload rows.
+local function refill_entry(object,entry)
+    if not object.refill_only then return entry end
+    local fields={}
+    for _,f in ipairs(entry.fields or{})do
+        if tostring(f.semanticFieldId):match('from_supply$')then fields[#fields+1]=f end
+    end
+    return setmetatable({fields=fields},{__index=entry})
+end
 local function player_rows(hd2,object,entry)
+    entry=refill_entry(object,entry)
     local rows={}
     local name=entry.name
     for _,f in ipairs(entry.fields or{})do
@@ -811,6 +835,7 @@ local function player_rows(hd2,object,entry)
             -- (fires_scope: the swap whose donor these rows give way to, "What a swapped weapon fires" below)
             local common={id=id,label=f.displayName,unit=f.unit,field=field,target=target,shared=shared_ack(f),
                 unverified=unverified(f),descriptor=f,section=section,fires_scope=fires,note=field_note(f)}
+            if id:match('^heatsink%.')then common.group='Heatsinks';common.section='Supply'end
             if id=='reload.duration'and timing then
                 common.label=entry.kind=='underbarrel'and'Reload duration (underbarrel)'
                     or(name=='AR-11 Arbitrator'and'Reload duration (AR mode)'or'Reload duration')
@@ -893,6 +918,10 @@ local function player_rows(hd2,object,entry)
                 end
             end
         end
+    end
+    if object.refill_only then
+        for _,r in ipairs(rows)do r.weapon_name=name end
+        return rows
     end
     -- HD2Runtime 0.31.0 beam swaps: a beam weapon fires another catalogued beam (weapon:beam_source()). The source
     -- decides, not the field: the LAS-5 Scythe's own member is dormant (read-only), and its beam is swapped on the
@@ -1170,6 +1199,7 @@ local function support_payload_rows(hd2,object,entry,rows,role_text)
     return out
 end
 local function support_rows(hd2,object,entry)
+    entry=refill_entry(object,entry)
     local rows={}
     local name=entry.name
     -- HD2Runtime 0.31.1: the rows of the native ProgrammableAmmo projectile (role 'programmable') carry the feed's own
@@ -1242,6 +1272,7 @@ local function support_rows(hd2,object,entry)
             end
         end
     end
+    if object.refill_only then return rows end
     -- HD2Runtime 0.31.0: its projectile swaps (projectile_source(role)), its beam swap (beam_source()) and its
     -- overcharge explosion (its own, or another charge weapon's)
     local base_code='hd2.support_weapon('..string.format('%q',name)..')'
@@ -1256,7 +1287,8 @@ local function support_rows(hd2,object,entry)
                 section=join('Projectile',role_label(role),'Swap'),descriptor=f,field='attack.projectile',
                 code=base_code..':projectile_source('..string.format('%q',role)..')',swap_scope='attack:'..role,
                 source=function()return hd2.support_weapon(name):projectile_source(role)end,
-                options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
+                options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile',
+                    note=f.missileProjectileNote})
             if not f.editable and row.editable then
                 row.editable,row.reason=false,tostring(f.reason or'read-only in this HD2Runtime')
                 row.vanilla,row.kind,row.labels='own','reference',{{value='own',label='Own projectile'}}
@@ -1300,7 +1332,8 @@ local function support_rows(hd2,object,entry)
                     swap_scope='function:programmable',
                     code=base_code..':feed("programmable"):source()',
                     source=function()return hd2.support_weapon(name):feed('programmable'):source()end,
-                    options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile'})
+                    options=function(row)return projectile_options(hd2,row)end,own_label='Own projectile',
+                    note=f.missileProjectileNote})
             end
         end
     end
@@ -1606,9 +1639,37 @@ local HOVER_LABELS={['hover.vertical_acceleration_low_speed']='Lift (climbs when
     ['hover.vertical_acceleration_high_speed']='Lift at high climb speed',
     ['hover.vertical_speed_range_end']='Lift fade speed',['hover.max_vertical_speed']='Max climb speed (cap only)',
     ['hover.duration']='Climb window (seconds in the air)'}
-local function backpack_rows(hd2,object,entry)
+local function backpack_rows(hd2,object,entry,cat)
     local rows={}
     local name=entry.name
+    if name=='B-1 Supply Pack'then
+        local refill_note='These controls also affect ordinary resupply. Actual amounts are capped by capacity and may depend on attachments or armor.'
+        local player=cat and cat:object('hd|Helldiver')
+        if player then
+            cat:open(player)
+            for _,original in ipairs(player.rows or{})do
+                if original.field=='helldiver.supply.stims_from_supply'then
+                    local row=setmetatable({canonical=original,object=object,section='Player refill'},
+                        {__index=original})
+                    rows[#rows+1]=row
+                end
+            end
+        end
+        -- Canonical views: editing here is the same preset operation as editing
+        -- the equipped item's own page, including its magazine attachments.
+        for _,category in ipairs({'primary','secondary','throwables','support_weapons'})do
+            for _,item in ipairs(cat and cat:objects(category)or{})do
+                for _,original in ipairs(cat:refill_rows(item))do
+                    local id=original.field or''
+                    if original.editable and(id:match('from_supply$'))then
+                        rows[#rows+1]=setmetatable({canonical=original,object=object,
+                            section=join(util.display_name(item),original.section),group='Supplies delivered',note=refill_note},
+                            {__index=original})
+                    end
+                end
+            end
+        end
+    end
     local zone_names={}
     local function zone_name(linked,zone)
         local key=linked or''
@@ -1619,7 +1680,7 @@ local function backpack_rows(hd2,object,entry)
         end
         return zone_names[key](zone)
     end
-    -- the Hover Pack shares the jump packs' JumppackComponent: its jump.* sustain and air-control members drive the
+    -- the Hover Pack shares the jump packs' JumppackComponent: its jump.* landing and air-control members drive the
     -- hover flight too, so they are "Flight" there, not a "Jump Pack" section on a pack that cannot jump
     local hovers=false
     for _,f in ipairs(entry.fields or{})do
@@ -1632,6 +1693,7 @@ local function backpack_rows(hd2,object,entry)
             if t.path=='backpack'then
                 target=function()return hd2.backpack(name)end
                 section=(f.uiGroup and(UI_GROUPS[f.uiGroup]or util.humanize(f.uiGroup)))
+                    or(f.semanticFieldId:match('^jump%.sustain_')and'Landing thrust')
                     or(hovers and domain_of(f.semanticFieldId)=='jump'and'Flight')
                     or domain_label(f.semanticFieldId)
             elseif t.path=='linked'then
@@ -1653,6 +1715,7 @@ local function backpack_rows(hd2,object,entry)
                     min=f.min,max=f.max,type=f.type,
                     storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=shared_ack(f),
                     unverified=unverified(f),descriptor=f,section=section,
+                    note=name=='B-1 Supply Pack'and'New packs use starting boxes (-1 = full). Resupply adds at least one box up to capacity. A pack cannot refill itself.'or nil,
                     group=t.path=='damage_zone'and'Damage Zones'or nil})
                 -- shown locked with the Runtime's reason, so nobody edits a value the game ignores
                 local why=dormant_notice(f)
@@ -1798,6 +1861,7 @@ local function throwable_rows(hd2,object,entry)
     local paths=util.sorted_keys(entry.targets or{})
     for _,key in ipairs(paths)do
         local t=entry.targets[key]
+        if not object.refill_only or t.path=='throwable'then
         local target=throwable_target(hd2,name,t)
         local section=t.label and join(util.humanize(t.path),t.label)or util.humanize(t.path or key)
         if t.path=='throwable'then section='Throwable'end
@@ -1816,11 +1880,21 @@ local function throwable_rows(hd2,object,entry)
         end
         for _,id in ipairs(util.sorted_keys(t.fields or{}))do
             local f=t.fields[id]
+            if not object.refill_only or id:match('from_supply$')then
             local min,max,integer=range_of(f)
             -- HD2Runtime 0.31.1: the explosion's status slots (each used slot's status, and the first empty slot's
             -- status and strength), as the primaries have them
             local slot_section=f.statusSlot and join(section,'Status')or section
-            if f.editable and f.type=='explosion_payload'then
+            if f.editable and f.type=='explosion_reference'then
+                local function value()return f.currentDefault=='none'and'none'or hd2.explosion(f.currentDefault)end
+                local row=make_value_row(object,{id=f.instanceKey,kind='reference',label='Explosion payload',
+                    field=f.semanticFieldId,target=target,expect=value,vanilla=value(),
+                    shared=shared_ack(f),unverified=true,unverified_reference=true,descriptor=f,section='Explosion',
+                    note='Changes the native detonation payload. Separate scripted pulses and lingering effects may still occur.'})
+                row.options=function()return payload_options(row)end
+                row.throwable_payload=true
+                rows[#rows+1]=row
+            elseif f.editable and f.type=='explosion_payload'then
                 local options={}
                 for _,name in ipairs(f.allowedValues or{})do
                     local handle=hd2.explosion(name);local info=handle:describe()
@@ -1848,6 +1922,8 @@ local function throwable_rows(hd2,object,entry)
                     storage=(f.backing or{}).storage,field=f.semanticFieldId or id,target=target,
                     shared=shared_ack(f),unverified=unverified(f),descriptor=f,section=slot_section})
             end
+        end
+        end
         end
     end
     return rows
@@ -1890,11 +1966,16 @@ local function attachment_rows(hd2,object,entry)
             local modifier=field_id:match('^attachment%.modifier%.(.+)$')
             local label=f.displayName or MODIFIER_LABELS[modifier or'']
                 or(field_id=='attachment.ergonomics_modifier'and'Ergonomics')or util.humanize(field_id)
-            rows[#rows+1]=make_row(object,{id=field_id,label=label,vanilla=f.currentDefault,min=f.min,max=f.max,
+            rows[#rows+1]=make_row(object,{id=field_id,label=label,unit=f.unit or(field_id=='attachment.reload_duration'and'seconds'),
+                vanilla=f.currentDefault,min=f.min,max=f.max,
                 type=INTEGER_STORAGE[f.storage or'']and'integer'or'number',storage=f.storage,field=field_id,
                 target=function()return hd2.weapon_attachment(id)end,shared=true,unverified=true,descriptor=f,
                 section=util.humanize(entry.slot or'magazine')})
         end
+    end
+    if entry.kind=='heatsink'and#rows==0 then
+        rows[#rows+1]=info_row(object,{id='attachment.inherited',label='Uses weapon values',
+            text='Inherited',info=true,reason='Uses the weapon base heat and heatsink values.'})
     end
     return rows
 end
@@ -1978,6 +2059,7 @@ end
 M.conversion_entry=conversion_entry
 local CONVERSION_GROUP='Beam Conversion'
 local function beam_conversion_rows(cat,object,name)
+    if object.refill_only then return {}end
     if type(cat.real_hd2)~='table'or type(cat.real_hd2.beam_conversion)~='function'then return {}end
     local w,C=conversion_entry(name)
     -- not a projectile weapon, or already a beam: nothing to convert, nothing to show
@@ -2112,7 +2194,7 @@ local function weapon_attachments(name)
     local out={}
     for _,g in ipairs(ATTACHMENT_GROUPS)do
         local list={}
-        for id,entry in pairs(by_slot[g.key]or{})do list[#list+1]={id=id,entry=entry,group=g.label}end
+        for id,entry in pairs(by_slot[g.key]or{})do list[#list+1]={id=id,entry=entry,group=entry.kind=='heatsink'and'Heatsinks'or g.label}end
         table.sort(list,function(a,b)return util.natural_less(a.entry.name or a.id,b.entry.name or b.id)end)
         for _,item in ipairs(list)do out[#out+1]=item end
     end
@@ -2203,7 +2285,7 @@ local function player_category(slot)
                             local label=util.plain((m.entry.name or m.id):gsub('%s+',' '),60)
                             append(rows,part_rows(object,'mag:'..m.id,function(proxy)
                                 return attachment_rows(cat.hd2,proxy,m.entry)
-                            end,function(row)row.group=m.group;row.section=label end))
+                            end,function(row)row.group=m.group;row.section=label;row.derived_context=m.id end))
                         end
                         return rows
                     end}
@@ -2299,14 +2381,14 @@ function CATEGORY.support_weapons(cat)
             aliases={'st|'..name,'sw|'..name,backpack and('bp|'..name..' Backpack')or nil},
             build=function(object)
                 local rows={}
-                if stratagem then append(rows,part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end))end
+                if stratagem and not object.refill_only then append(rows,part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end))end
                 append(rows,part_rows(object,'sw',function(p)return support_rows(cat.hd2,p,weapon)end))
                 append(rows,beam_conversion_rows(cat,object,name))
-                if backpack then
-                    append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack)end,
+                if backpack and not object.refill_only then
+                    append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack,cat)end,
                         function(row)if not row.group then row.section=join('Backpack',row.section)end end))
                 end
-                if rack then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
+                if rack and not object.refill_only then append(rows,part_rows(object,'pod',function(p)return pod_rows(cat.hd2,p,rack)end))end
                 return rows
             end}
     end
@@ -2334,7 +2416,7 @@ function CATEGORY.support_backpacks(cat)
                 stratagem=name,aliases=aliases,
                 build=function(object)
                     local rows=part_rows(object,'st',function(p)return stratagem_rows(cat.hd2,p,stratagem)end)
-                    if backpack then append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack)end))end
+                    if backpack then append(rows,part_rows(object,'bp',function(p)return backpack_rows(cat.hd2,p,backpack,cat)end))end
                     for _,d in ipairs(drones)do
                         append(rows,part_rows(object,'vw:'..(d.entry.mount or'gun'),function(p)
                             return vehicle_weapon_rows(cat.hd2,p,d.entry)end,
@@ -2421,26 +2503,26 @@ function CATEGORY.throwables(cat)
     end
     return sorted_objects(list)
 end
-function CATEGORY.melee(cat)
-    local D,why=load('melee_authoring')
-    if not D then return nil,why end
-    local list={}
-    for name,e in pairs(D.entries or{})do
-        list[#list+1]={key='me|'..name,name=name,subtitle='Melee reach, damage & stamina',
-            build=function(object)
+-- Preserve legacy me|... row keys so saved sessions/presets keep targeting the same native fields.
+-- Their object is now the weapon's normal armory page, with its ordinary icon and category.
+local function melee_entry(name)
+    local D=load('melee_authoring')
+    return D and D.entries and D.entries[name]
+end
+local function melee_rows(hd2,host)
+    local name=host.name
+    local e=melee_entry(name)
+    if not e then return {}end
+    local object=setmetatable({key='me|'..name},{__index=host})
                 local rows={}
-                rows[#rows+1]=M.info_row(object,{id='melee:geometry',label='Melee reach',
-                    text='Hit volumes follow the animated weapon bone',
-                    note='Dimensions and offsets tune the hit volume. Absolute reach also depends on the animation '
-                        ..'and shape; individual axes may not affect every shape. Edits apply to the next attack.'})
                 for _,key in ipairs(util.sorted_keys(e.targets))do
                     local t=e.targets[key]
                     local target=function()
-                        local m=cat.hd2.melee(name)
+                        local m=hd2.melee(name)
                         return key=='tuning'and m or m:zone(key)
                     end
                     if t.consumers then
-                        rows[#rows+1]=M.info_row(object,{id=key..':scope',label='Shared with',section=t.label,
+                        rows[#rows+1]=M.info_row(object,{id=key..':scope',label='Shared with',section=t.label or'Melee',
                             text=tostring(#t.consumers)..' weapons',note=table.concat(t.consumers,', ')})
                     end
                     for _,id in ipairs(util.sorted_keys(t.fields))do
@@ -2448,14 +2530,13 @@ function CATEGORY.melee(cat)
                         rows[#rows+1]=make_row(object,{id=key..':'..id,field=id,label=f.displayName,unit=f.unit,
                             vanilla=f.currentDefault,min=f.min,max=f.max,type=f.type,storage=f.backing.storage,
                             target=target,descriptor=f,shared=f.shared,unverified=true,editable=f.editable,
-                            exact=true,reason=f.reason,note=f.lifecycle,section=t.label,
-                            group=id:match('^damage%.')and'Melee Damage'or'Melee Reach & Stamina'})
+                            exact=true,reason=f.reason,note=f.lifecycle,section=t.label or'Melee',
+                            group='Melee'})
                     end
                 end
-                return rows
-            end}
-    end
-    return sorted_objects(list)
+
+    for _,row in ipairs(rows)do row.object=host;row.group='Melee' end
+    return rows
 end
 -- Status effects (HD2Runtime 0.31.0 hd2.status_effect): each status's own definition, for every attack that applies
 -- it: how long it lasts (status.duration) and the damage row it deals while active (:damage()).
@@ -2536,7 +2617,7 @@ local HELLDIVER_LABELS={direction_factor='Strafe and backpedal factor',aim='Aimi
     cost_dodge='Cost of a dive',cost_climb='Cost of a climb',cost_slide='Cost of a slide',
     explosive_damage_percentage='Explosion damage share',damage_multiplier='Damage multiplier',
     damage_multiplier_dps='Damage over time multiplier',durable_resistance='Durable damage share',
-    affects_main_health='Main health share',health='Health'}
+    affects_main_health='Main health share',health='Health',stims_from_supply='Stims from supply'}
 local ZONE_LABELS={head='Head',body='Body',arm_left='Left arm',arm_right='Right arm',leg_left='Left leg',
     leg_right='Right leg'}
 local function enum_labels(f)
@@ -2572,8 +2653,10 @@ local function helldiver_rows(hd2,object)
     for _,f in ipairs(H.fields('entity'))do
         local id=f.semanticFieldId
         local section=id:find('^helldiver%.speed%.')and'Speed'or id:find('^helldiver%.stamina%.')and'Stamina'
-            or'Damage'
-        rows[#rows+1]=helldiver_field_row(object,f,entity,section,nil,section=='Damage'and'Live, every Helldiver'or ship)
+            or id:find('^helldiver%.supply%.')and'Player refill'or'Damage'
+        local note=section=='Player refill'and'Shared by all Helldivers and supply sources. Capped by stim capacity; armor bonuses and private inventory copies can alter the result.'
+            or(section=='Damage'and'Live, every Helldiver'or ship)
+        rows[#rows+1]=helldiver_field_row(object,f,entity,section,nil,note)
     end
     for _,zone in ipairs(H.ZONES or{})do
         local zid=zone
@@ -2604,9 +2687,12 @@ local function passive_rows(hd2,object)
     end
     local why='armor perks are held by the editor in this session (the Runtime keeps one perk override per game, solo only), not exported as a mod'
     local function row(id,label,labels,vanilla,note)
-        return make_value_row(object,{id=id,kind='choice',label=label,field='player_passives.'..id,vanilla=vanilla,
+        local r=make_value_row(object,{id=id,kind='choice',label=label,field='player_passives.'..id,vanilla=vanilla,
             labels=labels,options=static_options(labels),section='Armor perks',unverified=true,controller='passives',
             note=note,export_reason=why,target=function()return hd2.player_passives end})
+        -- Preserve old presets and the controller's storage identity after moving to Helldiver.
+        r.key='hd|Armor perks|'..id;r.loc='row:'..r.key
+        return r
     end
     return {row('armor','Armor passive',armor,'kit','Your own armor, solo only; follows armor changes'),
         row('second','Second passive',second,'none','Added to the armor passive (no stacking of the same bonus)')}
@@ -2617,14 +2703,46 @@ function CATEGORY.helldiver(cat)
     end
     local list={}
     if load('helldiver_writes')then
-        list[#list+1]={key='hd|Helldiver',name='Helldiver',subtitle='Every Helldiver',
-            build=function(object)return helldiver_rows(cat.hd2,object)end}
-    end
-    if type(cat.real_hd2.passives)=='table'and type(cat.real_hd2.player_passives)=='table'then
-        list[#list+1]={key='hd|Armor perks',name='Armor perks',subtitle='Your Helldiver',
-            build=function(object)return passive_rows(cat.real_hd2,object)end}
+        list[#list+1]={key='hd|Helldiver',name='Helldiver',subtitle='Every Helldiver',aliases={'hd|Armor perks'},
+            build=function(object)
+                local rows=helldiver_rows(cat.hd2,object)
+                for _,row in ipairs(rows)do
+                    if row.editable and not row.info then row.risk,row.risk_note='gameguard',M.HELLDIVER_GAMEGUARD_RISK end
+                end
+                if type(cat.real_hd2.passives)=='table'and type(cat.real_hd2.player_passives)=='table'then
+                    append(rows,passive_rows(cat.real_hd2,object))
+                end
+                return rows
+            end}
     end
     return list
+end
+
+function CATEGORY.armor_perks(cat)
+    local P=cat.real_hd2.passives
+    if type(P)~='table'or type(P.perk)~='function'then return nil,'Armor perk editing requires HD2Runtime 0.40.0 RC10 or later.'end
+    local list={}
+    for _,p in ipairs(P.list())do
+        local perk=p;local d=P.perk(p.id):describe()
+        list[#list+1]={key='ap|'..p.id,name=title_case(p.name),game_name_key=p.name,subtitle='Armor perks',
+            iconKind='passive',iconName=p.name,detail=p.description,
+            build=function(object)
+                local rows={}
+                for _,f in ipairs(d.fields)do
+                    rows[#rows+1]=make_row(object,{id=f.semanticFieldId,field=f.semanticFieldId,label=f.label,
+                        vanilla=f.currentDefault,min=f.min,max=f.max,type=f.unit=='count'and'integer'or f.type,
+                        storage='f32',unit=f.unit=='seconds'and's'or f.unit=='multiplier'and'x'or nil,
+                        shared=true,unverified=true,descriptor=f,section=f.section,note=f.lifecycle,
+                        target=function()return cat.hd2.passives.perk(perk.id)end})
+                end
+                rows[#rows+1]=info_row(object,{id='description',label='Perk description',text=perk.description,
+                    info=true,section='Perk details',note='Vanilla description; edited values are shown in the fields above.'})
+                if#d.fields==0 then rows[#rows+1]=info_row(object,{id='no-fields',label='Perk bonuses',
+                    text='No numeric gameplay fields mapped for this perk.',info=true,section='Perk details'})end
+                return rows
+            end}
+    end
+    return sorted_objects(list)
 end
 
 -- Armor (hd2.armor_stats; HD2Runtime docs/armor-stats.md): each kit's piece weights, the per-weight class
@@ -2652,6 +2770,9 @@ end
 -- executable data). A player reported GameGuard closing the game after writing them (docs/runtime-requests.md R10):
 -- those rows carry risk = 'gameguard' and say so.
 M.GAMEGUARD_RISK='Writes game.dll\'s own data: GameGuard was reported to close the game after these edits.'
+-- The Helldiver's own stats (every Helldiver: health, stamina, speeds...): players reported GameGuard closing the game
+-- after tuning them (2026-10-14). Same risk marking, with its own reason (row.risk_note).
+M.HELLDIVER_GAMEGUARD_RISK='Players reported GameGuard closing the game after tuning the Helldiver\'s stats.'
 local function number_rows(object,fields,target,section,label_of)
     local rows={}
     for _,f in ipairs(fields)do
@@ -2721,10 +2842,19 @@ for category,kind in pairs({enemy_difficulty='difficulty',enemy_rosters='roster'
 end
 CATEGORY.destruction_models=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').models(cat,M)end
 CATEGORY.enemy_overview=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/enemies').overview(cat,M)end
+CATEGORY.mission_overview=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/missions').overview(cat)end
+CATEGORY.mission_timer=function(cat)return require('mods/skyeshade/hd2runtime_editor/editor/missions').timer(cat)end
 M.CATEGORY=CATEGORY
+for _,name in ipairs({'terminids','automatons','illuminate'})do
+    local faction=name
+    CATEGORY['missions_'..faction]=function(cat)
+        return require('mods/skyeshade/hd2runtime_editor/editor/missions').category(cat,M,faction)
+    end
+end
 
 -- The categories that can hold an object key's family (presets name rows by key; mods' claims name family objects).
-local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},me={'melee'},bo={'boosters'},
+local FAMILY_CATEGORIES={pw={'primary','secondary'},th={'throwables'},me={'primary','secondary','support_weapons'},bo={'boosters'},
+    mi={'missions_terminids','missions_automatons','missions_illuminate'},mo={'mission_overview'},mt={'mission_timer'},ap={'armor_perks'},
     st={'offensive','defensive','support_weapons','support_backpacks','vehicles','resupply'},
     sw={'support_weapons'},sp={'support_weapons'},bp={'support_weapons','support_backpacks'},sb={'support_backpacks'},
     vh={'vehicles'},ve={'vehicles'},vw={'vehicles','support_backpacks'},rs={'resupply'},ex={'resupply'},
@@ -2915,6 +3045,7 @@ end
 -- refused), where no catalogue instance is at hand (exports): as its view said (Catalog:payload_view), else whether it
 -- names an explosion other than the slot's own value.
 function M.payload_other(slot,value)
+    if slot and slot.throwable_payload and value=='none'then return slot.vanilla~='none'end
     local key=M.payload_identity(value)
     if not key or type(slot)~='table'then return false end
     local said
@@ -2948,7 +3079,7 @@ local function traced(hd2)
     return setmetatable({},{__index=function(_,key)
         local tracing=export_module.tracing
         if tracing and type(hd2[key])=='function'then return tracing(key)end
-        if(key=='enemies'or key=='melee')and type(hd2[key])=='table'then
+        if(key=='enemies'or key=='melee'or key=='passives')and type(hd2[key])=='table'then
             return setmetatable({},{__index=function(_,method)
                 if export_module.tracing and type(hd2[key][method])=='function'then
                     return export_module.tracing(key..'.'..method)
@@ -2979,6 +3110,9 @@ function Catalog:objects(category)
     end
     for _,object in ipairs(list)do
         object.category,object.tone=category,tone
+        if(category=='primary'or category=='secondary'or category=='support_weapons')and melee_entry(object.name)then
+            object.has_melee=true;self.aliases['me|'..object.name]=object
+        end
         self.by_key[object.key]=object
         for _,alias in pairs(object.aliases or{})do self.aliases[alias]=object end
     end
@@ -3235,6 +3369,13 @@ local function status_children(rows)
                         -- Keep old preset keys as aliases without drawing a second strength control.
                         own.alias_keys=own.alias_keys or{}
                         own.alias_keys[#own.alias_keys+1]=c.key
+                        for _,alias in ipairs(c.alias_keys or{})do own.alias_keys[#own.alias_keys+1]=alias end
+                        if c.delivery_aliases then
+                            own.delivery_aliases=own.delivery_aliases or{}
+                            for _,alias in ipairs(c.delivery_aliases)do
+                                own.delivery_aliases[#own.delivery_aliases+1]=alias
+                            end
+                        end
                     else
                         c.section,c.group=t.section,t.group
                         list[#list+1]=c
@@ -3288,21 +3429,96 @@ local function ammo_order(rows)
     return rows
 end
 M.ammo_order=ammo_order
+-- Repeated delivery paths can resolve to the same native settings bytes. Keep one control per proven
+-- location and role suffix, with old preset keys resolving to it. Equal defaults alone prove nothing.
+local function delivery_rows(rows)
+    local owners,out={},{}
+    for _,row in ipairs(rows)do
+        local t=row.descriptor and row.descriptor.target or{}
+        local delivery,suffix=tostring(t.attack or''):match('^delivery_(%d+)_(.+)$')
+        local key
+        if t.path=='attack'and delivery and row.editable and row.loc:match('^settings/')then
+            key=table.concat({row.loc,row.field,suffix,row.group or'',row.kind or'',row.storage or''},'\0')
+        end
+        local owner=key and owners[key]
+        if owner and owner.min==row.min and owner.max==row.max and owner.shared==row.shared
+            and owner.unverified==row.unverified and util.same(owner.vanilla,row.vanilla)then
+            owner.alias_keys=owner.alias_keys or{}
+            owner.alias_keys[#owner.alias_keys+1]=row.key
+            for _,alias in ipairs(row.alias_keys or{})do owner.alias_keys[#owner.alias_keys+1]=alias end
+            owner.delivery_aliases=owner.delivery_aliases or{}
+            owner.delivery_aliases[#owner.delivery_aliases+1]=row
+            owner.deliveries[tonumber(delivery)]=true
+        else
+            out[#out+1]=row
+            if key then owners[key]=row;row.deliveries={[tonumber(delivery)]=true}end
+        end
+    end
+    for _,row in ipairs(out)do if row.deliveries then
+        local numbers={};for n in pairs(row.deliveries)do numbers[#numbers+1]=n end;table.sort(numbers)
+        if#numbers>1 then
+            row.section=row.section:gsub('Delivery %d+ ',function()
+                return Lf('Deliveries %s',table.concat(numbers,', '))..' '
+            end,1)
+        end
+    end end
+    return out
+end
+M.delivery_rows=delivery_rows
 -- An object's rows and sections (built once): object.rows, object.sections = {{label, rows}}.
+function Catalog:refill_rows(object)
+    if object.rows then return object.rows end
+    if object.refill_cache then return object.refill_list end
+    local proxy=setmetatable({refill_only=true},{__index=object})
+    local ok,rows=pcall(object.build,proxy)
+    if not ok then return {}end
+    object.refill_cache,object.refill_list={},{}
+    for _,row in ipairs(rows or{})do
+        if row.editable and tostring(row.field):match('from_supply$')then
+            row.object=object
+            object.refill_cache[row.key]=row
+            object.refill_list[#object.refill_list+1]=row
+        end
+    end
+    return object.refill_list
+end
+-- Runs fn once no object is being built (at once when none is): work that opens other objects must not run inside a
+-- build, where it could reach an object whose build is still on the stack and build that object a second time.
+function Catalog:after_build(fn)
+    if(self.building or 0)==0 then return fn()end
+    self.after_builds=self.after_builds or{}
+    self.after_builds[#self.after_builds+1]=fn
+end
 function Catalog:open(object)
     if object.rows then return object end
+    self.building=(self.building or 0)+1
     local ok,rows=pcall(object.build,object)
+    self.building=self.building-1
+    self:open_built(object,ok,rows)
+    -- the outermost build is done and its rows are in place: run the work deferred meanwhile
+    local queued=self.building==0 and self.after_builds
+    if queued then
+        self.after_builds=nil
+        for _,fn in ipairs(queued)do fn()end
+    end
+    return object
+end
+function Catalog:open_built(object,ok,rows)
     if not ok then
         object.rows,object.sections,object.error={},{},tostring(rows)
         return object
     end
-    rows=ammo_order(status_children(status_slots(rows)))
+    if object.has_melee then append(rows,melee_rows(self.hd2,object))end
+    rows=require('mods/skyeshade/hd2runtime_editor/editor/derived').add(object,rows,M)
+    rows=ammo_order(status_children(status_slots(delivery_rows(rows))))
     object.rows,object.sections={},{}
     local by_label={}
     for _,row in ipairs(rows)do
-        if row and not self.rows[row.key]then
+        local cached=row and object.refill_cache and object.refill_cache[row.key]
+        if cached then row=cached end
+        if row and(not self.rows[row.key]or row.canonical or cached)then
             object.rows[#object.rows+1]=row
-            self.rows[row.key]=row
+            self.rows[row.key]=row.canonical or row
             for _,alias in ipairs(row.alias_keys or{})do self.rows[alias]=row end
             local list=self.by_loc[row.loc]
             if not list then list={};self.by_loc[row.loc]=list end
@@ -3340,14 +3556,21 @@ function Catalog:open(object)
     -- the impact and expiry payload slots, each with the rows of its own explosion (its section and that section's
     -- status, of the same weapon and part): "What a payload slot sets off"
     for _,slot in ipairs(object.rows)do
-        if slot.field=='terminal.explosion'and slot.kind=='reference'then
+        if(slot.field=='terminal.explosion'or slot.throwable_payload)and slot.kind=='reference'then
             object.payload_slots=object.payload_slots or{}
             object.payload_slots[#object.payload_slots+1]=slot
             slot.payload_rows={}
             local status=join(slot.section,'Status')
             for _,r in ipairs(object.rows)do
+                local throwable_child=false
+                if slot.throwable_payload and r.field~='throwable.explosion'and not r.info and r.target then
+                    local ok,t=pcall(r.target)
+                    throwable_child=ok and t.resource=='throwable'and
+                        (t.path=='explosion'or t.path=='arc'or t.path=='shrapnel'or t.path=='bomblets'
+                        or t.path=='bomblet_explosion'or t.path=='status_effect')
+                end
                 if r~=slot and r.field~='terminal.explosion'and r.group==slot.group and r.weapon_name==slot.weapon_name
-                    and(r.section==slot.section or r.section==status)and not r.info then
+                    and(r.section==slot.section or r.section==status or throwable_child)and not r.info then
                     if r.catalogue_explosion then
                         -- (a catalogued explosion's own row, edited through hd2.explosion(name): HD2Runtime keeps
                         -- taking it whatever the slot sets off, so it is only set aside from view, never locked)
@@ -3509,6 +3732,10 @@ end
 -- {key, rows (views of the explosion's rows, under the slot), note (an info row instead of rows), other (it names
 -- another explosion than the weapon's own: its own explosion rows are set aside)}. Cached per slot and explosion.
 function Catalog:payload_view(slot,value)
+    if slot.throwable_payload and value=='none'then
+        slot.empty_payload_view=slot.empty_payload_view or{key='none',rows={},label='None',other=slot.vanilla~='none'}
+        return slot.empty_payload_view
+    end
     local key,id=M.payload_identity(value)
     if not key then return nil end
     self.payload_views=self.payload_views or{}
@@ -3603,9 +3830,9 @@ end
 -- Every open row on the same native bytes.
 function Catalog:siblings(row)return self.by_loc[row.loc]or{row}end
 -- Opens up to `budget` more objects (every category, in order) so the native-bytes index covers the whole catalogue;
--- true once every object is open. With `seconds`, it also stops once that much CPU time has passed (after at least
--- one object). The editor calls it every frame with a few milliseconds, so the full index (about 20,000 rows) builds
--- in the background without a hitch.
+-- true once every object is open, and the objects this step opened. With `seconds`, it also stops once that much CPU
+-- time has passed (after at least one object). The editor calls it every frame with a few milliseconds, so the full
+-- index (about 20,000 rows) builds in the background without a hitch.
 function Catalog:index_step(budget,seconds)
     local started=seconds and os.clock()
     if self.indexed then return true end
@@ -3616,19 +3843,19 @@ function Catalog:index_step(budget,seconds)
             for _,item in ipairs(group.items)do self.index_categories[#self.index_categories+1]=item.id end
         end
     end
-    local opened=0
+    local opened,list=0,{}
     while opened<(budget or 4)do
         if#self.index_queue==0 then
             local category=table.remove(self.index_categories,1)
-            if not category then self.indexed=true;return true end
+            if not category then self.indexed=true;return true,list end
             for _,object in ipairs((self:objects(category)))do self.index_queue[#self.index_queue+1]=object end
         else
             local object=table.remove(self.index_queue,1)
-            if not object.rows then self:open(object);opened=opened+1 end
-            if started and opened>0 and os.clock()-started>=seconds then return false end
+            if not object.rows then self:open(object);opened=opened+1;list[opened]=object end
+            if started and opened>0 and os.clock()-started>=seconds then return false,list end
         end
     end
-    return false
+    return false,list
 end
 -- Every row by the identities ModBuilder projects name them with (editor/modbuilder.lua): instance[instanceKey] and
 -- weapon['<catalogue weapon>|<semanticFieldId>'], swap (projectile and terminal explosion swaps), ident (rows without
@@ -3640,10 +3867,17 @@ function Catalog:import_index()
     for _,group in ipairs(M.GROUPS)do
         for _,item in ipairs(group.items)do
             for _,object in ipairs((self:objects(item.id))or{})do
-                for _,row in ipairs(object.rows or{})do
+                for _,row in ipairs(object.rows or{})do if not row.canonical then
                     lookup.rows[#lookup.rows+1]=row
                     local d=type(row.descriptor)=='table'and row.descriptor or{}
                     if d.instanceKey and not lookup.instance[d.instanceKey]then lookup.instance[d.instanceKey]=row end
+                    for _,alias in ipairs(row.delivery_aliases or{})do
+                        local ad=alias.descriptor or{}
+                        if ad.instanceKey then lookup.instance[ad.instanceKey]=row end
+                        -- Lua imports may name any delivery path, while edits use the retained key.
+                        lookup.rows[#lookup.rows+1]=setmetatable({target=alias.target,target_code=alias.target_code},
+                            {__index=row})
+                    end
                     if row.weapon_name and d.semanticFieldId then
                         local key=row.weapon_name..'|'..d.semanticFieldId
                         if not lookup.weapon[key]then lookup.weapon[key]=row end
@@ -3667,7 +3901,7 @@ function Catalog:import_index()
                     if s and row.weapon_name then
                         lookup.swap[s.kind..'|'..row.weapon_name..'|'..s.role..(s.phase and('|'..s.phase)or'')]=row
                     end
-                end
+                end end -- presentation aliases use the canonical roster/payload entry
             end
         end
     end

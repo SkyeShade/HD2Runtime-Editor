@@ -282,7 +282,7 @@ local ac=open_object('sp|AC-8 Autocannon')
 local has={}
 for _,r in ipairs(ac.rows)do
     local part=r.key:match('^sp|AC%-8 Autocannon|(%w+)')
-    has[part]=true
+    if part then has[part]=true else assert(r.group=='Melee'and r.key:sub(1,3)=='me|')end
 end
 assert(has.st and has.sw and has.pod,'support weapon composite: call-in, weapon and hellpod')
 assert(H.catalog:object('st|AC-8 Autocannon')==ac and H.catalog:object('sw|AC-8 Autocannon')==ac,'old keys resolve to the composite')
@@ -1482,9 +1482,25 @@ do
         -- Esc closes it; resetting the field clears the error and the markers
         H.app:open_errors();step({'ESCAPE'})
         assert(not H.app.errors_popup and H.app.view=='logs','Esc closes only the list')
-        H.layer:reset(s.type2)
+        H.app:goto_error(H.app:error_list()[1])
+        d=step({})
+        local function click_reset(d)
+            local reset
+            for _,item in ipairs(d.items)do if item.k=='t'and item.s=='RESET'then reset=item end end
+            assert(reset,'failed field has a visible RESET button')
+            step({},{mouse={x=reset.x,y=reset.y,left=false}})
+            step({},{mouse={x=reset.x,y=reset.y,left=true}})
+            step({},{mouse={x=reset.x,y=reset.y,left=false}})
+        end
+        click_reset(d)
         settle(1)
         assert(select(3,H.layer:counts())==0 and not H.app:markers().error[o.key],'reset: no error left')
+        assert(H.layer:set(s.type2,'gas_confusion',{kind='preset',name='Gas kit'}))
+        settle(1);H.app:open_errors()
+        click_reset(step({}))
+        settle(1)
+        assert(#H.app:error_list()==0,'RESET in errors popup did not discard the failed value')
+        H.app:close_errors()
         H.app:set_view('browse')
     end
 end
@@ -1661,7 +1677,7 @@ do
     local beam,swap=index_of(list,'  Beam'),index_of(list,'  * Beam')
     assert(beam and(not swap or swap<beam),'LAS-98: the beam swap before the beam: '..table.concat(list,', '))
     -- row keys and sections are unchanged (presentation only)
-    for _,r in ipairs(lib.rows)do assert(r.key:find('^pw|AR%-23 Liberator|'),'row key unchanged: '..r.key)end
+    for _,r in ipairs(lib.rows)do assert(r.key:find('^pw|AR%-23 Liberator|')or(r.group=='Melee'and r.key:find('^me|AR%-23 Liberator|')),'row key unchanged: '..r.key)end
     assert(sections.classify('Damage · Flak direct hit · Status')=='projectile','classification table')
     assert(sections.classify('Damage · Status')=='damage','a beam\'s damage')
     -- single rows: the layout folds a part of one row (its feed before it), a category of one row is that row alone; a

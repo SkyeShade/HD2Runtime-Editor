@@ -76,7 +76,7 @@ for _,category in ipairs({'primary','secondary','throwables','offensive','defens
     for _,o in ipairs((H.catalog:objects(category)))do
         H.catalog:open(o)
         for _,r in ipairs(o.rows or{})do
-            if r.editable and not r.kind and type(r.vanilla)=='number'then
+            if r.editable and not r.kind and type(r.vanilla)=='number'and values[r.key]==nil then
                 values[r.key]=catalog_module.encode(r,r.vanilla)
                 labels[r.key]=o.name..' · '..r.label
                 n=n+1

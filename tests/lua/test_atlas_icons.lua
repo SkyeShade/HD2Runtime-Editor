@@ -55,7 +55,7 @@ end
 local warm
 I.warm({asset_dependency=H.hd2.asset_dependency,require_assets=function(request)
     warm=request;return {status='waiting_for_assets'}end},icons)
-assert(warm and#warm.targets==2,'preload only the two UI atlas packages')
+assert(warm and#warm.targets==3,'preload each of the three UI atlas packages once')
 local packages={}
 for _,handle in ipairs(warm.targets)do packages[H.hd2.asset_dependency(handle).package]=true end
 assert(packages.atlas_mission and packages.atlas_shared)
@@ -78,6 +78,18 @@ assert(I.entry({objectives={},factions=icons.factions},{iconKind='objective',
 local old=I.load({resources={game_icons=function(kind)assert(kind=='stratagem'or kind=='booster');return{}end,
     game_icon=api.game_icon}})
 assert(old and next(old.weapons)==nil,'older Runtime compatibility')
+-- Difficulty badges fill the existing roster-label gutter, without changing field identity or label columns.
+local roster=H.catalog:objects('enemy_rosters')[1];H.catalog:open(roster)
+assert(H.app:goto_object(roster));seen={}
+local frame=H.frame({});assert(#frame.refused==0 and#frame.items<1024)
+for _,row in ipairs(roster.rows)do
+ local level=row.field:match('^spawn%.weight_(%d+)$')
+ if level then
+  local icon=assert(I.entry(icons,row.field_icon));assert(icon==icons.difficulties[level])
+  local draws=0;for _,item in ipairs(seen)do if item.handle==icon.handle then draws=draws+1 end end
+  assert(draws==1,'difficulty badge missing or duplicated: '..level)
+ end
+end
 H.app.canvas.image=original
 assert(H.app:goto_object(rifle));H.catalog:open(rifle);assert(#H.frame({}).refused==0)
 return 'atlas silhouettes factions objectives mixed loading aspect fallback render ok'

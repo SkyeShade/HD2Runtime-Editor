@@ -10,10 +10,10 @@
       "api": 1
     },
     "hd2runtime": {
-      "min_version": "0.32.0",
+      "min_version": "0.40.0",
       "api": 1,
       "module": "mods/skyeshade/hd2runtime"
     }
   },
-  "sdk": "../HD2Runtime-dev6/sdk"
+  "sdk": "../HD2Runtime/sdk"
 }

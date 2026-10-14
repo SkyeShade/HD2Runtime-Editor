@@ -177,6 +177,17 @@ end
 
 -- The values applied when the game was last left (restored at startup when the setting is on).
 function Presets:session()return self.store and map_of(self.store:get('session',{}))or{}end
+-- A durable checkpoint before any application starts. Deferred store:set alone is not a crash barrier.
+function Presets:application()return self.store and self.store:get('application',nil)or nil end
+function Presets:checkpoint(values,application)
+    if not self.store or type(self.store.save)~='function'then return false,'saved data cannot be flushed'end
+    local ok,done,why=pcall(function()
+        if values then self.store:set('session',pairs_of(values))end
+        self.store:set('application',application)
+        return self.store:save()
+    end)
+    return ok and done==true,ok and why or tostring(done)
+end
 function Presets:set_session(values)
     if not self.store then return end
     pcall(self.store.set,self.store,'session',pairs_of(values))
