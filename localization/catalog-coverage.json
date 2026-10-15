@@ -1,0 +1,20 @@
+{
+  "editor_version": "1.0.0",
+  "editor_base": "144522a749104d086e0414cc7e18e5f966d47b6e",
+  "runtime_version": "0.40.0",
+  "runtime_revision": "34fba0887b196130df4142933fbe1b6ff6be5020",
+  "coverage": {
+    "catalogue_texts": 10674,
+    "keys_sha256": "ed9939d90f2e0370d25b35bf19367b62584753236d41bcba92793cd7489ea131",
+    "counts": {
+      "retained_acronym": 1,
+      "retained_designation": 7,
+      "retained_model_name_or_id": 3258,
+      "retained_native_identifier": 3,
+      "retained_resource_path": 1138,
+      "translated_composed": 1032,
+      "translated_exact": 5235,
+      "uncovered": 0
+    }
+  }
+}

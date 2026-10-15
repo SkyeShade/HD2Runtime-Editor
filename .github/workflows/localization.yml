@@ -1,0 +1,20 @@
+name: Localization
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  translation-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check translations and generated resources
+        run: python -m unittest discover -s tests -p test_localization.py -v
+        # Game LuaJIT/Runtime integration cases are skipped here; see localization/README.md.

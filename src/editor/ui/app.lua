@@ -2301,7 +2301,7 @@ function App:draw_fields(y0,h)
                     align='right',max=bw-16})
             end
             local unit=util.unit(row.unit)
-            if unit then cv:text(unit,x+FX.unit,cy,{size=SZ.tiny,colour=C.faint,max=56})end
+            if unit then cv:text(L(unit),x+FX.unit,cy,{size=SZ.tiny,colour=C.faint,max=56})end
             -- source badge (an error first: a refused value on a field that is locked or waiting for its order now
             -- still says why it failed)
             local bxr=x+lw+FX.badge_right
@@ -2488,7 +2488,7 @@ function App:draw_footer(y,h)
     w=110;bx=bx-w-10
     button(self,L('DISCARD'),bx,by,w,bh,self.pending_n>0 and'normal'or'disabled',self.btn_discard)
     w=150;bx=bx-w-10
-    button(self,self.pending_n>0 and('APPLY  '..self.pending_n)or'APPLY',bx,by,w,bh,
+    button(self,self.pending_n>0 and Lf('APPLY  %d',self.pending_n)or L('APPLY'),bx,by,w,bh,
         self.pending_n>0 and'primary'or'disabled',self.btn_apply)
 end
 
