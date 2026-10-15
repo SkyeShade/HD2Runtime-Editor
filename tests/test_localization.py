@@ -53,20 +53,32 @@ class LocalizationDataTests(unittest.TestCase):
                 self.assertTrue(value.strip())
                 self.assertNotRegex(value, r'[\x00-\x1f\ufffd]')
                 self.assertEqual(formats.findall(key), formats.findall(value))
+                self.assertEqual(re.findall(r'#[A-Z]+',key), re.findall(r'#[A-Z]+',value))
                 self.assertEqual(collections.Counter(numbers.findall(key)),
                                  collections.Counter(numbers.findall(value)))
                 for token in identifiers.findall(key):
                     self.assertIn(token, value)
 
-    def test_no_extracted_game_name_table(self):
-        # Official names are resolved by game_names.lua from the installed game's API.
-        # A translation pack must not replace that API with a copied game text dump.
-        self.assertNotIn('AR-23 Liberator', chinese())
-        self.assertNotIn('B-01 Tactical', chinese())
+    def test_pack_has_translations_not_native_catalogue_tables(self):
+        # Authored name fallbacks are allowed; a name key alone cannot establish provenance.
+        # Opaque paths, component lists and observed bone names are handled by templates.
+        for key in chinese():
+            self.assertFalse(key.startswith('content/'),key)
+            self.assertFalse(' (observed)'in key and key!='%s (observed)',key)
+            self.assertFalse(' (candidate)'in key and key!='%s (candidate)',key)
+            if key.endswith('. Authored type values; existing instances may retain private copies.'):
+                self.assertTrue(key.startswith('%s.'),key)
 
 
 @unittest.skipUnless(lua_host.available(), 'needs game LuaJIT and a Runtime checkout')
 class LocalizationRuntimeTests(unittest.TestCase):
+    def test_enumerated_catalogue_coverage(self):
+        audit = tool('locale_catalog')
+        rows = audit.inventory()
+        self.assertFalse([row['text'] for row in rows if audit.classification(row)=='uncovered'])
+        expected = json.loads((ROOT/'localization/catalog-coverage.json').read_text(encoding='utf8'))
+        self.assertEqual(audit.summarize(rows), expected['coverage'])
+
     def test_bundled_chinese_in_the_window(self):
         paths = {key: (ROOT / 'tests/lua' / name).as_posix() for key, name in
                  [('harness', 'ui_harness.lua'), ('sim', 'sim.lua')]}
@@ -111,8 +123,10 @@ assert(object.key=='pw|'..key and object.name==key)
 api.text.name=function()return nil,'UNAVAILABLE'end
 api.text.language=function()return'us'end
 instance:refresh()
-assert(util.display_name(object)==key)
+assert(util.display_name(object)==i.L(key) and i.L(key)=='AR-23 解放者')
 assert(i.L('Damage')=='伤害')
+i.use('English')
+assert(util.display_name(object)==key and object.key=='pw|'..key)
 return 'ok'
 '''), 'ok')
 

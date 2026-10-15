@@ -1,23 +1,51 @@
 # Bundled translations
 
 `builtin.json` is the existing 135-text supplement shared by 13 languages. `zh-cn.json`
-extends Chinese with 2,234 entries: all 862 interface texts in the generated
-`src/editor/strings.lua`, plus 1,372 reviewed catalogue display texts and unit labels.
+extends Chinese with 5,844 entries, including all 862 interface texts in the generated
+`src/editor/strings.lua`, catalogue display texts, unit labels and diagnostic templates.
 The shared supplement and the other 12 languages are unchanged.
 
-This coverage is against Editor 1.0.0 and Runtime 0.40.0. It is not a claim that every
-Runtime-generated catalogue string is translated: that Runtime adds 10,414 catalogue
-texts beyond the interface, including generated names, technical identifiers and
-new domain descriptions. Unrecognized text stays English; composite labels still
-use the existing part-by-part lookup. Add reviewed translations as the Runtime evolves.
+The exhaustive offline audit for Editor 1.0.0 and Runtime 0.40.0 enumerates 10,674
+unique catalogue texts. All translatable display text in that snapshot is covered:
+
+| Classification | Texts |
+| --- | ---: |
+| Exact translations | 5,235 |
+| Composed translations, including protected captures | 1,032 |
+| Native model filenames and model IDs, retained | 3,258 |
+| Native resource paths, retained | 1,138 |
+| Native compound identifiers, retained | 3 |
+| Model/designation codes, retained | 7 |
+| `ID` acronym, retained | 1 |
+| Uncovered display text | 0 |
+
+These are unique catalogue strings, not extra dictionary rows; some overlap the
+interface. The review summary pins the source revisions and text digest in
+`catalog-coverage.json`. Names, subtitles, section/group titles, field labels,
+notes/reasons, choice labels and trait labels are enumerated. This includes enemy
+and entity labels, spawning/destruction controls, transport bounds and the 32
+public armour-perk descriptions. Unknown future text or text produced only by a
+live game remains outside this snapshot and falls back to English.
+
+Keep native filenames, `model_*` IDs, `content/...` paths, compound native IDs,
+`Mec F/M` identifiers and the `AX/ARC-3 K-9` designation literal. Component lists
+and observed/candidate bone names are opaque captures: only their surrounding
+explanation is translated. Their raw tables are not shipped in this pack. The audit
+can write the complete per-text classification and retained-identifier list locally.
 
 The translations adapt the editor's and Runtime's public English display text.
 Uses code / research from [HD2Runtime by SkyeShade](https://github.com/SkyeShade/HD2Runtime).
 The original author notices and licenses remain in place. No Runtime source,
 catalogue dump, game text dump, game binary, font, user configuration or log is bundled
-with this translation contribution. Official weapon and stratagem names are read
-from the installed game's text API by `game_names.lua`, with its existing precedence
-and English fallback; the translation pack does not embed an extracted name table.
+with this translation contribution. The added entries reuse authored translation
+phrases and independently translate public English display text, including name
+fallbacks. They do not import the earlier local patch's extracted official-name table.
+Official weapon and stratagem names are still read from the installed game's text
+API by `game_names.lua` and take precedence. If the API is unavailable, the authored
+Chinese fallback is used; English selection still shows the original English keys.
+Fallback names are not asserted to be official translations. The few characters
+absent from all Runtime font atlases use readable alternatives or retain a model
+nickname such as `Shark`.
 
 ## Loading and overrides
 
@@ -67,7 +95,13 @@ filename without an index after `win.lua` has declared its WinAPI structs. The
 Chinese-path case skips on Windows code pages that cannot represent those names.
 Use private temporary/configuration directories for the complete offline suite.
 
+The catalogue audit requires the same offline LuaJIT and Runtime setup. It reads
+public Runtime catalogue modules, not a running game. A changed catalogue digest
+fails the check so newly generated text must be reviewed instead of silently counted
+as covered. Reports can contain native resource names: keep them in `build/`.
+
 ```console
+python tools/locale_catalog.py --check --report build/catalog-localization-report.json
 python -m unittest discover -s tests -v
 python build.py
 ```

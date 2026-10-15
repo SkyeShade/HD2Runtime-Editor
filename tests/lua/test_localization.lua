@@ -23,6 +23,16 @@ assert(i.L('damage.status_1_type')=='damage.status_1_type')
 assert(i.L('ASSET_UNAVAILABLE')=='ASSET_UNAVAILABLE')
 assert(i.L('m/s')=='m/s' and i.L('rpm')=='rpm')
 assert(i.L('Unknown future field')=='Unknown future field')
+-- Template captures are opaque; suffixes translate without changing native names, IDs or percentages.
+local suffix='. Authored type values; existing instances may retain private copies.'
+local raw='0x295933be, Ability, Unit, 100%'
+assert(i.L(raw..suffix)==raw..'。原始类型参数；现有实例可能保留私有副本。')
+assert(i.L('head_slot_1 (observed)')=='head_slot_1（已观测）')
+assert(i.L('unconfirmed_2 (candidate)')=='unconfirmed_2（候选）')
+assert(i.L('head_slot_1 (observed) / Damage')=='head_slot_1（已观测） / 伤害')
+assert(i.L('content/test/unit_001 / Direct model association.')=='content/test/unit_001 / 直接关联的模型。')
+assert(i.L('content/test/unit_001')=='content/test/unit_001')
+assert(i.L('Unknown future field · Damage')=='Unknown future field · 伤害')
 
 local log=logfile.new()
 assert(not log.poll(1) and log.error==i.L('no log path'))
@@ -72,6 +82,8 @@ assert(i.use('简体中文',languages) and i.L('BROWSE')=='浏览')
 assert(i.use_game_language(game('de'))=='Deutsch')
 assert(i.L('BROWSE')=='ANSEHEN' and i.L('Landing thrust')==data.de['Landing thrust'])
 assert(i.L('APPLY')=='APPLY') -- never borrow Chinese for a non-Chinese file
+assert(i.L(raw..suffix)==raw..suffix)
+assert(i.L('head_slot_1 (observed)')=='head_slot_1 (observed)')
 files['zh-cn.txt']='@language 简体中文\n@code cn\nBROWSE = 优先文件\n'
 languages=i.languages()
 local count=0;for _,l in ipairs(languages)do if l.name=='简体中文'then count=count+1 end end
@@ -88,6 +100,7 @@ for code,rows in pairs(data)do
     end
 end
 i.use('English')
+assert(i.L(raw..suffix)==raw..suffix and i.L('head_slot_1 (observed)')=='head_slot_1 (observed)')
 assert(i.use_game_language(game('us'))==nil and i.L('BROWSE')=='BROWSE')
 i.set({['Saved preset %s (%d fields)']='%d %d'},'Broken')
 assert(i.Lf('Saved preset %s (%d fields)','x',2)=='Saved preset x (2 fields)')

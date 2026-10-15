@@ -29,8 +29,8 @@ local function by_parts(text)
     while true do
         local a,b=text:find(SEPARATOR,start,true)
         local part=text:sub(start,(a or 0)-1)
-        local t=current[part]
-        if t then changed=true;part=t end
+        local t=M.L(part)
+        if t~=part then changed=true;part=t end
         out[#out+1]=part
         if not a then break end
         start=b+1
@@ -43,6 +43,26 @@ function M.L(text)
     if text==nil then return''end
     local t=current[text]
     if t then return t end
+    -- Catalogue diagnostics contain opaque resource names and component lists. Translate only the surrounding
+    -- sentence, never those captures; this also avoids shipping copies of thousands of native identifiers.
+    if type(text)=='string'and next(current)~=nil then
+        local capture=text:match('^(.-)%. Authored type values; existing instances may retain private copies%.$')
+        local template=capture and '%s. Authored type values; existing instances may retain private copies.'
+        if not capture then
+            capture=text:match('^(.-) %(observed%)$');template=capture and '%s (observed)'
+        end
+        if not capture then
+            capture=text:match('^(.-) %(candidate%)$');template=capture and '%s (candidate)'
+        end
+        if capture and current[template]then
+            local ok,result=pcall(string.format,current[template],capture)
+            if ok then return result end
+        end
+        local label,note=text:match('^(.-) / (.+)$')
+        if label and(label:match('^content/%S+$')or label:match(' %(observed%)$')or label:match(' %(candidate%)$'))then
+            return M.L(label)..' / '..M.L(note)
+        end
+    end
     if type(text)=='string'and next(current)~=nil and text:find(SEPARATOR,1,true)then return by_parts(text)end
     return text
 end
