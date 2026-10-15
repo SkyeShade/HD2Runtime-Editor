@@ -1053,7 +1053,7 @@ function M.install(App)
                 cv:text(Lf('%d characters cannot be drawn yet (%s)',lang.undrawable,table.concat(lang.sample or{},' ')),
                     x+552,y+13,{size=SZ.tiny,colour=C.pending,max=W-x-560})
             end
-            cv:text(lang.file and Lf('%d texts, %s',lang.count,lang.file)or L('built in'),x+540,y+13,
+            cv:text(lang.file and Lf('%d texts, %s',lang.count,lang.display_file or lang.file)or L('built in'),x+540,y+13,
                 {size=SZ.tiny,colour=C.faint,align='right'})
             cv:hit(x-8,y-2,560,28,action)
             y=y+30
@@ -1064,7 +1064,7 @@ function M.install(App)
         cv:text(folder or L('(no %LOCALAPPDATA%)'),x,y+20,{size=SZ.small,colour=C.dim,max=W-48})
         self.btn_reload_lang=self.btn_reload_lang or{click=function()
             self.language_cache=nil
-            local n=#self:languages()-1
+            local n=0;for _,lang in ipairs(self:languages())do if lang.file then n=n+1 end end
             self:toast(Lf('Found %d language files',n),C.ok)
         end}
         self.btn_template=self.btn_template or{click=function()

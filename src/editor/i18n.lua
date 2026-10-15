@@ -1,7 +1,7 @@
 -- HD2R Editor (c) 2026 SkyeShade. All rights reserved except as granted in LICENSE
 -- (https://github.com/SkyeShade/HD2Runtime-Editor). Do not redistribute or reuse without the credit it requires.
--- Localisation: every text the editor shows goes through L(text). English is built in (the text itself); other
--- languages are plain UTF-8 text files in a folder the editor reads at startup and on Reload:
+-- Localisation: every text the editor shows goes through L(text). English (the text itself) and Simplified Chinese
+-- are built in. Optional UTF-8 text files override bundled translations at startup and on Reload:
 --     %LOCALAPPDATA%\HD2REditor\localization\<anything>.txt
 -- One line per text, the English original, then " = ", then the translation; # starts a comment. A line
 -- "@language Deutsch" names the language (else the file name does); an optional "@code cn" names the game language it
@@ -13,6 +13,8 @@
 local M={}
 
 local builtin=require('mods/skyeshade/hd2runtime_editor/editor/locale')
+-- Only complete interface packs are selectable. The other languages retain their automatic supplements.
+local COMPLETE={cn='简体中文'}
 local current={}          -- English -> translation
 local language='English'
 local parts_cache={}      -- composite labels ('Damage · Flak') translated part by part, per language
@@ -122,7 +124,7 @@ end
 -- The .txt files in the folder: FindFirstFileW through LuaJIT's FFI when available, else the names listed in the
 -- folder's index.txt (one per line).
 local function list_files(folder)
-    local names={}
+    local names,labels={},{}
     local ok=pcall(function()
         local ffi=require('ffi')
         local kernel=ffi.load('kernel32')
@@ -142,15 +144,26 @@ local function list_files(folder)
         end
         local pattern=folder..'\\*.txt'
         local wide=ffi.new('uint16_t[?]',#pattern*2+2)
-        kernel.MultiByteToWideChar(65001,0,pattern,-1,wide,#pattern*2+2)
+        -- os.getenv and io.open use the native Windows code page. Do not reinterpret their paths as UTF-8:
+        -- a Chinese profile on CP936 would otherwise be enumerated as a different directory.
+        kernel.MultiByteToWideChar(0,0,pattern,-1,wide,#pattern*2+2)
         local data=ffi.new('HD2EditorFindDataW')
-        local handle=kernel.FindFirstFileW(wide,data)
+        -- Other modules (including editor/win.lua) may already have declared a distinct FIND_DATA type.
+        local find_first=ffi.cast('void * (__stdcall *)(const uint16_t *, HD2EditorFindDataW *)',kernel.FindFirstFileW)
+        local find_next=ffi.cast('int (__stdcall *)(void *, HD2EditorFindDataW *)',kernel.FindNextFileW)
+        local handle=find_first(wide,data)
         if handle==nil or tonumber(ffi.cast('intptr_t',handle))==-1 then return end
         local buffer=ffi.new('char[1024]')
         repeat
-            local n=kernel.WideCharToMultiByte(65001,0,data.name,-1,buffer,1024,nil,nil)
-            if n>1 then names[#names+1]=ffi.string(buffer,n-1)end
-        until kernel.FindNextFileW(handle,data)==0
+            local n=kernel.WideCharToMultiByte(0,0,data.name,-1,buffer,1024,nil,nil)
+            if n>1 then
+                local name=ffi.string(buffer,n-1)
+                names[#names+1]=name
+                -- Keep the display label UTF-8 even though io.open needs the native-codepage filename.
+                local shown=kernel.WideCharToMultiByte(65001,0,data.name,-1,buffer,1024,nil,nil)
+                if shown>1 then labels[name]=ffi.string(buffer,shown-1)end
+            end
+        until find_next(handle,data)==0
         kernel.FindClose(handle)
     end)
     if not ok or#names==0 then
@@ -164,7 +177,7 @@ local function list_files(folder)
         if n:lower()~='template.txt'and n:lower()~='index.txt'then out[#out+1]=n end
     end
     table.sort(out)
-    return out
+    return out,labels
 end
 
 -- The characters of a translation map the overlay can never draw (the game then shows '?'). HD2Runtime 0.31.0+ draws
@@ -212,18 +225,33 @@ function M.undrawable(map)
     end
     return n,sample
 end
--- Every language: {{name, file (nil for English), count, undrawable, sample}}.
+-- Every language: {{name, file (nil for a built-in), builtin (code), count, undrawable, sample}}.
 function M.languages()
     local out={{name='English',count=0}}
     local folder=M.folder()
-    if not folder then return out end
-    for _,file in ipairs(list_files(folder))do
+    local named={English=true}
+    local files,labels={},{}
+    if folder then files,labels=list_files(folder)end
+    for _,file in ipairs(files)do
         local text=read(folder..'\\'..file)
         if text then
             local map,name,n,code=M.parse(text)
             local missing,sample=M.undrawable(map)
-            out[#out+1]={name=name or(file:gsub('%.txt$','')),file=file,count=n,undrawable=missing,sample=sample,
+            local shown=labels[file]or file
+            out[#out+1]={name=name or(shown:gsub('%.txt$','')),file=file,display_file=shown,count=n,undrawable=missing,sample=sample,
                 code=code}
+            named[out[#out].name]=true
+        end
+    end
+    -- Files come first so aliases such as @language My Chinese / @code cn still override the bundled pack.
+    local codes={};for code in pairs(COMPLETE)do codes[#codes+1]=code end;table.sort(codes)
+    for _,code in ipairs(codes)do
+        local name=COMPLETE[code]
+        if not named[name]then
+            local map=builtin[code]
+            local n=0;for _ in pairs(map)do n=n+1 end
+            local missing,sample=M.undrawable(map)
+            out[#out+1]={name=name,builtin=code,code=code,count=n,undrawable=missing,sample=sample}
         end
     end
     return out
@@ -234,7 +262,8 @@ function M.use(name,languages)
     if name==nil or name=='English'then switch({},'English');return true end
     for _,l in ipairs(languages or M.languages())do
         if l.name==name and l.file then
-            local text=read(M.folder()..'\\'..l.file)
+            local folder=M.folder()
+            local text=folder and read(folder..'\\'..l.file)
             if text then
                 local map=M.parse(text)
                 for code,extra in pairs(builtin)do
@@ -247,8 +276,13 @@ function M.use(name,languages)
             end
         end
     end
+    -- This also keeps an existing saved Chinese selection usable after its external file was removed.
+    for code,label in pairs(COMPLETE)do
+        if name==label or name==code then switch(builtin[code],label);return true end
+    end
+    local why=M.Lf('no localisation file for %s',tostring(name))
     switch({},'English')
-    return false,'no localisation file for '..tostring(name)
+    return false,why
 end
 -- For tests: use a map directly.
 function M.set(map,name)switch(map,name or'Custom')end
@@ -273,8 +307,8 @@ function M.match_game_language(code,languages)
     local wanted={}
     for _,n in ipairs(names)do wanted[n]=true end
     for _,l in ipairs(languages or M.languages())do
-        if l.file then
-            local stem=l.file:gsub('%.txt$',''):lower()
+        if l.file or l.builtin then
+            local stem=l.file and l.file:gsub('%.txt$',''):lower()or l.builtin
             if(l.code and wanted[l.code])or wanted[stem]or wanted[tostring(l.name):lower()]then return l.name end
         end
     end

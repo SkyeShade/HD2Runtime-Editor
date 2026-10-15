@@ -297,7 +297,15 @@ The icons are derived from Arrowhead's artwork. They are git-ignored and only en
 ## Localisation
 
 Every text the window shows goes through one lookup: the interface, and the catalogue's object names (weapons,
-stratagems, enemies ...), subtitles, sections, groups, field labels and value labels. To translate the editor:
+stratagems, enemies ...), subtitles, sections, groups, field labels and value labels.
+
+**Simplified Chinese is included.** With no language selected, a Chinese game/Runtime language selects it automatically.
+You can also choose **简体中文** in Settings; no separate language file or index is needed, including on a Chinese
+Windows profile. An explicit English choice is kept. The pack covers the complete editor interface and reviewed
+catalogue text; new Runtime catalogue strings still fall back to English. Official object names continue to come
+from the game's own text API below. See [translation scope and checks](localization/README.md).
+
+To add a language or override the bundled translations:
 
 1. In game, open **Settings** and press **WRITE TEMPLATE**. It writes `template.txt` into `%LOCALAPPDATA%\HD2REditor\localization\`: every interface text, then every name, section and field the catalogue of your HD2Runtime shows.
 2. Copy it to a new name ending in `.txt`, set the `@language` line, and write each translation after ` = `. Keep `%d` and `%s` where they are (a translation that breaks them shows the English text). Lines without a translation are ignored. A section such as `Explosion · Primary impact` is also translated part by part (`Explosion`, `Primary impact`). A text that contains ` = ` itself works too.

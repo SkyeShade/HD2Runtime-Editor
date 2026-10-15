@@ -3,6 +3,7 @@
 -- HD2Runtime.log, followed live: the last part of the file on first read, then only what was appended (read at most
 -- every half second, only while someone looks). A file that shrank (a new game session) is read again from its end.
 -- Each line is classified for its colour: error, warning, ok, editor, perf, info.
+local i18n=require('mods/skyeshade/hd2runtime_editor/editor/i18n')
 local M={}
 
 local TAIL=256*1024      -- bytes read on the first look
@@ -56,9 +57,9 @@ function M.new(path)
         self.clock=self.clock+(dt or 0)
         if self.clock<self.next_read then return false end
         self.next_read=self.clock+0.5
-        if not self.path or type(io)~='table'then self.error='no log path';return false end
+        if not self.path or type(io)~='table'then self.error=i18n.L('no log path');return false end
         local ok,f=pcall(io.open,self.path,'rb')
-        if not ok or not f then self.error='cannot open '..tostring(self.path);return false end
+        if not ok or not f then self.error=i18n.Lf('cannot open %s',tostring(self.path));return false end
         self.error=nil
         local size=f:seek('end')
         if self.offset==nil or size<self.offset then
