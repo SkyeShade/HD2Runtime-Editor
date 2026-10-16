@@ -183,11 +183,13 @@ function M.install(App)
             if e.code then rx=rx+chip(cv,e.code,rx,ry+35,C.error,C.error_soft,nil,10)+8 end
             cv:text(e.text,rx,ry+35,{size=SZ.tiny,colour=C.faint,max=x+w-126-rx,z=12})
             cv:hit(x+12,ry,w-24,rh,action)
+            -- RESET marks the failed value for reset (1.0.1: Apply takes it back); UNDO takes the mark back
             e.row.reset_error_action=e.row.reset_error_action or{click=function()
-                self:reset_change({row=e.row})
+                self:revert_change({row=e.row.canonical or e.row,state='error'})
                 if self.edit and self.edit.row==e.row then self.edit=nil end
             end}
-            modal_button(self,cv,L('RESET'),x+w-102,ry+25,78,22,e.row.reset_error_action,true)
+            local marked=self:reset_mark(e.row)~=nil
+            modal_button(self,cv,marked and L('UNDO')or L('RESET'),x+w-102,ry+25,78,22,e.row.reset_error_action)
         end
         if n==0 then cv:text(L('No errors: every value the editor applied was accepted.'),x+28,ly+22,
             {size=SZ.small,colour=C.faint,z=12})end

@@ -132,4 +132,36 @@ settle()
 check(entry_of(a.row)==nil and layer:slot_of(a.row)==nil or not(layer:slot_of(a.row).user or layer:slot_of(a.row).error),
     'the failed field is reset on Apply')
 out[#out+1]='failed field ok'
+
+-- 6. a click on the PENDING RESET tag in Changes takes the mark back
+for _,it in ipairs(rows)do app:stage(it.row,it.v)end
+app:apply()
+settle()
+app:set_view('changes')
+app:revert_change(entry_of(b.row))
+local d=step()
+local tag
+for _,it in ipairs(d.items)do if it.k=='t'and it.s=='PENDING RESET'then tag=it end end
+check(tag,'the tag is drawn')
+H.frame({},{mouse={x=tag.x,y=tag.y,left=false}})
+H.frame({},{mouse={x=tag.x,y=tag.y,left=true}})
+H.frame({},{mouse={x=tag.x,y=tag.y,left=false}})
+check(not app:reset_mark(b.row)and app.pending_n==0 and game(b.row)==b.v,'the tag click takes the mark back')
+out[#out+1]='tag click ok'
+
+-- 7. REVERT ALL marks every field (after its confirmation); Discard keeps them, Apply resets them
+app:ask('reset')
+check(app.confirm and app.confirm.kind=='reset','REVERT ALL asks first')
+app:confirm_yes()
+for _,it in ipairs(rows)do check(app:reset_mark(it.row),'marked '..it.row.key)end
+for _=1,60 do step()end
+for _,it in ipairs(rows)do check(game(it.row)==it.v,'unchanged before Apply '..it.row.key)end
+app:discard()
+check(not app:has_pending(),'Discard drops the marks')
+app:ask('reset');app:confirm_yes()
+app:apply()
+settle()
+for _,it in ipairs(rows)do check(game(it.row)==base_of(it.row),'reset on Apply '..it.row.key)end
+check(#app:changes()==0 and not app:has_pending(),'nothing left')
+out[#out+1]='revert all ok'
 return table.concat(out,'\n')

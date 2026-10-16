@@ -70,6 +70,9 @@ local function revert_all()
     check(app.confirm and app.confirm.kind=='reset','REVERT ALL asks to confirm (not "nothing to reset"): '
         ..tostring(app.toast_msg and app.toast_msg.text))
     app:confirm_yes()
+    -- (1.0.1: REVERT ALL marks every field; Apply resets them)
+    check(app:has_pending(),'REVERT ALL leaves its marks for Apply')
+    app:apply()
 end
 local function rows_in_state(state)
     local n=0

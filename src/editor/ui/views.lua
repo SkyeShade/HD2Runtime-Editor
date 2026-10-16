@@ -103,11 +103,7 @@ function M.install(App)
     function App:revert_change(entry)
         if not entry or entry.state=='removing'then return end
         local row=entry.row
-        if entry.reset then
-            self:unstage(row)
-            self:toast(L('Pending change removed'),C.dim)
-            return
-        end
+        if self:unmark_reset(row)then return end
         local base,holder=self.layer:base(row)
         if self:mark_reset(row)then
             self:toast(Lf('Staged: back to %s (press Apply)',self:text(row,base))
@@ -177,8 +173,10 @@ function M.install(App)
         self.change_actions=self.change_actions or{}
         if self.change_actions_key~=self.changes_key then
             self.change_actions,self.change_reset_actions,self.change_actions_key={},{},self.changes_key
+            self.change_unmark_actions={}
         end
         self.change_reset_actions=self.change_reset_actions or{}
+        self.change_unmark_actions=self.change_unmark_actions or{}
         self:list({x=0,y=hy+24,w=W,h=y0+h-hy-28,count=#list,row_h=32,selected=self.change_index,
             scroll_key='change_scroll',focused=true,actions=self.change_actions,
             click=function(i)
@@ -216,6 +214,16 @@ function M.install(App)
                 end
                 -- RESET marks the field (Apply resets it); on a marked field, UNDO takes the mark back
                 local e=list[i]
+                if e.reset then
+                    -- so does a click on its PENDING RESET tag (here, over the row's own click region)
+                    local unmark=self.change_unmark_actions[i]
+                    if not unmark then
+                        unmark={click=function()self:unmark_reset(e.row)end}
+                        self.change_unmark_actions[i]=unmark
+                    end
+                    local cw=cv:measure(L('PENDING RESET'),SZ.tiny,'title')+14
+                    cv:hit(x+lw-112-cw,y+rh/2-10,cw,20,unmark)
+                end
                 button(self,e.reset and L('UNDO')or L('RESET'),x+lw-96,y+4,80,rh-8,
                     e.state=='removing'and'disabled'or e.reset and'normal'or'danger',action)
             end})

@@ -134,7 +134,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Diese Diagnose benötigt HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Ein Regler pro ursprünglicher Dauer. Bereich: %s bis %s Sekunden; längere Missionstimer kürzt das Spiel.",
     "%d-minute missions": "%d-Minuten-Missionen",
-    "Mixed values": "Unterschiedliche Werte"
+    "Mixed values": "Unterschiedliche Werte",
+    "%d fields marked for reset (press Apply)": "%d Felder zum Zurücksetzen markiert (Anwenden drücken)"
   },
   "es": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Jugadores informaron de que GameGuard cerró el juego tras ajustar las estadísticas del Helldiver.",
@@ -271,7 +272,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Este diagnóstico requiere HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Un control por duración original. Intervalo: de %s a %s segundos; el juego recorta los temporizadores más largos.",
     "%d-minute missions": "Misiones de %d minutos",
-    "Mixed values": "Valores diferentes"
+    "Mixed values": "Valores diferentes",
+    "%d fields marked for reset (press Apply)": "%d campos marcados para restablecer (pulsa Aplicar)"
   },
   "fr": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Des joueurs ont signalé que GameGuard fermait le jeu après avoir modifié les statistiques du Helldiver.",
@@ -408,7 +410,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Ce diagnostic nécessite HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Un curseur par durée initiale. Plage : de %s à %s secondes ; le jeu réduit les minuteurs plus longs.",
     "%d-minute missions": "Missions de %d minutes",
-    "Mixed values": "Valeurs différentes"
+    "Mixed values": "Valeurs différentes",
+    "%d fields marked for reset (press Apply)": "%d champs marqués pour réinitialisation (appuyez sur Appliquer)"
   },
   "it": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Alcuni giocatori hanno segnalato che GameGuard chiude il gioco dopo aver modificato le statistiche dell’Helldiver.",
@@ -545,7 +548,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Questa diagnosi richiede HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Un cursore per durata originale. Intervallo: da %s a %s secondi; il gioco riduce i timer più lunghi.",
     "%d-minute missions": "Missioni da %d minuti",
-    "Mixed values": "Valori diversi"
+    "Mixed values": "Valori diversi",
+    "%d fields marked for reset (press Apply)": "%d campi contrassegnati per il ripristino (premi Applica)"
   },
   "jp": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "ヘルダイバーの能力値を調整した後、GameGuardがゲームを終了したという報告があります。",
@@ -682,7 +686,8 @@
     "This diagnostic requires HD2Runtime RC13.": "この診断にはHD2Runtime RC13が必要です。",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "元の制限時間ごとにスライダーを表示。範囲：%s～%s秒。これより長いタイマーはゲームが短縮します。",
     "%d-minute missions": "%d分のミッション",
-    "Mixed values": "異なる値"
+    "Mixed values": "異なる値",
+    "%d fields marked for reset (press Apply)": "%d項目をリセット対象にしました（適用を押してください）"
   },
   "ko": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "헬다이버 능력치를 조정한 후 GameGuard가 게임을 종료했다는 보고가 있습니다.",
@@ -819,7 +824,8 @@
     "This diagnostic requires HD2Runtime RC13.": "이 진단에는 HD2Runtime RC13이 필요합니다.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "기본 제한 시간별 슬라이더입니다. 범위: %s~%s초. 더 긴 타이머는 게임이 줄입니다.",
     "%d-minute missions": "%d분 임무",
-    "Mixed values": "서로 다른 값"
+    "Mixed values": "서로 다른 값",
+    "%d fields marked for reset (press Apply)": "%d개 항목이 초기화 대상으로 표시됨 (적용을 누르세요)"
   },
   "pl": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Gracze zgłaszali, że GameGuard zamyka grę po zmianie statystyk Helldivera.",
@@ -956,7 +962,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Ta diagnostyka wymaga HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Jeden suwak na każdy pierwotny czas. Zakres: %s–%s sekund; dłuższe liczniki gra skraca.",
     "%d-minute missions": "Misje %d-minutowe",
-    "Mixed values": "Różne wartości"
+    "Mixed values": "Różne wartości",
+    "%d fields marked for reset (press Apply)": "Oznaczono pola do przywrócenia: %d (naciśnij Zastosuj)"
   },
   "pt": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Jogadores relataram que o GameGuard fechou o jogo após ajustarem as estatísticas do Helldiver.",
@@ -1093,7 +1100,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Este diagnóstico requer HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Um controlo por duração original. Intervalo: %s a %s segundos; o jogo encurta temporizadores mais longos.",
     "%d-minute missions": "Missões de %d minutos",
-    "Mixed values": "Valores diferentes"
+    "Mixed values": "Valores diferentes",
+    "%d fields marked for reset (press Apply)": "%d campos marcados para repor (prime Aplicar)"
   },
   "bp": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Jogadores relataram que o GameGuard fechou o jogo após ajustarem os atributos do Helldiver.",
@@ -1230,7 +1238,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Este diagnóstico requer HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Um controle por duração original. Intervalo: %s a %s segundos; o jogo encurta cronômetros mais longos.",
     "%d-minute missions": "Missões de %d minutos",
-    "Mixed values": "Valores diferentes"
+    "Mixed values": "Valores diferentes",
+    "%d fields marked for reset (press Apply)": "%d campos marcados para redefinir (pressione Aplicar)"
   },
   "ru": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Игроки сообщали, что GameGuard закрывал игру после изменения характеристик Адского десантника.",
@@ -1367,7 +1376,8 @@
     "This diagnostic requires HD2Runtime RC13.": "Для диагностики нужен HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Один ползунок на каждую исходную длительность. Диапазон: %s–%s секунд; более длинные таймеры игра сокращает.",
     "%d-minute missions": "Миссии на %d мин.",
-    "Mixed values": "Разные значения"
+    "Mixed values": "Разные значения",
+    "%d fields marked for reset (press Apply)": "Отмечено полей для сброса: %d (нажмите «Применить»)"
   },
   "cn": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "有玩家报告称，调整绝地潜兵属性后 GameGuard 关闭了游戏。",
@@ -1504,7 +1514,8 @@
     "This diagnostic requires HD2Runtime RC13.": "此诊断需要HD2Runtime RC13。",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "每种初始时长对应一个滑块。范围：%s至%s秒；更长的任务计时器会被游戏截断。",
     "%d-minute missions": "%d分钟任务",
-    "Mixed values": "数值不同"
+    "Mixed values": "数值不同",
+    "%d fields marked for reset (press Apply)": "已标记 %d 个字段待恢复默认（请按应用）"
   },
   "tc": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "有玩家回報，調整絕地戰兵屬性後 GameGuard 關閉了遊戲。",
@@ -1641,7 +1652,8 @@
     "This diagnostic requires HD2Runtime RC13.": "此診斷需要HD2Runtime RC13。",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "每種初始時長對應一個滑桿。範圍：%s至%s秒；更長的任務計時器會被遊戲截斷。",
     "%d-minute missions": "%d分鐘任務",
-    "Mixed values": "數值不同"
+    "Mixed values": "數值不同",
+    "%d fields marked for reset (press Apply)": "已標記 %d 個欄位待恢復預設（請按套用）"
   },
   "ms": {
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Pemain melaporkan GameGuard menutup permainan selepas melaras statistik Helldiver.",
@@ -1778,6 +1790,7 @@
     "This diagnostic requires HD2Runtime RC13.": "Este diagnóstico requiere HD2Runtime RC13.",
     "One slider per original duration. Range: %s to %s seconds; the game cuts longer mission timers.": "Satu peluncur bagi setiap tempoh asal. Julat: %s hingga %s saat; permainan memendekkan pemasa yang lebih panjang.",
     "%d-minute missions": "Misi %d minit",
-    "Mixed values": "Nilai berbeza"
+    "Mixed values": "Nilai berbeza",
+    "%d fields marked for reset (press Apply)": "%d campos marcados para restablecer (presiona Aplicar)"
   }
 }

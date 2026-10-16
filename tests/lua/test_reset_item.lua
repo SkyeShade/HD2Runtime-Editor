@@ -7,7 +7,8 @@ local function first_numeric(o,skip)
             and r.max>r.vanilla then return r end
     end
 end
--- A weapon: one applied and one pending change; RESET ITEM asks, then both go back now; another item is untouched.
+-- A weapon: one applied and one pending change; RESET ITEM asks, marks them, and Apply takes both back (1.0.1); another
+-- item is untouched.
 local list=H.catalog:objects('primary')
 local w=list[1];H.catalog:open(w)
 local other=list[2];H.catalog:open(other)
@@ -22,6 +23,9 @@ H.app.btn_reset_item.click()
 assert(H.app.confirm and H.app.confirm.kind=='reset_item'and H.app.confirm.data.count==2)
 assert(#H.frame({}).refused==0)
 H.app:confirm_yes();settle()
+-- (1.0.1) marked: the pending value is dropped, the applied one stays until Apply
+assert(H.sim.value(a)==a.vanilla+1 and H.app.pending[b.key]==nil and H.app:reset_mark(a),'marked, not yet reset')
+H.app:apply();settle()
 assert(H.sim.value(a)==a.vanilla and H.app.pending[b.key]==nil,'both back')
 assert(H.sim.value(c)==c.vanilla+1,'another item is untouched')
 assert(#H.app:item_changes(w)==0)

@@ -73,6 +73,10 @@ out[#out+1]='player wins ok'
 
 -- 3. Reset to defaults forgets the values that did not come back too.
 app:reset_defaults()
+-- (1.0.1: nothing changes until Apply)
+run(5,session)
+check(presets:session()[rof.key]~=nil,'REVERT ALL alone keeps the saved values until Apply')
+app:apply()
 run(10,session)
 saved=presets:session()
 check(next(saved)==nil,'nothing saved after Reset to defaults: '..tostring(next(saved)))

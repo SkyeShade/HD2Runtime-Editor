@@ -53,7 +53,8 @@ function Session:recover_interrupted()
     return false
 end
 function Session:pending_values()
-    local values=self:values()
+    -- (a REVERT ALL waiting for Apply: the custom stratagem tunes and the saved values that did not come back go too)
+    local values=self.app.pending_revert and self.app:encode_values(self.layer:overrides())or self:values()
     for key,p in pairs(self.app.pending)do
         -- (a field marked for reset is saved as gone, as once reset)
         if p.reset then values[key]=nil

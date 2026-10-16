@@ -187,6 +187,10 @@ H.app:ask('reset')
 step({},nil,'10_confirm')
 assert(H.app.confirm and H.app.confirm.kind=='reset','confirm dialog')
 step({'ENTER'})
+settle(4)
+-- (1.0.1) REVERT ALL marks every field: nothing changes until Apply (F9)
+assert(H.sim.value(rof)~=1200 and H.app:reset_mark(rof),'marked, not yet reset')
+step({'F9'})
 settle(8)
 step({},nil,'11_after_reset')
 assert(H.sim.value(rof)==1200,'reset returned the mod value 1200: '..tostring(H.sim.value(rof)))
@@ -577,8 +581,13 @@ do
     assert(next(H.app:custom_values())==nil,'untuned: no values')
     H.app:load_preset('Custom Tunes')
     assert(H_custom.cooldown==90 and H_custom.uses==nil,'loading the preset tunes it again')
-    -- Reset to defaults untunes it
+    -- Reset to defaults untunes it, on Apply (1.0.1); Discard keeps the tune
     H.app:reset_defaults()
+    assert(H_custom.tuned and H.app:has_pending(),'REVERT ALL waits for Apply')
+    H.app:discard()
+    assert(H_custom.tuned and not H.app:has_pending(),'Discard keeps the tune')
+    H.app:reset_defaults()
+    H.app:apply()
     assert(not H_custom.tuned and next(H.app:custom_values())==nil,'reset to defaults returns it to its registered values')
     H.presets:delete('Custom Tunes')
     H_custom.uses,H_custom.registered.uses,H_custom.limits=nil,nil,nil
@@ -1495,12 +1504,32 @@ do
             step({},{mouse={x=reset.x,y=reset.y,left=true}})
             step({},{mouse={x=reset.x,y=reset.y,left=false}})
         end
+        local function click_text(d,text)
+            local hit
+            for _,item in ipairs(d.items)do if item.k=='t'and item.s==text then hit=item end end
+            assert(hit,'visible: '..text)
+            step({},{mouse={x=hit.x,y=hit.y,left=false}})
+            step({},{mouse={x=hit.x,y=hit.y,left=true}})
+            step({},{mouse={x=hit.x,y=hit.y,left=false}})
+        end
         click_reset(d)
+        settle(1)
+        -- (1.0.1) RESET marks the failed field: its error stays until Apply; a click on the PENDING RESET tag takes the
+        -- mark back, RESET marks it again
+        assert(select(3,H.layer:counts())==1 and H.app:has_pending(),'marked: the error stays until Apply')
+        click_text(step({}),'PENDING RESET')
+        assert(not H.app:has_pending()and select(3,H.layer:counts())==1,'the tag click takes the mark back')
+        click_reset(step({}))
+        assert(H.app:has_pending(),'marked again')
+        H.app:apply()
         settle(1)
         assert(select(3,H.layer:counts())==0 and not H.app:markers().error[o.key],'reset: no error left')
         assert(H.layer:set(s.type2,'gas_confusion',{kind='preset',name='Gas kit'}))
         settle(1);H.app:open_errors()
         click_reset(step({}))
+        -- (marked in the errors list too: UNDO there, Apply resets it)
+        assert(H.app:has_pending(),'marked from the errors list')
+        H.app:apply()
         settle(1)
         assert(#H.app:error_list()==0,'RESET in errors popup did not discard the failed value')
         H.app:close_errors()

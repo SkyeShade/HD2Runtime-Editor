@@ -813,9 +813,11 @@ end
 ---------------------------------------------------------------------------------------------- staging --
 -- Drops pending values staged on other rows of the same native bytes (one value per location).
 function App:unstage_siblings(row)
+    local dropped=false
     for _,other in ipairs(self.catalog:siblings(row))do
-        if other.key~=row.key then self:drop_pending(other.key)end
+        if other.key~=row.key and self:drop_pending(other.key)then dropped=true end
     end
+    return dropped
 end
 -- 'AR-23 Liberator, AR-23P Liberator Penetrator (+2)': the other objects a shared row's value also changes.
 function App:shared_names(row,limit)
@@ -1006,12 +1008,28 @@ function App:mark_reset(row)
     local slot=self.layer:slot_of(row)
     -- (the pending value goes first, as with an immediate reset: a status slot left empty takes its later slots along)
     self:unstage(row)
-    if not(slot and(slot.user or slot.error)and not slot.removing)then return false end
+    if not(row.key and slot and(slot.user or slot.error)and not slot.removing)then return false end
     self.pending[row.key]={row=row,value=(self.layer:base(row)),reset=true}
     self.pending_n=self.pending_n+1
-    self.changes_key=nil
+    self.changes_key,self.item_changes_key=nil,nil
     return true
 end
+-- The reset mark on a field (its pending entry), or nil.
+function App:reset_mark(row)
+    local p=row and self.pending[(row.canonical or row).key]
+    return p and p.reset and p or nil
+end
+-- Takes a reset mark back (a click on its PENDING RESET tag, UNDO): the field keeps its value. True when there was one.
+function App:unmark_reset(row)
+    if not self:reset_mark(row)then return false end
+    self:drop_pending((row.canonical or row).key)
+    self.item_changes_key=nil
+    self:toast(L('Pending change removed'),C.dim)
+    return true
+end
+-- Whether Apply has anything to do: pending values and marks, or a REVERT ALL waiting for it (custom stratagem tunes
+-- and saved values that did not come back go back on Apply too).
+function App:has_pending()return self.pending_n>0 or self.pending_revert==true end
 -- Returns how many values are missing, and how many were left out because their weapon fires another projectile (or
 -- its payload slot sets off another explosion).
 function App:stage_map(map,origin)
@@ -1086,7 +1104,7 @@ function App:apply_recovered(row,value,origin)
 end
 function App:apply()
     if self.spawn_job then self:toast(L('Spawn changes are still being prepared'),C.pending);return end
-    if self.pending_n==0 then self:toast(L('Nothing to apply'),C.dim);return end
+    if not self:has_pending()then self:toast(L('Nothing to apply'),C.dim);return end
     local mission_block=require('mods/skyeshade/hd2runtime_editor/editor/missions').apply_block(self.catalog,self.pending)
     if mission_block then self:ask('mission_timer_block',mission_block);return end
     if self.ctx.before_apply and not self.ctx.before_apply()then return end
@@ -1108,6 +1126,18 @@ function App:apply()
             self:toast(Lf('%s: %s',L(p.row.label),tostring(why)),C.error)
         end
     end
+    if self.pending_revert then
+        -- REVERT ALL (1.0.1: on Apply): the custom stratagem tunes and the saved values that did not come back at this
+        -- start (editor/session.lua) go too, as do fields no reset mark could name (no key)
+        self.pending_revert=nil
+        n=n+self:untune_custom_all()
+        if self.ctx.forget_saved then self.ctx.forget_saved()end
+        for _,slot in pairs(self.layer.slots)do
+            if slot.row and not slot.row.key and not slot.removing and(slot.user or slot.error)then
+                self.layer:reset(slot.row);n=n+1
+            end
+        end
+    end
     self.pending_n=failed
     if failed==0 then self:toast(n==1 and L('Applying 1 change')or Lf('Applying %d changes',n),C.gold)end
     self.save_session=true
@@ -1117,20 +1147,34 @@ function App:discard()
     local n=self.pending_n
     local pending=self.pending
     self.pending,self.pending_n={},0
+    self.pending_revert=nil
+    self.changes_key,self.item_changes_key=nil,nil
     if self.ctx.discard_pending then self.ctx.discard_pending(pending)end
     self:toast(n>0 and(n==1 and L('Discarded 1 pending change')or Lf('Discarded %d pending changes',n))
         or L('Nothing pending'),C.dim)
 end
+-- Marks reset fields and says so: how many marks there are now (n), with shared value names (shared) when given.
+function App:say_marked(n,shared)
+    self:toast(Lf('%d fields marked for reset (press Apply)',n)
+        ..(shared and('  '..Lf('Shared values: this also resets %s.',shared))or''),n>0 and C.pending or C.dim)
+end
+-- REVERT ALL / RESET TO DEFAULTS (1.0.1: on Apply, after its confirmation): every field the editor changed or that
+-- failed is marked for reset, pending values are dropped; Apply resets them all, with the custom stratagem tunes and
+-- the saved values that did not come back; Discard keeps everything.
 function App:reset_defaults()
     self.spawn_job=nil
-    local n=self.layer:reset_all()+self:untune_custom_all()
-    -- the saved values that did not come back at this start go too (editor/session.lua)
-    if self.ctx.forget_saved then self.ctx.forget_saved()end
-    self.pending,self.pending_n={},0
-    self.save_session=true
-    self:toast(n>0 and(n==1 and L('Returning 1 field to the mods\' and game values')
-            or Lf('Returning %d fields to the mods\' and game values',n))
-        or L('Nothing to reset: no editor values are active'),n>0 and C.gold or C.dim)
+    for key,p in pairs(self.pending)do if not p.reset then self:drop_pending(key)end end
+    local n=0
+    for _,slot in pairs(self.layer.slots)do
+        if slot.row and not slot.removing and(slot.user or slot.error)then
+            if self:reset_mark(slot.row)or self:mark_reset(slot.row)then n=n+1 end
+        end
+    end
+    local custom=0
+    for _,e in ipairs(self:custom_list())do if e.tuned then custom=custom+1 end end
+    self.pending_revert=true
+    self.changes_key,self.item_changes_key=nil,nil
+    self:say_marked(n+custom)
 end
 -- Step for nudging a value: integers by 1, decimals by a tenth of their magnitude.
 local function nudge_step(row,value,shift,ctrl)
@@ -1318,10 +1362,9 @@ function App:handle_browse_keys(f)
             if k.DELETE then
                 if self:unstage(row)then self:toast(L('Pending change removed'),C.dim)
                 else
-                    local _,source=self.layer:value(row)
-                    if source=='editor'then
-                        local base=self.layer:base(row)
-                        self:stage(row,base)
+                    -- an applied (or failed) value: marked for reset, as RESET in Changes marks it (1.0.1)
+                    local base=self.layer:base(row)
+                    if self:mark_reset(row.canonical or row)then
                         self:toast(Lf('Staged: back to %s (press Apply)',self:text(row,base)),C.pending)
                     end
                 end
@@ -1608,21 +1651,22 @@ function App:item_shared_names(object,rows)
     for i=1,math.min(3,#names)do shown[i]=names[i]end
     return table.concat(shown,', ')..(#names>3 and(' (+'..(#names-3)..')')or'')
 end
--- Resets every change of the item now, as RESET TO DEFAULTS does for every field: pending values are dropped and
--- applied editor values go back to the base (the mod's value, or the game's when no mod set it).
-function App:reset_item(object)
+-- RESET ITEM (1.0.1: on Apply, after its confirmation): every change of the item is marked for reset, as REVERT ALL
+-- marks every field: pending values are dropped, and Apply takes applied or failed values back to the base (the mod's
+-- value, or the game's when no mod set it). Returns how many fields are marked.
+function App:reset_item(object,shared)
     local rows=self:item_changes(object)
-    local n=0
+    local n,dropped=0,0
     for _,r in ipairs(rows)do
-        local dropped=self:unstage(r)
-        self:unstage_siblings(r)
-        local slot=self.layer:slot_of(r)
-        local reset=slot and(slot.user or slot.error)and self.layer:reset(r)
-        if reset then self.save_session=true end
-        if reset or dropped then n=n+1 end
+        if self:unstage_siblings(r)then dropped=dropped+1 end
+        local was=self.pending[r.key]~=nil
+        if self:reset_mark(r)or self:mark_reset(r)then n=n+1 elseif was then dropped=dropped+1 end
     end
     self.item_changes_key=nil
-    self:toast(Lf('%s: %d fields back to default',util.display_name(object),n),C.gold)
+    -- (only pending values, nothing applied: they are just dropped)
+    if n==0 and dropped>0 then self:toast(dropped==1 and L('Discarded 1 pending change')
+        or Lf('Discarded %d pending changes',dropped),C.dim)
+    else self:say_marked(n,shared)end
     return n
 end
 function App:confirm_yes()
@@ -1630,7 +1674,7 @@ function App:confirm_yes()
     self.confirm=nil
     if not c then return end
     if c.kind=='reset'then self:reset_defaults()
-    elseif c.kind=='reset_item'then self:reset_item(c.data.object)
+    elseif c.kind=='reset_item'then self:reset_item(c.data.object,c.data.shared)
     elseif c.kind=='delete_preset'then
         self.presets:delete(c.data)
         self:toast(Lf('Deleted preset %s',c.data),C.dim)
@@ -2324,12 +2368,18 @@ function App:draw_fields(y0,h)
             -- source badge (an error first: a refused value on a field that is locked or waiting for its order now
             -- still says why it failed)
             local bxr=x+lw+FX.badge_right
-            if state=='error'then
+            if self:reset_mark(row)then
+                -- marked for reset (1.0.1): a click on the tag takes the mark back
+                local cw=chip(cv,L('PENDING RESET'),bxr,cy,C.pending,C.pending_soft,'right')
+                row.unmark_action=row.unmark_action or{click=function()self:unmark_reset(row)end}
+                cv:hit(bxr-cw,cy-10,cw,20,row.unmark_action)
+            elseif state=='error'then
                 chip(cv,L('ERROR'),bxr,cy,C.error,C.error_soft,'right')
                 local slot=self.layer:slot_of(row)
                 if slot and slot.error then
+                    -- (marked for reset: Apply takes the failed value back)
                     row.reset_error_action=row.reset_error_action or{click=function()
-                        self:reset_change({row=row})
+                        self:revert_change({row=row.canonical or row,state='error'})
                         if self.edit and self.edit.row==row then self.edit=nil end
                     end}
                     button(self,L('RESET'),bxr-126,y+5,62,rh-10,'danger',row.reset_error_action)
@@ -2505,10 +2555,12 @@ function App:draw_footer(y,h)
     bx=bx-w
     button(self,L('RESET TO DEFAULTS'),bx,by,w,bh,(resettable>0 or self.pending_n>0)and'danger'or'disabled',self.btn_reset)
     w=110;bx=bx-w-10
-    button(self,L('DISCARD'),bx,by,w,bh,self.pending_n>0 and'normal'or'disabled',self.btn_discard)
+    -- (a REVERT ALL waiting for Apply counts as pending: its custom stratagem tunes have no mark of their own)
+    local pending=self:has_pending()
+    button(self,L('DISCARD'),bx,by,w,bh,pending and'normal'or'disabled',self.btn_discard)
     w=150;bx=bx-w-10
     button(self,self.pending_n>0 and('APPLY  '..self.pending_n)or'APPLY',bx,by,w,bh,
-        self.pending_n>0 and'primary'or'disabled',self.btn_apply)
+        pending and'primary'or'disabled',self.btn_apply)
 end
 
 function App:draw_confirm()

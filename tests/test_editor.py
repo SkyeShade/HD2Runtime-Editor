@@ -520,7 +520,8 @@ return 'ok'
         # 1.0.1: RESET in Changes marks a field; Apply resets it, UNDO and Discard keep it
         result = lua_file('test_mark_reset.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                                   'harness': (LUA / 'ui_harness.lua').as_posix()})
-        for line in ('mark ok', 'undo discard ok', 'apply reset ok', 'pending only ok', 'failed field ok'):
+        for line in ('mark ok', 'undo discard ok', 'apply reset ok', 'pending only ok', 'failed field ok', 'tag click ok',
+                     'revert all ok'):
             self.assertIn(line, result)
 
     def test_window_frames_stay_inside_overlay_limits(self):
