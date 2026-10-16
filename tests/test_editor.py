@@ -516,6 +516,13 @@ return 'ok'
         for line in ('revert all ok', 'revert during apply ok', 'revert after resets ok', 'failed resets ok'):
             self.assertIn(line, result)
 
+    def test_changes_reset_marks_until_apply(self):
+        # 1.0.1: RESET in Changes marks a field; Apply resets it, UNDO and Discard keep it
+        result = lua_file('test_mark_reset.lua', {'sim': (LUA / 'sim.lua').as_posix(),
+                                                  'harness': (LUA / 'ui_harness.lua').as_posix()})
+        for line in ('mark ok', 'undo discard ok', 'apply reset ok', 'pending only ok', 'failed field ok'):
+            self.assertIn(line, result)
+
     def test_window_frames_stay_inside_overlay_limits(self):
         result = lua_file('test_ui.lua', {'sim': (LUA / 'sim.lua').as_posix(),
                                           'harness': (LUA / 'ui_harness.lua').as_posix()})

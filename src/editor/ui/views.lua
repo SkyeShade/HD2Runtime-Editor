@@ -67,7 +67,14 @@ function M.install(App)
         if self.changes_key==key then return self.changes_cache end
         local list,seen={},{}
         for _,p in pairs(self.pending)do
-            list[#list+1]={row=p.row,value=p.value,state='pending'}
+            -- a field marked for reset shows the value it still holds (the one Apply takes away)
+            local value=p.value
+            if p.reset then
+                local slot=self.layer:slot_of(p.row)
+                if slot and slot.user and slot.target~=nil then value=slot.target
+                elseif slot and slot.failed_value~=nil then value=slot.failed_value end
+            end
+            list[#list+1]={row=p.row,value=value,state='pending',reset=p.reset}
             seen[p.row.key]=true
         end
         for _,slot in pairs(self.layer.slots)do
@@ -90,15 +97,28 @@ function M.install(App)
         self.changes_key,self.changes_cache=key,list
         return list
     end
+    -- RESET in Changes (1.0.1): marks the field for reset; Apply takes its value back to the base (the mod's value, or
+    -- the game's when no mod set it), Discard keeps it. Again on a marked field: the mark is undone. A field with only a
+    -- pending value (nothing applied) just loses that value.
     function App:revert_change(entry)
         if not entry or entry.state=='removing'then return end
-        if entry.state=='pending'then self:unstage(entry.row);self:toast(L('Pending change removed'),C.dim);return end
-        local base=self.layer:base(entry.row)
-        self:stage(entry.row,base)
-        self:toast(Lf('Staged: back to %s (press Apply)',self:text(entry.row,base)),C.pending)
+        local row=entry.row
+        if entry.reset then
+            self:unstage(row)
+            self:toast(L('Pending change removed'),C.dim)
+            return
+        end
+        local base,holder=self.layer:base(row)
+        if self:mark_reset(row)then
+            self:toast(Lf('Staged: back to %s (press Apply)',self:text(row,base))
+                ..(holder and(' ('..L('the mod value')..')')or''),C.pending)
+        elseif entry.state=='pending'then
+            self:toast(L('Pending change removed'),C.dim)
+        end
     end
     -- Resets one change now, as RESET TO DEFAULTS does for every field: its pending value is dropped and an applied
-    -- editor value goes back to the base (the mod's value, or the game's when no mod set it).
+    -- editor value goes back to the base (the mod's value, or the game's when no mod set it). (The RESET of a failed
+    -- value in Browse and Errors; Changes marks for reset instead: App:mark_reset.)
     function App:reset_change(entry)
         if not entry then return end
         local row=entry.row
@@ -121,8 +141,7 @@ function M.install(App)
         if k.PAGEUP then self.change_index=clamp_index(self.change_index-12,#list)end
         if k.PAGEDOWN then self.change_index=clamp_index(self.change_index+12,#list)end
         if(k.ENTER or k.RIGHT)and list[self.change_index]then self:sound('open');self:reveal(list[self.change_index].row)end
-        if k.DELETE then self:revert_change(list[self.change_index])end
-        if k.BACKSPACE then self:reset_change(list[self.change_index])end
+        if k.DELETE or k.BACKSPACE then self:revert_change(list[self.change_index])end
     end
     function App:draw_changes(y0,h)
         local cv=self.canvas
@@ -179,8 +198,9 @@ function M.install(App)
                 cv:text(self:text(e.row,e.value),x+lw-250,cy,{size=SZ.label,colour=C.gold,align='right',max=160})
                 local fg,bg,label=C.gold,C.gold_wash,L('EDITED')
                 if e.state=='pending'then
-                    -- a pending value equal to the base resets the field when applied
-                    fg,bg,label=C.pending,C.pending_soft,util.same(e.value,base)and L('PENDING RESET')or L('PENDING')
+                    -- a field marked for reset, or a pending value equal to the base, resets the field when applied
+                    fg,bg,label=C.pending,C.pending_soft,(e.reset or util.same(e.value,base))and L('PENDING RESET')
+                        or L('PENDING')
                 elseif e.state=='removing'then fg,bg,label=C.pending,C.pending_soft,L('REMOVING')
                 elseif e.state=='applying'and self:loading(e.row)then fg,bg,label={255,199,44,255},C.gold_soft,L('LOADING')
                 elseif e.state=='applying'then fg,bg,label={255,199,44,255},C.gold_soft,L('APPLYING')
@@ -191,10 +211,13 @@ function M.install(App)
                 local action=self.change_reset_actions[i]
                 if not action then
                     local index=i
-                    action={click=function()self:reset_change(self:changes()[index])end}
+                    action={click=function()self:revert_change(self:changes()[index])end}
                     self.change_reset_actions[i]=action
                 end
-                button(self,L('RESET'),x+lw-96,y+4,80,rh-8,list[i].state=='removing'and'disabled'or'danger',action)
+                -- RESET marks the field (Apply resets it); on a marked field, UNDO takes the mark back
+                local e=list[i]
+                button(self,e.reset and L('UNDO')or L('RESET'),x+lw-96,y+4,80,rh-8,
+                    e.state=='removing'and'disabled'or e.reset and'normal'or'danger',action)
             end})
     end
 

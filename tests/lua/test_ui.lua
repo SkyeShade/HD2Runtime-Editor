@@ -724,7 +724,7 @@ assert(pend and pend.state=='pending'and pend.value==base,'pending reset listed'
 H.app:apply();settle(6)
 assert(H.layer:state(rof)~='active'and H.layer:overrides()[rof.key]==nil and H.sim.value(rof)==1200,
     'applying the mod value reset the field to it: '..tostring(H.layer:state(rof))..' '..tostring(H.sim.value(rof)))
--- the RESET button: edit again, then reset from the Changes tab without Apply
+-- the RESET button: edit again, then RESET in the Changes tab marks the field (1.0.1); Apply resets it
 assert(H.app:stage(rof,1500));H.app:apply();settle(6)
 assert(H.sim.value(rof)==1500,'1500 written')
 step({},nil,'32_changes_reset_button')
@@ -733,6 +733,9 @@ local index
 for i,c in ipairs(list)do if c.row==rof then index=i end end
 assert(index and H.app.change_reset_actions[index],'a RESET button on the change')
 H.app.change_reset_actions[index].click()
+settle(6)
+assert(H.sim.value(rof)==1500 and H.layer:state(rof)=='active','RESET only marks: 1500 stays until Apply')
+H.app:apply()
 settle(6)
 assert(H.layer:state(rof)~='active'and H.sim.value(rof)==1200,'RESET returned the field to the mod value: '
     ..tostring(H.sim.value(rof)))

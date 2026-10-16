@@ -999,6 +999,19 @@ function App:unstage(row)
     end
     return false
 end
+-- Marks a field for reset (RESET in Changes, 1.0.1): Apply takes it back to its base as App:reset_change does now, and
+-- Discard keeps its value. Until then nothing changes in the game, and the session keeps saving the applied value. True
+-- when marked; with nothing applied or failed to take back, its pending value (if any) is only dropped: false.
+function App:mark_reset(row)
+    local slot=self.layer:slot_of(row)
+    -- (the pending value goes first, as with an immediate reset: a status slot left empty takes its later slots along)
+    self:unstage(row)
+    if not(slot and(slot.user or slot.error)and not slot.removing)then return false end
+    self.pending[row.key]={row=row,value=(self.layer:base(row)),reset=true}
+    self.pending_n=self.pending_n+1
+    self.changes_key=nil
+    return true
+end
 -- Returns how many values are missing, and how many were left out because their weapon fires another projectile (or
 -- its payload slot sets off another explosion).
 function App:stage_map(map,origin)
@@ -1080,7 +1093,13 @@ function App:apply()
     local n,failed=0,0
     for key,p in pairs(self.pending)do
         local ok,why
-        if p.row.recovered_key then ok,why=self:apply_recovered(p.row,p.value,p.origin)
+        if p.reset then
+            -- a field marked for reset (RESET in Changes): back to its base, as an immediate reset does; already back
+            -- (reset or replaced since) counts as done
+            local slot=self.layer:slot_of(p.row)
+            if slot and(slot.user or slot.error)and not slot.removing then self.layer:reset(p.row)end
+            ok=true
+        elseif p.row.recovered_key then ok,why=self:apply_recovered(p.row,p.value,p.origin)
         else ok,why=self.layer:set(p.row,p.value,p.origin)end
         if ok then self.pending[key]=nil;n=n+1
         else
@@ -2644,7 +2663,8 @@ function App:current_values()
     local values=self.layer:overrides()
     -- Recovery can leave custom tunes pending; those requested values take precedence in saved presets.
     for key,value in pairs(self:custom_values())do values[key]=value end
-    for key,p in pairs(self.pending)do values[key]=p.value end
+    -- (a field marked for reset is left out, as once reset)
+    for key,p in pairs(self.pending)do if p.reset then values[key]=nil else values[key]=p.value end end
     return values
 end
 -- The game's own icon of a stratagem or booster (tools/game_icons.py; HD2Runtime r50 d:image), coloured as the

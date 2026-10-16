@@ -55,8 +55,12 @@ end
 function Session:pending_values()
     local values=self:values()
     for key,p in pairs(self.app.pending)do
-        local encoded=self.app:encode_values({[key]=p.value})
-        values[key]=encoded[key]
+        -- (a field marked for reset is saved as gone, as once reset)
+        if p.reset then values[key]=nil
+        else
+            local encoded=self.app:encode_values({[key]=p.value})
+            values[key]=encoded[key]
+        end
     end
     return values
 end

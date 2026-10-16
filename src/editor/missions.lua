@@ -69,7 +69,8 @@ end
 function M.apply_block(cat,pending)
     local has_timer=false
     for _,p in pairs(pending)do
-        if p.row.field=='mission.duration_seconds'then has_timer=true;break end
+        -- (a timer marked for reset goes back as an immediate reset always did)
+        if p.row.field=='mission.duration_seconds'and not p.reset then has_timer=true;break end
     end
     if not has_timer or type(cat.real_hd2.game_state)~='function'then return end
     local ok,state=pcall(cat.real_hd2.game_state)

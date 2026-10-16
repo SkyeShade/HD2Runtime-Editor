@@ -36,9 +36,14 @@ function M.install(App)
         end
         return self.exporter
     end
-    -- The changes the wizard offers: every editor change that is applied or pending.
+    -- The changes the wizard offers: every editor change that is applied or pending (not a field marked for reset).
     function App:export_changes()
-        local list=self:changes()
+        local all=self:changes()
+        if self.export_list_of~=all then
+            self.export_list_of,self.export_list=all,{}
+            for _,e in ipairs(all)do if not e.reset then self.export_list[#self.export_list+1]=e end end
+        end
+        local list=self.export_list
         local x=state(self)
         if not x.selected then
             x.selected={}
