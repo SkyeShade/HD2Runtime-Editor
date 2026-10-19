@@ -2,7 +2,7 @@
 
 # HD2R Editor
 
-**New in 1.0.0** (for HD2Runtime 0.40.0): enemies, structures and spawning pages, Mission Overview with timer sliders (up to 41:40), a host-controlled timer freeze and "Freeze automatically", armor perks, reload / heat / melee / throwable controls, RESET ITEM, the game's keybind page (MODS tab) and a GameGuard warning on the Helldiver's stats. See [docs/releases/1.0.0.md](docs/releases/1.0.0.md).
+**New in 1.0.1** (for HD2Runtime 0.40.1): resets wait for Apply (PENDING RESET, UNDO), the optimized-application switch follows HD2Runtime 0.40.1 (off by default, saved by the Runtime), and the armor class tables and damage curve are read only. See [docs/releases/1.0.1.md](docs/releases/1.0.1.md); 1.0.0 in [docs/releases/1.0.0.md](docs/releases/1.0.0.md).
 
 HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mod you have deployed and what each HD2Runtime mod changes. You can edit any field HD2Runtime can write, including fields a mod already sets, and apply the edits live. Reset to defaults gives everything back exactly as your mods and the game had it.
 
@@ -157,7 +157,7 @@ HD2R Editor is a Helldivers 2 mod with its own in-game window. It shows every mo
   - It never overwrites a project ModBuilder made. Reopen ModBuilder's project list to see a new one.
 - **No custom Lua.** The editor only changes fields HD2Runtime already exposes. For new behaviour, custom stratagems or a mod to share, use [HD2Runtime ModBuilder](https://github.com/SkyeShade/HD2Runtime-ModBuilder).
 
-> **Status: 1.0.0, for HD2Runtime 0.40.0.** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
+> **Status: 1.0.1, for HD2Runtime 0.40.1 (also runs on 0.40.0).** Tested in game, and offline against the real HD2Runtime source (see [Tests](#tests)).
 
 ## Requirements
 

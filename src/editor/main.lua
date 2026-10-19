@@ -31,7 +31,7 @@ local mod_icon_map=optional('mod_icons')
 local preset_icon_map=optional('preset_icons')
 local M={}
 
-M.VERSION='1.0.0'
+M.VERSION='1.0.1'
 M.HOTKEY='F8'
 -- The toggle on the game's own keybind page too (HD2Runtime rc20+ with Mod Bindings Menu installed; an older Runtime
 -- ignores it): any input bound there opens and closes the editor as the hotkey does.
