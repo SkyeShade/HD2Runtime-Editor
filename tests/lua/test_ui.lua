@@ -987,7 +987,17 @@ end
 -- first stage, none on a kit's piece weights
 do
     local classes=H.catalog:object('ar|classes')
-    if classes then
+    if classes then H.catalog:open(classes)end
+    local writable=false
+    for _,r in ipairs(classes and classes.rows or{})do if r.editable then writable=true end end
+    if classes and not writable then
+        -- HD2Runtime 0.40.1 and later: read only, said in the list; no risk chip on a row nobody can edit
+        assert(classes.detail=='read only (game.dll data)','the object says read only: '..tostring(classes.detail))
+        for _,r in ipairs(classes.rows)do
+            assert(not r.editable and r.risk==nil and r.reason:find('GameGuard',1,true),'class rows read only')
+        end
+    end
+    if classes and writable then
         H.catalog:open(classes)
         local row
         for _,r in ipairs(classes.rows)do if r.editable and not row then row=r end end

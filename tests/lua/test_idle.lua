@@ -1,5 +1,7 @@
 -- Closed-window work uses the real ensure scheduler; no UI rendering is involved.
 local S=dofile(...)
+-- Sleeping and paused ensures are the Runtime's application optimizations (off by default since HD2Runtime 0.40.1).
+pcall(S.hd2.diagnostics.application_optimizations,true)
 local id='mods/skyeshade/hd2runtime_editor'
 local cat=require(id..'/editor/catalog').new(S.hd2)
 local ledger=require(id..'/editor/ledger').install(S.hd2,id)

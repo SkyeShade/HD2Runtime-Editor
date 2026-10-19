@@ -1,5 +1,8 @@
 {
   "de": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Nur lesbar: HD2Runtime schreibt die Daten von game.dll nicht mehr (GameGuard hat Berichten zufolge das Spiel geschlossen).",
+    "read only (game.dll data)": "nur lesbar (game.dll-Daten)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Seit HD2Runtime 0.40.1 standardmäßig aus. Derselbe Schalter wie F10 > Einstellungen.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Spieler berichteten, dass GameGuard das Spiel nach dem Anpassen der Helldiver-Werte geschlossen hat.",
     "RESET ITEM": "OBJEKT ZURÜCKSETZEN",
     "RESET ITEM?": "OBJEKT ZURÜCKSETZEN?",
@@ -138,6 +141,9 @@
     "%d fields marked for reset (press Apply)": "%d Felder zum Zurücksetzen markiert (Anwenden drücken)"
   },
   "es": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Solo lectura: HD2Runtime ya no escribe los datos propios de game.dll (se informó de que GameGuard cerraba el juego).",
+    "read only (game.dll data)": "solo lectura (datos de game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Desactivado por defecto desde HD2Runtime 0.40.1. El mismo interruptor que F10 > Ajustes.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Jugadores informaron de que GameGuard cerró el juego tras ajustar las estadísticas del Helldiver.",
     "RESET ITEM": "RESTABLECER OBJETO",
     "RESET ITEM?": "¿RESTABLECER OBJETO?",
@@ -276,6 +282,9 @@
     "%d fields marked for reset (press Apply)": "%d campos marcados para restablecer (pulsa Aplicar)"
   },
   "fr": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Lecture seule : HD2Runtime n’écrit plus les données de game.dll (GameGuard aurait fermé le jeu).",
+    "read only (game.dll data)": "lecture seule (données de game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Désactivé par défaut depuis HD2Runtime 0.40.1. Le même réglage que F10 > Paramètres.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Des joueurs ont signalé que GameGuard fermait le jeu après avoir modifié les statistiques du Helldiver.",
     "RESET ITEM": "RÉINITIALISER L’OBJET",
     "RESET ITEM?": "RÉINITIALISER L’OBJET ?",
@@ -414,6 +423,9 @@
     "%d fields marked for reset (press Apply)": "%d champs marqués pour réinitialisation (appuyez sur Appliquer)"
   },
   "it": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Sola lettura: HD2Runtime non scrive più i dati di game.dll (è stato segnalato che GameGuard chiudeva il gioco).",
+    "read only (game.dll data)": "sola lettura (dati di game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Disattivato di default da HD2Runtime 0.40.1. Lo stesso interruttore di F10 > Impostazioni.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Alcuni giocatori hanno segnalato che GameGuard chiude il gioco dopo aver modificato le statistiche dell’Helldiver.",
     "RESET ITEM": "RIPRISTINA OGGETTO",
     "RESET ITEM?": "RIPRISTINARE L’OGGETTO?",
@@ -552,6 +564,9 @@
     "%d fields marked for reset (press Apply)": "%d campi contrassegnati per il ripristino (premi Applica)"
   },
   "jp": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "読み取り専用：HD2Runtime は game.dll のデータを書き換えなくなりました（GameGuard がゲームを終了したという報告があります）。",
+    "read only (game.dll data)": "読み取り専用（game.dll のデータ）",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "HD2Runtime 0.40.1 以降は既定でオフ。F10 > 設定 と同じスイッチです。",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "ヘルダイバーの能力値を調整した後、GameGuardがゲームを終了したという報告があります。",
     "RESET ITEM": "項目をリセット",
     "RESET ITEM?": "項目をリセットしますか？",
@@ -690,6 +705,9 @@
     "%d fields marked for reset (press Apply)": "%d項目をリセット対象にしました（適用を押してください）"
   },
   "ko": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "읽기 전용: HD2Runtime은 더 이상 game.dll의 데이터를 쓰지 않습니다(GameGuard가 게임을 종료했다는 보고가 있습니다).",
+    "read only (game.dll data)": "읽기 전용(game.dll 데이터)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "HD2Runtime 0.40.1부터 기본값은 꺼짐입니다. F10 > 설정과 같은 스위치입니다.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "헬다이버 능력치를 조정한 후 GameGuard가 게임을 종료했다는 보고가 있습니다.",
     "RESET ITEM": "항목 초기화",
     "RESET ITEM?": "항목을 초기화할까요?",
@@ -828,6 +846,9 @@
     "%d fields marked for reset (press Apply)": "%d개 항목이 초기화 대상으로 표시됨 (적용을 누르세요)"
   },
   "pl": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Tylko do odczytu: HD2Runtime nie zapisuje już danych game.dll (zgłaszano, że GameGuard zamykał grę).",
+    "read only (game.dll data)": "tylko do odczytu (dane game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Domyślnie wyłączone od HD2Runtime 0.40.1. Ten sam przełącznik co F10 > Ustawienia.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Gracze zgłaszali, że GameGuard zamyka grę po zmianie statystyk Helldivera.",
     "RESET ITEM": "RESETUJ ELEMENT",
     "RESET ITEM?": "ZRESETOWAĆ ELEMENT?",
@@ -966,6 +987,9 @@
     "%d fields marked for reset (press Apply)": "Oznaczono pola do przywrócenia: %d (naciśnij Zastosuj)"
   },
   "pt": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Só de leitura: o HD2Runtime já não escreve os dados do game.dll (foi relatado que o GameGuard fechava o jogo).",
+    "read only (game.dll data)": "só de leitura (dados do game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Desligado por predefinição desde o HD2Runtime 0.40.1. O mesmo interruptor que F10 > Definições.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Jogadores relataram que o GameGuard fechou o jogo após ajustarem as estatísticas do Helldiver.",
     "RESET ITEM": "REPOR ITEM",
     "RESET ITEM?": "REPOR ITEM?",
@@ -1104,6 +1128,9 @@
     "%d fields marked for reset (press Apply)": "%d campos marcados para repor (prime Aplicar)"
   },
   "bp": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Somente leitura: o HD2Runtime não grava mais os dados do game.dll (foi relatado que o GameGuard fechava o jogo).",
+    "read only (game.dll data)": "somente leitura (dados do game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Desligado por padrão desde o HD2Runtime 0.40.1. O mesmo interruptor de F10 > Configurações.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Jogadores relataram que o GameGuard fechou o jogo após ajustarem os atributos do Helldiver.",
     "RESET ITEM": "REDEFINIR ITEM",
     "RESET ITEM?": "REDEFINIR ITEM?",
@@ -1242,6 +1269,9 @@
     "%d fields marked for reset (press Apply)": "%d campos marcados para redefinir (pressione Aplicar)"
   },
   "ru": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Только чтение: HD2Runtime больше не записывает данные game.dll (сообщалось, что GameGuard закрывал игру).",
+    "read only (game.dll data)": "только чтение (данные game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Выключено по умолчанию с HD2Runtime 0.40.1. Тот же переключатель, что и F10 > Настройки.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Игроки сообщали, что GameGuard закрывал игру после изменения характеристик Адского десантника.",
     "RESET ITEM": "СБРОСИТЬ ОБЪЕКТ",
     "RESET ITEM?": "СБРОСИТЬ ОБЪЕКТ?",
@@ -1380,6 +1410,9 @@
     "%d fields marked for reset (press Apply)": "Отмечено полей для сброса: %d (нажмите «Применить»)"
   },
   "cn": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "只读：HD2Runtime 不再写入 game.dll 自身的数据（有报告称 GameGuard 会关闭游戏）。",
+    "read only (game.dll data)": "只读（game.dll 数据）",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "自 HD2Runtime 0.40.1 起默认关闭。与 F10 > 设置 中的开关相同。",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "有玩家报告称，调整绝地潜兵属性后 GameGuard 关闭了游戏。",
     "RESET ITEM": "重置此项",
     "RESET ITEM?": "重置此项？",
@@ -1518,6 +1551,9 @@
     "%d fields marked for reset (press Apply)": "已标记 %d 个字段待恢复默认（请按应用）"
   },
   "tc": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "唯讀：HD2Runtime 不再寫入 game.dll 本身的資料（有回報指出 GameGuard 會關閉遊戲）。",
+    "read only (game.dll data)": "唯讀（game.dll 資料）",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "自 HD2Runtime 0.40.1 起預設關閉。與 F10 > 設定 中的開關相同。",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "有玩家回報，調整絕地戰兵屬性後 GameGuard 關閉了遊戲。",
     "RESET ITEM": "重設此項",
     "RESET ITEM?": "重設此項？",
@@ -1656,6 +1692,9 @@
     "%d fields marked for reset (press Apply)": "已標記 %d 個欄位待恢復預設（請按套用）"
   },
   "ms": {
+    "Read only: HD2Runtime no longer writes game.dll's own data (GameGuard was reported to close the game).": "Solo lectura: HD2Runtime ya no escribe los datos propios de game.dll (se informó que GameGuard cerraba el juego).",
+    "read only (game.dll data)": "solo lectura (datos de game.dll)",
+    "Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.": "Desactivado de forma predeterminada desde HD2Runtime 0.40.1. El mismo interruptor que F10 > Configuración.",
     "Players reported GameGuard closing the game after tuning the Helldiver's stats.": "Pemain melaporkan GameGuard menutup permainan selepas melaras statistik Helldiver.",
     "RESET ITEM": "TETAP SEMULA ITEM",
     "RESET ITEM?": "TETAP SEMULA ITEM?",

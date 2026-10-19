@@ -13,12 +13,23 @@ assert(type(state)=='table','the addon returned '..tostring(state))
 assert(state.status=='ready','editor status '..tostring(state.status)..' missing='..table.concat(state.missing or{},','))
 local hd2=require('hd2runtime/api/hd2')
 -- the wrapper's guard: loading again returns the same state
-assert(hd2.diagnostics.application_optimizations()==true)
-assert(state.app:set_optimized_application(false))
-assert(hd2.diagnostics.application_optimizations()==false)
-assert(state.presets:setting('optimized_application',true)==false)
-assert(state.app:set_optimized_application(true))
-assert(hd2.diagnostics.application_optimizations()==true)
+if type(hd2.diagnostics.save_application_optimizations)=='function'then
+    -- HD2Runtime 0.40.1 and later: off by default, the Runtime saves the choice (F10 > Settings); the editor does not
+    -- turn it on at start.
+    local settings=require('hd2runtime/runtime/runtime_settings')
+    assert(hd2.diagnostics.application_optimizations()==false,'the editor turned the optimizations on at start')
+    assert(state.app:set_optimized_application(true))
+    assert(hd2.diagnostics.application_optimizations()==true and settings.enabled('optimized_application')==true)
+    assert(state.app:set_optimized_application(false))
+    assert(hd2.diagnostics.application_optimizations()==false and settings.enabled('optimized_application')==false)
+else
+    assert(hd2.diagnostics.application_optimizations()==true)
+    assert(state.app:set_optimized_application(false))
+    assert(hd2.diagnostics.application_optimizations()==false)
+    assert(state.presets:setting('optimized_application',true)==false)
+    assert(state.app:set_optimized_application(true))
+    assert(hd2.diagnostics.application_optimizations()==true)
+end
 assert(chunk()==state,'a second load must return the same state')
 -- Optional local mod artwork must survive handle initialization for every alias.
 local has_icons,icons=pcall(require,'mods/skyeshade/hd2runtime_editor/editor/generated/mod_icons')

@@ -895,13 +895,15 @@ function M.install(App)
     -- The settings that are on/off switches (the first rows of SETTINGS), then the interface size and the open key.
     App.SETTINGS_TOGGLES=6
     function App:set_optimized_application(on)
-        local control=type(self.hd2.diagnostics)=='table'and self.hd2.diagnostics.application_optimizations
+        local diagnostics=type(self.hd2.diagnostics)=='table'and self.hd2.diagnostics or{}
+        -- HD2Runtime 0.40.1 and later save it themselves (the same switch as F10 > Settings).
+        local control=diagnostics.save_application_optimizations or diagnostics.application_optimizations
         if type(control)~='function'then
             self:toast(L('This Runtime build does not support the application toggle.'),C.pending);return false
         end
         local ok,result=pcall(control,on)
         if not ok or result~=on then self:toast(tostring(result),C.error);return false end
-        self.presets:set_setting('optimized_application',on)
+        if not diagnostics.save_application_optimizations then self.presets:set_setting('optimized_application',on)end
         return true
     end
     -- "Use the game's names": the game's own names of weapons, stratagems, boosters ... in its language
@@ -956,7 +958,11 @@ function M.install(App)
             {click=function()self:set_game_names(not self.presets:setting('game_names',true))end},
             {click=function()
                 local control=type(self.hd2.diagnostics)=='table'and self.hd2.diagnostics.application_optimizations
-                local current=type(control)=='function'and control()or self.presets:setting('optimized_application',true)
+                local saved=type(self.hd2.diagnostics)=='table'
+                    and type(self.hd2.diagnostics.save_application_optimizations)=='function'
+                local current
+                if type(control)=='function'then current=control()
+                else current=self.presets:setting('optimized_application',not saved)end
                 self:set_optimized_application(not current)
             end}}
         local labels={L('Restore my last applied values when the game starts'),
@@ -985,7 +991,10 @@ function M.install(App)
                     and L('Off: slower, no shared discovery/decode caches. Write checks remain.')
                     or L('This Runtime build does not support the application toggle.'),
                     x+552,y-6,{size=SZ.tiny,colour=C.faint,max=W-x-576})
-                cv:text(L('Diagnostic only. Both modes use buffers; not a confirmed WASP crash fix.'),
+                local runtime_saves=type(self.hd2.diagnostics)=='table'
+                    and type(self.hd2.diagnostics.save_application_optimizations)=='function'
+                cv:text(runtime_saves and L('Off by default since HD2Runtime 0.40.1. The same switch as F10 > Settings.')
+                    or L('Diagnostic only. Both modes use buffers; not a confirmed WASP crash fix.'),
                     x+552,y+8,{size=SZ.tiny,colour=C.faint,max=W-x-576})
             end
             y=y+34

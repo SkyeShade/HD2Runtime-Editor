@@ -275,8 +275,16 @@ cycle_number(row_of('hd|Helldiver',function(r)return r.field=='zone.health'and r
 out[#out+1]='helldiver fields ok'
 -- Armor (hd2.armor_stats): a kit's piece weight, a class factor and the damage curve
 cycle(row_of('ar|1F9BFA78',function(r)return r.field=='armor_kit.piece_weight.torso'end),'heavy','armor kit torso')
-cycle_number(row_of('ar|classes',function(r)return r.field=='armor_class.speed'end),1.2,'armor class speed')
-cycle_number(row_of('ar|damage curve',function(r)return r.field=='armor_damage_curve.at_0'end),1,'armor damage curve')
+-- (HD2Runtime 0.40.1 and later: the class tables and the curve are read only, game.dll executable data)
+local class_row=row_of('ar|classes',function(r)return r.field=='armor_class.speed'end)
+local curve_row=row_of('ar|damage curve',function(r)return r.field=='armor_damage_curve.at_0'end)
+if class_row.editable then
+    cycle_number(class_row,1.2,'armor class speed')
+    cycle_number(curve_row,1,'armor damage curve')
+else
+    -- (the app refuses to stage a read-only row: ui/app.lua)
+    check(not curve_row.editable and tostring(class_row.reason):find('GameGuard',1,true),'class rows are read only')
+end
 out[#out+1]='armor stats ok'
 -- Armor perks: one hd2.player_passives.set for both rows; a refusal shows on the rows; reset stops the override
 local real_perks=hd2.player_passives

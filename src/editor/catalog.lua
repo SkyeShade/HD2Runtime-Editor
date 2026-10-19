@@ -2770,6 +2770,7 @@ end
 -- executable data). A player reported GameGuard closing the game after writing them (docs/runtime-requests.md R10):
 -- those rows carry risk = 'gameguard' and say so.
 M.GAMEGUARD_RISK='Writes game.dll\'s own data: GameGuard was reported to close the game after these edits.'
+M.GAMEGUARD_READ_ONLY='Read only: HD2Runtime no longer writes game.dll\'s own data (GameGuard was reported to close the game).'
 -- The Helldiver's own stats (every Helldiver: health, stamina, speeds...): players reported GameGuard closing the game
 -- after tuning them (2026-10-14). Same risk marking, with its own reason (row.risk_note).
 M.HELLDIVER_GAMEGUARD_RISK='Players reported GameGuard closing the game after tuning the Helldiver\'s stats.'
@@ -2778,8 +2779,10 @@ local function number_rows(object,fields,target,section,label_of)
     for _,f in ipairs(fields)do
         rows[#rows+1]=make_row(object,{id=f.semanticFieldId,label=label_of(f),vanilla=f.currentDefault,min=f.min,
             max=f.max,type='number',storage=(f.backing or{}).storage,field=f.semanticFieldId,target=target,shared=true,
-            unverified=true,descriptor=f,section=section,note=armor_note(f)})
-        rows[#rows].risk='gameguard'
+            unverified=true,descriptor=f,section=section,note=armor_note(f),
+            -- HD2Runtime 0.40.1 and later: game.dll's executable data is read only (editable = false, readOnlyReason).
+            editable=f.editable~=false,reason=f.editable==false and M.GAMEGUARD_READ_ONLY or nil})
+        if f.editable~=false then rows[#rows].risk='gameguard'end
     end
     return rows
 end
@@ -2789,7 +2792,10 @@ function CATEGORY.armor(cat)
     if not D or not W or type(D.kits)~='table'then return nil,why or'this HD2Runtime has no armor stats (HD2Runtime 0.30.0)'end
     local hd2=cat.hd2
     local list={}
-    list[1]={key='ar|classes',name='Armor classes',subtitle='Shared tables',detail='may trigger GameGuard (game.dll data)',
+    -- HD2Runtime 0.40.1 and later: the class tables and the curve are read only (game.dll executable data).
+    local read_only=type(W.class_fields)=='function'and(W.class_fields(0)[1]or{}).editable==false
+    local detail=read_only and'read only (game.dll data)'or'may trigger GameGuard (game.dll data)'
+    list[1]={key='ar|classes',name='Armor classes',subtitle='Shared tables',detail=detail,
         build=function(object)
             local rows={}
             for index,name in ipairs(D.classes or{})do
@@ -2801,7 +2807,7 @@ function CATEGORY.armor(cat)
             return rows
         end}
     list[2]={key='ar|damage curve',name='Armor damage curve',subtitle='Shared tables',
-        detail='may trigger GameGuard (game.dll data)',
+        detail=detail,
         build=function(object)
             return number_rows(object,W.curve_fields(),function()return hd2.armor_stats.damage_curve()end,
                 'Damage taken at each armor value',function(f)return 'At armor value '..tostring(f.armorValue)end)

@@ -91,9 +91,12 @@ function M.start(hd2,id)
         if ok and value then store=value else log('saved data unavailable: '..tostring(value))end
     end
     local presets=presets_module.new(store)
-    -- Restore before session application. Older Runtime builds simply omit this diagnostic control.
+    -- Restore before session application. Older Runtime builds simply omit this diagnostic control. HD2Runtime 0.40.1
+    -- and later keep the choice themselves (F10 > Settings "Faster application (0.40.0)", off by default): nothing to
+    -- restore here.
     local application_mode=type(hd2.diagnostics)=='table'and hd2.diagnostics.application_optimizations
-    if type(application_mode)=='function'then
+    local runtime_saves=type(hd2.diagnostics)=='table'and type(hd2.diagnostics.save_application_optimizations)=='function'
+    if type(application_mode)=='function'and not runtime_saves then
         local ok,why=pcall(application_mode,presets:setting('optimized_application',true))
         if not ok then log('application mode unavailable: '..tostring(why))end
     end
